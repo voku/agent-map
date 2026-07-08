@@ -44,43 +44,97 @@ final readonly class MagoAstBackend implements AstBackend, ParallelAstBackend
         /** @var list<array{file: string, process: resource, stdout: resource, stderr: resource, out: string, err: string}> $running */
         $running = [];
 
-        while ($pending !== [] || $running !== []) {
-            while (count($running) < $workers && $pending !== []) {
-                $file = array_shift($pending);
-                $started = $this->start($file);
-                if ($started === null) {
-                    $results[$file] = new AstResult($file, false, 'Unable to start mago process.');
+        $signals = $this->trapInterrupts($running);
+
+        try {
+            while ($pending !== [] || $running !== []) {
+                while (count($running) < $workers && $pending !== []) {
+                    $file = array_shift($pending);
+                    $started = $this->start($file);
+                    if ($started === null) {
+                        $results[$file] = new AstResult($file, false, 'Unable to start mago process.');
+                        continue;
+                    }
+
+                    $running[] = $started;
+                }
+
+                if ($running === []) {
                     continue;
                 }
 
-                $running[] = $started;
-            }
+                $stillRunning = [];
+                foreach ($running as $entry) {
+                    $entry['out'] .= (string) stream_get_contents($entry['stdout']);
+                    $entry['err'] .= (string) stream_get_contents($entry['stderr']);
 
-            if ($running === []) {
-                continue;
-            }
+                    $status = proc_get_status($entry['process']);
+                    if ($status['running']) {
+                        $stillRunning[] = $entry;
+                        continue;
+                    }
 
-            $stillRunning = [];
-            foreach ($running as $entry) {
-                $entry['out'] .= (string) stream_get_contents($entry['stdout']);
-                $entry['err'] .= (string) stream_get_contents($entry['stderr']);
-
-                $status = proc_get_status($entry['process']);
-                if ($status['running']) {
-                    $stillRunning[] = $entry;
-                    continue;
+                    $results[$entry['file']] = $this->finish($entry, $status['exitcode']);
                 }
 
-                $results[$entry['file']] = $this->finish($entry, $status['exitcode']);
+                $running = $stillRunning;
+                if ($running !== []) {
+                    usleep(1_000);
+                }
             }
-
-            $running = $stillRunning;
-            if ($running !== []) {
-                usleep(1_000);
-            }
+        } finally {
+            $this->releaseInterrupts($signals);
         }
 
         return $results;
+    }
+
+    /**
+     * Without this, a killed (Ctrl-C'd) build leaves its in-flight `mago`
+     * children running as orphans instead of exiting with the parent.
+     *
+     * @param list<array{file: string, process: resource, stdout: resource, stderr: resource, out: string, err: string}> $running
+     *
+     * @return array<int, mixed>|null previous signal handlers keyed by signal number, or null if pcntl is unavailable
+     */
+    private function trapInterrupts(array &$running): ?array
+    {
+        if (!function_exists('pcntl_async_signals')) {
+            return null;
+        }
+
+        pcntl_async_signals(true);
+        $previous = [
+            SIGINT => pcntl_signal_get_handler(SIGINT),
+            SIGTERM => pcntl_signal_get_handler(SIGTERM),
+        ];
+
+        $handler = static function (int $signal) use (&$running): void {
+            foreach ($running as $entry) {
+                proc_terminate($entry['process']);
+            }
+
+            exit(128 + $signal);
+        };
+
+        pcntl_signal(SIGINT, $handler);
+        pcntl_signal(SIGTERM, $handler);
+
+        return $previous;
+    }
+
+    /**
+     * @param array<int, mixed>|null $previous
+     */
+    private function releaseInterrupts(?array $previous): void
+    {
+        if ($previous === null) {
+            return;
+        }
+
+        foreach ($previous as $signal => $handler) {
+            pcntl_signal($signal, $handler);
+        }
     }
 
     /**
