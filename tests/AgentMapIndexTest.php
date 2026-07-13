@@ -46,8 +46,69 @@ final class AgentMapIndexTest extends TestCase
     {
         $index = $this->index();
 
-        self::assertCount(1, $index->query('EvidenceValidator'));
-        self::assertCount(1, $index->query('validateAgentHistoryReference'));
+        $classMatch = $index->query('EvidenceValidator');
+        self::assertSame('exact', $classMatch->matchType);
+        self::assertCount(1, $classMatch->files);
+
+        $methodMatch = $index->query('validateAgentHistoryReference');
+        self::assertSame('exact', $methodMatch->matchType);
+        self::assertCount(1, $methodMatch->files);
+    }
+
+    public function testQueryFallsBackToNormalizedMatchAcrossCaseAndSeparators(): void
+    {
+        $index = $this->index();
+
+        // Literal method name is camelCase; querying the snake_case spelling has no literal
+        // substring hit, so this only succeeds via the case/separator-insensitive fallback.
+        $match = $index->query('validate_agent_history_reference');
+
+        self::assertSame('normalized', $match->matchType);
+        self::assertCount(1, $match->files);
+    }
+
+    public function testQueryCombinesLiteralAndNormalizedMatches(): void
+    {
+        $dto = new FileEntry(
+            'modules/AntragCreateDataTransferObjectM365EntraAppAnpassen.php',
+            1,
+            'dto',
+            'Demo',
+            [new SymbolEntry('class', 'AntragCreateDataTransferObjectM365EntraAppAnpassen', 'Demo\\AntragCreateDataTransferObjectM365EntraAppAnpassen', 1, 5)],
+        );
+        $module = new FileEntry(
+            'modules/ModuleM365_EntraAppAnpassen.php',
+            1,
+            'module',
+            'Demo',
+            [new SymbolEntry('class', 'ModuleM365_EntraAppAnpassen', 'Demo\\ModuleM365_EntraAppAnpassen', 1, 5)],
+        );
+        $index = new AgentMapIndex('1.0', 'now', $this->root, 'simple', [$dto, $module]);
+
+        $match = $index->query('M365EntraAppAnpassen');
+
+        self::assertSame('mixed', $match->matchType);
+        self::assertSame([$dto->path, $module->path], array_map(static fn (FileEntry $file): string => $file->path, $match->files));
+    }
+
+    public function testMethodQueryKeepsOnlyTheMatchingMethod(): void
+    {
+        $match = $this->index()->query('validateAgentHistoryReference');
+
+        self::assertSame('exact', $match->matchType);
+        self::assertCount(1, $match->files);
+        self::assertCount(1, $match->files[0]->symbols);
+        self::assertSame(['validateAgentHistoryReference'], array_map(static fn (MethodEntry $method): string => $method->name, $match->files[0]->symbols[0]->methods));
+    }
+
+    public function testQueryReportsNoneWhenNothingMatchesEvenNormalized(): void
+    {
+        $index = $this->index();
+
+        $match = $index->query('TotallyUnrelatedSymbolName');
+
+        self::assertSame('none', $match->matchType);
+        self::assertSame([], $match->files);
     }
 
     public function testFileLookupWorks(): void
@@ -61,7 +122,7 @@ final class AgentMapIndexTest extends TestCase
     public function testFileLookupPreservesLeadingDotDirectory(): void
     {
         $entry = new FileEntry('.tools/AgentHook.php', 1, 'hash', 'Demo', []);
-        $index = new AgentMapIndex('1.0', 'now', $this->root, 'token', [$entry]);
+        $index = new AgentMapIndex('1.0', 'now', $this->root, 'simple', [$entry]);
 
         self::assertSame($entry, $index->file('.tools/AgentHook.php'));
         self::assertSame($entry, $index->file('./.tools/AgentHook.php'));
@@ -102,9 +163,20 @@ final class AgentMapIndexTest extends TestCase
         file_put_contents($this->root . '/src/EvidenceValidator_UnitCest.php', '<?php echo 1;');
         $production = new FileEntry('src/EvidenceValidator.php', 1, 'a', 'Demo', []);
         $test = new FileEntry('src/EvidenceValidator_UnitCest.php', 1, 'b', 'Demo', []);
-        $index = new AgentMapIndex('1.0', 'now', $this->root, 'token', [$production, $test]);
+        $index = new AgentMapIndex('1.0', 'now', $this->root, 'simple', [$production, $test]);
 
         self::assertSame([$test], $index->likelyTestFiles($production));
+    }
+
+    public function testLikelyTestFilesForCombinesRelatedProductionFiles(): void
+    {
+        $first = new FileEntry('src/FirstService.php', 1, 'a', 'Demo', []);
+        $second = new FileEntry('src/SecondService.php', 1, 'b', 'Demo', []);
+        $firstTest = new FileEntry('tests/FirstServiceTest.php', 1, 'c', 'Demo\\Tests', []);
+        $secondTest = new FileEntry('tests/SecondServiceTest.php', 1, 'd', 'Demo\\Tests', []);
+        $index = new AgentMapIndex('1.0', 'now', $this->root, 'simple', [$first, $second, $firstTest, $secondTest]);
+
+        self::assertSame([$firstTest, $secondTest], $index->likelyTestFilesFor([$first, $second]));
     }
 
     private function index(): AgentMapIndex
@@ -115,7 +187,7 @@ final class AgentMapIndexTest extends TestCase
             '1.0',
             '2026-07-07T12:00:00+02:00',
             $this->root,
-            'token',
+            'simple',
             [
                 new FileEntry(
                     'src/EvidenceValidator.php',

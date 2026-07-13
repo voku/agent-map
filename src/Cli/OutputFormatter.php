@@ -27,7 +27,7 @@ final readonly class OutputFormatter
 
     /**
      * @param list<FileEntry> $files
-     * @return list<array{path: string, namespace: string, symbols: list<array{kind: string, name: string, fqn: string, methods: list<array{name: string, visibility: string}>, methods_omitted: int}>, symbols_omitted: int}>
+     * @return list<array{path: string, namespace: string, symbols: list<array{kind: string, name: string, fqn: string, line_start: int, line_end: int, extends: list<string>, implements: list<string>, uses: list<string>, params: list<string>, return_type: ?string, attributes: list<string>, methods: list<array{name: string, visibility: string, line_start: int, line_end: int, static: bool, params: list<string>, return_type: ?string, attributes: list<string>}>, methods_omitted: int}>, symbols_omitted: int}>
      */
     public function filesPayload(array $files, int $symbolLimit = 10, int $methodLimit = 10): array
     {
@@ -35,7 +35,7 @@ final readonly class OutputFormatter
     }
 
     /**
-     * @return array{path: string, namespace: string, symbols: list<array{kind: string, name: string, fqn: string, methods: list<array{name: string, visibility: string}>, methods_omitted: int}>, symbols_omitted: int}
+     * @return array{path: string, namespace: string, symbols: list<array{kind: string, name: string, fqn: string, line_start: int, line_end: int, extends: list<string>, implements: list<string>, uses: list<string>, params: list<string>, return_type: ?string, attributes: list<string>, methods: list<array{name: string, visibility: string, line_start: int, line_end: int, static: bool, params: list<string>, return_type: ?string, attributes: list<string>}>, methods_omitted: int}>, symbols_omitted: int}
      */
     public function filePayload(FileEntry $file, int $symbolLimit = 10, int $methodLimit = 10): array
     {
@@ -50,7 +50,7 @@ final readonly class OutputFormatter
     }
 
     /**
-     * @return array{kind: string, name: string, fqn: string, methods: list<array{name: string, visibility: string}>, methods_omitted: int}
+     * @return array{kind: string, name: string, fqn: string, line_start: int, line_end: int, extends: list<string>, implements: list<string>, uses: list<string>, params: list<string>, return_type: ?string, attributes: list<string>, methods: list<array{name: string, visibility: string, line_start: int, line_end: int, static: bool, params: list<string>, return_type: ?string, attributes: list<string>}>, methods_omitted: int}
      */
     public function symbolPayload(SymbolEntry $symbol, int $methodLimit = 10): array
     {
@@ -60,9 +60,23 @@ final readonly class OutputFormatter
             'kind' => $symbol->kind,
             'name' => $symbol->name,
             'fqn' => $symbol->fqn,
+            'line_start' => $symbol->lineStart,
+            'line_end' => $symbol->lineEnd,
+            'extends' => $symbol->extends,
+            'implements' => $symbol->implements,
+            'uses' => $symbol->uses,
+            'params' => $symbol->params,
+            'return_type' => $symbol->returnType,
+            'attributes' => $symbol->attributes,
             'methods' => array_map(static fn (MethodEntry $method): array => [
                 'name' => $method->name,
                 'visibility' => $method->visibility,
+                'line_start' => $method->lineStart,
+                'line_end' => $method->lineEnd,
+                'static' => $method->static,
+                'params' => $method->params,
+                'return_type' => $method->returnType,
+                'attributes' => $method->attributes,
             ], $methods),
             'methods_omitted' => max(0, count($symbol->methods) - count($methods)),
         ];
@@ -91,8 +105,28 @@ final readonly class OutputFormatter
             'stats' => $this->statsText($payload),
             'related' => $this->relatedText($payload),
             'changed' => $this->changedText($payload),
+            'query' => $this->matchTypeNote($payload) . $this->filesText(is_array($payload['files'] ?? null) ? $payload['files'] : [], (bool) ($payload['include_namespace'] ?? false)),
             default => $this->filesText(is_array($payload['files'] ?? null) ? $payload['files'] : [], (bool) ($payload['include_namespace'] ?? false)),
         };
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function matchTypeNote(array $payload): string
+    {
+        $matchType = $payload['match_type'] ?? null;
+        if ($matchType === 'mixed') {
+            return 'NOTE: includes case/separator-normalized matches alongside literal results'
+                . " (e.g. isDevUser ~ is_dev_user ~ ->is_dev_user). Verify the normalized hints.\n\n";
+        }
+
+        if ($matchType !== 'normalized') {
+            return '';
+        }
+
+        return 'NOTE: no exact match for "' . (string) ($payload['query'] ?? '') . '" — showing case/separator-normalized'
+            . " matches instead (e.g. isDevUser ~ is_dev_user ~ ->is_dev_user). Verify these are the symbol you meant.\n\n";
     }
 
     /**
@@ -126,10 +160,15 @@ final readonly class OutputFormatter
                 }
 
                 $symbolName = $includeNamespace ? (string) ($symbol['name'] ?? '') : (string) ($symbol['fqn'] ?? '');
-                $out .= '  ' . (string) ($symbol['kind'] ?? '') . ' ' . $symbolName . "\n";
+                $kind = (string) ($symbol['kind'] ?? '');
+                $suffix = $kind === 'function' ? $this->signatureSuffix($symbol) : $this->classRelationsSuffix($symbol);
+                $out .= $this->attributesLine('  ', $symbol);
+                $out .= '  ' . $kind . ' ' . $symbolName . $suffix . $this->lineRangeSuffix($symbol) . "\n";
                 foreach (is_array($symbol['methods'] ?? null) ? $symbol['methods'] : [] as $method) {
                     if (is_array($method)) {
-                        $out .= '    ' . $this->visibilityMarker((string) ($method['visibility'] ?? 'public')) . ' ' . (string) ($method['name'] ?? '') . "()\n";
+                        $static = ($method['static'] ?? false) ? 'static ' : '';
+                        $out .= $this->attributesLine('    ', $method);
+                        $out .= '    ' . $this->visibilityMarker((string) ($method['visibility'] ?? 'public')) . ' ' . $static . (string) ($method['name'] ?? '') . $this->signatureSuffix($method) . $this->lineRangeSuffix($method) . "\n";
                     }
                 }
 
@@ -209,6 +248,7 @@ final readonly class OutputFormatter
     private function relatedText(array $payload): string
     {
         $out = 'Query: ' . (string) ($payload['query'] ?? '') . "\n\n";
+        $out .= $this->matchTypeNote($payload);
         foreach (['primary' => 'Primary', 'likely_tests' => 'Likely tests', 'same_namespace' => 'Same namespace', 'mentions' => 'Mentions'] as $key => $label) {
             $out .= $label . ":\n";
             $out .= $this->filesText(is_array($payload[$key] ?? null) ? $payload[$key] : [], false) . "\n";
@@ -229,6 +269,69 @@ final readonly class OutputFormatter
         }
 
         return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private function attributesLine(string $indent, array $entry): string
+    {
+        $attributes = is_array($entry['attributes'] ?? null) ? $entry['attributes'] : [];
+        if ($attributes === []) {
+            return '';
+        }
+
+        return $indent . '#[' . implode(', ', array_map('strval', $attributes)) . "]\n";
+    }
+
+    /**
+     * @param array<string, mixed> $symbol
+     */
+    private function classRelationsSuffix(array $symbol): string
+    {
+        $extends = is_array($symbol['extends'] ?? null) ? $symbol['extends'] : [];
+        $implements = is_array($symbol['implements'] ?? null) ? $symbol['implements'] : [];
+        $uses = is_array($symbol['uses'] ?? null) ? $symbol['uses'] : [];
+
+        $suffix = '';
+        if ($extends !== []) {
+            $suffix .= ' extends ' . implode(', ', array_map('strval', $extends));
+        }
+
+        if ($implements !== []) {
+            $suffix .= ' implements ' . implode(', ', array_map('strval', $implements));
+        }
+
+        if ($uses !== []) {
+            $suffix .= ' uses ' . implode(', ', array_map('strval', $uses));
+        }
+
+        return $suffix;
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private function lineRangeSuffix(array $entry): string
+    {
+        $start = $entry['line_start'] ?? null;
+        $end = $entry['line_end'] ?? null;
+        if (!is_int($start) || !is_int($end) || $start <= 0) {
+            return '';
+        }
+
+        return $start === $end ? "  #L{$start}" : "  #L{$start}-{$end}";
+    }
+
+    /**
+     * @param array<string, mixed> $signature
+     */
+    private function signatureSuffix(array $signature): string
+    {
+        $params = is_array($signature['params'] ?? null) ? implode(', ', array_map('strval', $signature['params'])) : '';
+        $returnType = $signature['return_type'] ?? null;
+
+        return '(' . $params . ')' . ($returnType !== null ? ': ' . $returnType : '');
     }
 
     private function visibilityMarker(string $visibility): string

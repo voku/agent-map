@@ -19,19 +19,179 @@ final readonly class AgentMapIndex
     }
 
     /**
-     * @return list<FileEntry>
+     * Finds files by literal (case-insensitive) substring and by a separator-normalized form.
+     *
+     * The passes are deliberately combined instead of treating normalized matching as a fallback:
+     * a literal DTO match must not hide the owning class merely because its PHP name uses
+     * underscores (`M365EntraApp` vs `M365_EntraApp`). Method-only matches retain just the
+     * matching methods, keeping command output suitable for choosing a small source range.
      */
-    public function query(string $term): array
+    public function query(string $term): QueryMatch
     {
-        $term = mb_strtolower($term);
+        $lower = mb_strtolower($term);
+        $normalizedTerm = $this->normalize($term);
+        if ($lower === '' || $normalizedTerm === '') {
+            return new QueryMatch([], 'none');
+        }
+
         $matches = [];
+        $hasLiteral = false;
+        $hasNormalizedOnly = false;
         foreach ($this->files as $file) {
-            if (str_contains(mb_strtolower($file->path), $term) || $this->fileHasSymbolMatch($file, $term)) {
-                $matches[] = $file;
+            $literalPath = $this->matchesText($file->path, $lower);
+            $normalizedPath = $this->matchesText($file->path, $normalizedTerm, true);
+            $literalSymbols = $this->matchingSymbols($file, $lower);
+            $normalizedSymbols = $this->matchingSymbols($file, $normalizedTerm, true);
+            if (!$literalPath && !$normalizedPath && $literalSymbols === [] && $normalizedSymbols === []) {
+                continue;
             }
+
+            $isLiteral = $literalPath || $literalSymbols !== [];
+            $isNormalized = $normalizedPath || $normalizedSymbols !== [];
+            $hasLiteral = $hasLiteral || $isLiteral;
+            $hasNormalizedOnly = $hasNormalizedOnly || ($isNormalized && !$isLiteral);
+            $symbols = $this->mergeSymbolMatches($literalSymbols, $normalizedSymbols);
+
+            $matches[] = [
+                'file' => new FileEntry(
+                    $file->path,
+                    $file->modifiedAt,
+                    $file->sha1,
+                    $file->namespace,
+                    $symbols === [] ? $file->symbols : $symbols,
+                ),
+                'score' => $this->fileMatchScore($file, $lower, $normalizedTerm),
+            ];
+        }
+
+        usort(
+            $matches,
+            static fn (array $left, array $right): int => $right['score'] <=> $left['score'] ?: $left['file']->path <=> $right['file']->path,
+        );
+
+        if ($matches === []) {
+            return new QueryMatch([], 'none');
+        }
+
+        $matchType = $hasLiteral ? ($hasNormalizedOnly ? 'mixed' : 'exact') : 'normalized';
+
+        return new QueryMatch(array_map(static fn (array $match): FileEntry => $match['file'], $matches), $matchType);
+    }
+
+    /**
+     * @return array<string, SymbolEntry>
+     */
+    private function matchingSymbols(FileEntry $file, string $term, bool $normalized = false): array
+    {
+        $matches = [];
+        foreach ($file->symbols as $symbol) {
+            $symbolMatches = $this->matchesText($symbol->name, $term, $normalized)
+                || $this->matchesText($symbol->fqn, $term, $normalized);
+            $methods = [];
+            foreach ($symbol->methods as $method) {
+                if ($this->matchesText($method->name, $term, $normalized)) {
+                    $methods[] = $method;
+                }
+            }
+
+            if (!$symbolMatches && $methods === []) {
+                continue;
+            }
+
+            $matches[$symbol->fqn] = $symbolMatches ? $symbol : new SymbolEntry(
+                kind: $symbol->kind,
+                name: $symbol->name,
+                fqn: $symbol->fqn,
+                lineStart: $symbol->lineStart,
+                lineEnd: $symbol->lineEnd,
+                methods: $methods,
+                extends: $symbol->extends,
+                implements: $symbol->implements,
+                params: $symbol->params,
+                returnType: $symbol->returnType,
+                attributes: $symbol->attributes,
+                uses: $symbol->uses,
+            );
         }
 
         return $matches;
+    }
+
+    /**
+     * @param array<string, SymbolEntry> $literal
+     * @param array<string, SymbolEntry> $normalized
+     *
+     * @return list<SymbolEntry>
+     */
+    private function mergeSymbolMatches(array $literal, array $normalized): array
+    {
+        foreach ($normalized as $fqn => $symbol) {
+            if (!isset($literal[$fqn]) || count($symbol->methods) > count($literal[$fqn]->methods)) {
+                $literal[$fqn] = $symbol;
+            }
+        }
+
+        return array_values($literal);
+    }
+
+    private function fileMatchScore(FileEntry $file, string $lower, string $normalizedTerm): int
+    {
+        $score = max(
+            $this->matchScore($file->path, $lower, 8_000),
+            $this->matchScore($file->path, $normalizedTerm, 5_000, true),
+        );
+        foreach ($file->symbols as $symbol) {
+            $score = max(
+                $score,
+                $this->matchScore($symbol->name, $lower, 10_000),
+                $this->matchScore($symbol->fqn, $lower, 9_500),
+                $this->matchScore($symbol->name, $normalizedTerm, 7_000, true),
+                $this->matchScore($symbol->fqn, $normalizedTerm, 6_500, true),
+            );
+            foreach ($symbol->methods as $method) {
+                $score = max(
+                    $score,
+                    $this->matchScore($method->name, $lower, 9_000),
+                    $this->matchScore($method->name, $normalizedTerm, 6_000, true),
+                );
+            }
+        }
+
+        return $score;
+    }
+
+    private function matchScore(string $value, string $term, int $base, bool $normalized = false): int
+    {
+        $candidate = $normalized ? $this->normalize($value) : mb_strtolower($value);
+        if ($candidate === '' || $term === '') {
+            return 0;
+        }
+
+        if ($candidate === $term) {
+            return $base + 1_000;
+        }
+
+        $position = mb_strpos($candidate, $term);
+        if ($position === false) {
+            return 0;
+        }
+
+        return $base
+            + ($position === 0 ? 600 : 0)
+            - min(500, $position * 10)
+            - min(99, max(0, mb_strlen($candidate) - mb_strlen($term)));
+    }
+
+    private function matchesText(string $value, string $term, bool $normalized = false): bool
+    {
+        $candidate = $normalized ? $this->normalize($value) : mb_strtolower($value);
+
+        return $term !== '' && str_contains($candidate, $term);
+    }
+
+    private function normalize(string $value): string
+    {
+        return (string) preg_replace('~[^a-z0-9]+~', '', mb_strtolower($value));
     }
 
     /**
@@ -186,6 +346,56 @@ final readonly class AgentMapIndex
         return array_slice($matches, 0, $limit);
     }
 
+    /**
+     * @param list<FileEntry> $files
+     *
+     * @return list<FileEntry>
+     */
+    public function likelyTestFilesFor(array $files, int $limit = 10): array
+    {
+        $sourcePaths = array_fill_keys(array_map(static fn (FileEntry $file): string => $file->path, $files), true);
+        $matches = [];
+        foreach ($files as $file) {
+            foreach ($this->likelyTestFiles($file, $limit) as $candidate) {
+                if (isset($sourcePaths[$candidate->path])) {
+                    continue;
+                }
+
+                $matches[$candidate->path] = $candidate;
+                if (count($matches) >= $limit) {
+                    return array_values($matches);
+                }
+            }
+        }
+
+        return array_values($matches);
+    }
+
+    /**
+     * @param list<FileEntry> $files
+     *
+     * @return list<FileEntry>
+     */
+    public function sameNamespaceFilesFor(array $files, int $limit = 10): array
+    {
+        $sourcePaths = array_fill_keys(array_map(static fn (FileEntry $file): string => $file->path, $files), true);
+        $matches = [];
+        foreach ($files as $file) {
+            foreach ($this->sameNamespaceFiles($file, $limit) as $candidate) {
+                if (isset($sourcePaths[$candidate->path])) {
+                    continue;
+                }
+
+                $matches[$candidate->path] = $candidate;
+                if (count($matches) >= $limit) {
+                    return array_values($matches);
+                }
+            }
+        }
+
+        return array_values($matches);
+    }
+
     public function file(string $path): ?FileEntry
     {
         $path = str_replace('\\', '/', $path);
@@ -229,7 +439,7 @@ final readonly class AgentMapIndex
     }
 
     /**
-     * @return array{schema_version: string, generated_at: string, root: string, backend: string, files: list<array{path: string, modified_at: int, sha1: string, namespace: string, symbols: list<array{kind: string, name: string, fqn: string, line_start: int, line_end: int, methods: list<array{name: string, visibility: string, line_start: int}>}>}>}
+     * @return array{schema_version: string, generated_at: string, root: string, backend: string, files: list<array{path: string, modified_at: int, sha1: string, namespace: string, symbols: list<array{kind: string, name: string, fqn: string, line_start: int, line_end: int, extends: list<string>, implements: list<string>, uses: list<string>, params: list<string>, return_type: ?string, attributes: list<string>, methods: list<array{name: string, visibility: string, line_start: int, line_end: int, static: bool, params: list<string>, return_type: ?string, attributes: list<string>}>}>}>}
      */
     public function toArray(): array
     {
@@ -258,26 +468,9 @@ final readonly class AgentMapIndex
             (string) ($data['schema_version'] ?? '1.0'),
             (string) ($data['generated_at'] ?? ''),
             (string) ($data['root'] ?? ''),
-            (string) ($data['backend'] ?? 'token'),
+            (string) ($data['backend'] ?? 'simple'),
             $files,
         );
-    }
-
-    private function fileHasSymbolMatch(FileEntry $file, string $term): bool
-    {
-        foreach ($file->symbols as $symbol) {
-            if (str_contains(mb_strtolower($symbol->name), $term) || str_contains(mb_strtolower($symbol->fqn), $term)) {
-                return true;
-            }
-
-            foreach ($symbol->methods as $method) {
-                if (str_contains(mb_strtolower($method->name), $term)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     private function namespaceFromFqn(string $fqn): string

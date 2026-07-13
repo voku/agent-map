@@ -1,3 +1,8 @@
-/.agent-map/
-/.phpunit.result.cache
 /vendor/
+/.phpunit.cache/
+/.phpunit.result.cache
+/.idea/
+/coverage/
+/.agent-map/
+.DS_Store
+composer.lock

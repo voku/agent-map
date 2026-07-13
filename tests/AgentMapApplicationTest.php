@@ -84,6 +84,18 @@ final class AgentMapApplicationTest extends TestCase
         self::assertStringContainsString('src/NewService.php', $changed['output']);
     }
 
+    public function testRelatedSkipsSymbolLessMentionFiles(): void
+    {
+        file_put_contents($this->root . '/src/NoSymbols.php', "<?php\n// EvidenceValidator\n");
+        file_put_contents($this->root . '/src/Reference.php', $this->source('Reference') . "\n// EvidenceValidator\n");
+
+        $this->runApp(['agent-map', 'build', '--root=' . $this->root, '--paths=src,tests', '--out=' . $this->root . '/map.json']);
+        $related = $this->runApp(['agent-map', 'related', 'EvidenceValidator', '--index=' . $this->root . '/map.json']);
+
+        self::assertStringContainsString('src/Reference.php', $related['output']);
+        self::assertStringNotContainsString('src/NoSymbols.php', $related['output']);
+    }
+
     /**
      * @param list<string> $argv
      * @return array{exit: int, output: string}

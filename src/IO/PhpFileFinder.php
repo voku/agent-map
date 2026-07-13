@@ -32,9 +32,14 @@ final readonly class PhpFileFinder
 
         $files = [];
         foreach ($paths === [] ? ['.'] : $paths as $path) {
-            $absolutePath = $root . '/' . trim($path, '/');
-            if ($path === '.') {
-                $absolutePath = $root;
+            $absolutePath = $this->resolvePathWithinRoot($root, $path);
+            if ($absolutePath === null) {
+                continue;
+            }
+
+            if (is_file($absolutePath)) {
+                $this->addPhpFile($files, $root, $absolutePath, $patterns);
+                continue;
             }
 
             if (!is_dir($absolutePath)) {
@@ -46,23 +51,65 @@ final readonly class PhpFileFinder
             );
 
             foreach ($iterator as $item) {
-                $absolute = $this->normalizePath($item->getPathname());
-                if (!$item->isFile() || !str_ends_with($absolute, '.php')) {
+                if (!$item->isFile()) {
                     continue;
                 }
 
-                $relative = ltrim(substr($absolute, strlen($root)), '/');
-                if ($this->isExcluded($relative, $absolute, $patterns)) {
-                    continue;
-                }
-
-                $files[$relative] = $relative;
+                $this->addPhpFile($files, $root, $item->getPathname(), $patterns);
             }
         }
 
         sort($files);
 
         return $files;
+    }
+
+    /**
+     * @param array<string, string> $files
+     * @param list<string> $patterns
+     */
+    private function addPhpFile(array &$files, string $root, string $path, array $patterns): void
+    {
+        $real = realpath($path);
+        if (!is_string($real)) {
+            return;
+        }
+
+        $absolute = $this->normalizePath($real);
+        if (!$this->isWithinRoot($root, $absolute)) {
+            return;
+        }
+
+        if (!str_ends_with($absolute, '.php')) {
+            return;
+        }
+
+        $relative = ltrim(substr($absolute, strlen($root)), '/');
+        if ($this->isExcluded($relative, $absolute, $patterns)) {
+            return;
+        }
+
+        $files[$relative] = $relative;
+    }
+
+    private function resolvePathWithinRoot(string $root, string $path): ?string
+    {
+        $candidate = $path === '.'
+            ? $root
+            : $root . '/' . trim(str_replace('\\', '/', $path), '/');
+        $real = realpath($candidate);
+        if (!is_string($real)) {
+            return null;
+        }
+
+        $absolute = $this->normalizePath($real);
+
+        return $this->isWithinRoot($root, $absolute) ? $absolute : null;
+    }
+
+    private function isWithinRoot(string $root, string $absolute): bool
+    {
+        return $absolute === $root || str_starts_with($absolute, $root . '/');
     }
 
     /**

@@ -46,18 +46,15 @@ not own repo maps.
 
 PHPStan remains the authoritative correctness/type validation gate.
 
-Mago is an optional fast parser/toolchain backend.
-
 RTK handles shell-output compression separately.
 
-Mago guides agent navigation.
+`agent-map` guides agent navigation.
 PHPStan judges agent claims.
 
 ## Requirements
 
 - PHP 8.3 or newer
 - Composer
-- Optional: [Mago](https://github.com/carthage-software/mago) for the Mago parse gate
 
 ## Installation
 
@@ -85,8 +82,7 @@ Build an index:
 vendor/bin/agent-map build \
   --root=. \
   --paths=src,tests \
-  --out=.agent-map/php-symbols.json \
-  --backend=token
+  --out=.agent-map/php-symbols.json
 ```
 
 Inspect the map:
@@ -116,18 +112,15 @@ vendor/bin/agent-map build \
   --root=. \
   --paths=src,tests \
   --out=.agent-map/php-symbols.json \
-  --backend=token \
   --exclude='~Generated.*\.php$~'
 ```
 
 Options:
 
 - `--root`: repository root. Defaults to the current working directory.
-- `--paths`: comma-separated paths relative to root. Defaults to `.`.
+- `--paths`: comma-separated directories or PHP files relative to root. Defaults to `.`.
 - `--out`: output JSON file. Defaults to `.agent-map/php-symbols.json`.
-- `--backend`: `token` or `mago`. Defaults to `token`.
 - `--exclude`: repeatable PHP regex applied to normalized relative and absolute paths.
-- `--workers`: concurrent `mago` processes to run when `--backend=mago`. Defaults to `1`. Mago has no batch mode, so each file is its own process; on large repos this is the difference between minutes and seconds. Ignored by the `token` backend.
 
 Default excludes:
 
@@ -141,6 +134,10 @@ Invalid exclude regexes fail before scanning.
 ### `query <term>`
 
 Finds files by file path, symbol name, fully-qualified name, or method name.
+Literal hits and case/separator-normalized peers are combined, so a DTO named
+`M365EntraApp` does not hide a module named `M365_EntraApp`. Method-only
+queries show only the matching method under its containing symbol, rather than
+spending output on every unrelated method in that class.
 
 ```bash
 vendor/bin/agent-map query EvidenceValidator
@@ -237,28 +234,39 @@ mostly be used by scripts. TOON output is provided by `helgesverre/toon`.
 index is stale. They still return results so agents can keep moving, but the
 right fix is to rebuild the map.
 
-## Mago Backend
+## Parsing
 
-The token backend uses PHP's `token_get_all()` and works without external
-tools.
+`build` parses every file in-process with `voku/simple-php-code-parser`
+(nikic/php-parser under the hood). If a file fails to parse, the command
+fails clearly rather than silently skipping it.
 
-The Mago backend runs Mago as a parse gate, then uses the token extractor for
-symbols:
+Beyond class/interface/trait/enum/function names and line numbers, the index
+records the signature detail an agent needs to judge relevance without
+opening the file:
 
-```bash
-vendor/bin/agent-map build --backend=mago
-```
+- `extends` / `implements` for classes, interfaces, and enums
+- `uses` for the traits a class or trait composes (`use LoggerTrait;`),
+  resolved to the same fully-qualified names used for `extends` and
+  `implements`
+- method and function parameters (`Type $name`) and return types
+- method visibility and `static`
+- `line_start` / `line_end` for every class-like symbol, method, and
+  function — precise enough to `sed -n 'start,endp' file.php` out exactly
+  one method instead of reading the rest of the file. (Leading `#[...]`
+  attribute lines are included in the range.)
+- PHP 8 attributes on classes, interfaces, traits, enums, methods, and
+  functions, rendered as `Name(arg, key: arg, ...)` (e.g.
+  `#[Route('/widgets', priority: 5)]`). Parameter- and property-level
+  attributes are not extracted. Attribute arguments that are enum cases or
+  class constants render as a bare name string (e.g. `Foo` instead of
+  `SomeEnum::Foo`) and array-literal arguments render as `...` — both are
+  limitations of the underlying AST value resolver, not of agent-map.
 
-If `mago` is missing or parsing fails, the command fails clearly. It does not
-silently fall back to `token`.
-
-Mago has no way to parse multiple files in one process, so agent-map spawns
-one `mago` process per file. On a large repository that is slow if run
-sequentially; pass `--workers` to run several `mago` processes concurrently:
-
-```bash
-vendor/bin/agent-map build --backend=mago --workers=8
-```
+Trait-contributed methods are not merged into a class's own method list —
+if `Widget` composes `LoggerTrait`, only `Widget`'s own directly-declared
+methods appear under `Widget`; `LoggerTrait`'s methods appear only under the
+trait's own entry. The underlying parser resolves trait method inlining at
+runtime/reflection time, not statically, so agent-map doesn't have it either.
 
 ## Index File
 
@@ -267,9 +275,7 @@ The JSON index stores:
 - relative paths
 - file mtimes and SHA1 hashes
 - namespace
-- symbols
-- line numbers
-- methods and visibility
+- symbols, with line numbers, extends/implements, and method/function signatures
 
 It does not store source code or AST blobs.
 
@@ -335,6 +341,13 @@ Run tests and static analysis:
 vendor/bin/phpunit
 vendor/bin/phpstan analyse --configuration=phpstan.neon.dist
 find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+```
+
+Dogfood the focused IT-Portal discovery contract when that checkout is
+available alongside this repository:
+
+```bash
+IT_PORTAL_ROOT=../IT-Portal vendor/bin/phpunit --filter ItPortalDogfoodTest
 ```
 
 Validate Composer metadata:

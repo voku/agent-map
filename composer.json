@@ -17,8 +17,9 @@
     }
   },
   "require": {
-    "php": ">=8.3",
-    "helgesverre/toon": "^3.1"
+    "php": ">=8.2",
+    "helgesverre/toon": "^3.1",
+    "voku/simple-php-code-parser": "^0.22"
   },
   "require-dev": {
     "phpunit/phpunit": "^11.0",

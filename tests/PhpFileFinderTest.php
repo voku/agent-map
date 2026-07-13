@@ -14,6 +14,8 @@ final class PhpFileFinderTest extends TestCase
 {
     private string $root;
 
+    private string $outsideFile;
+
     protected function setUp(): void
     {
         $this->root = sys_get_temp_dir() . '/agent-map-finder-' . bin2hex(random_bytes(6));
@@ -26,10 +28,16 @@ final class PhpFileFinderTest extends TestCase
         file_put_contents($this->root . '/tests/KeepTest.php', '<?php');
         file_put_contents($this->root . '/vendor/package/Skip.php', '<?php');
         file_put_contents($this->root . '/var/cache/SkipCache.php', '<?php');
+        $this->outsideFile = dirname($this->root) . '/agent-map-finder-outside-' . bin2hex(random_bytes(6)) . '.php';
+        file_put_contents($this->outsideFile, '<?php');
     }
 
     protected function tearDown(): void
     {
+        if (is_file($this->outsideFile)) {
+            unlink($this->outsideFile);
+        }
+
         $this->removeDirectory($this->root);
     }
 
@@ -60,6 +68,20 @@ final class PhpFileFinderTest extends TestCase
         $files = (new PhpFileFinder())->find($this->root, ['tests', 'src']);
 
         self::assertSame(['src/GeneratedProxy.php', 'src/Keep.php', 'tests/KeepTest.php'], $files);
+    }
+
+    public function testFindsAnExplicitPhpFile(): void
+    {
+        $files = (new PhpFileFinder())->find($this->root, ['src/Keep.php']);
+
+        self::assertSame(['src/Keep.php'], $files);
+    }
+
+    public function testIgnoresExplicitFileOutsideRoot(): void
+    {
+        $files = (new PhpFileFinder())->find($this->root, ['../' . basename($this->outsideFile)]);
+
+        self::assertSame([], $files);
     }
 
     private function removeDirectory(string $path): void

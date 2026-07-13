@@ -12,12 +12,11 @@ final class CliOptionsTest extends TestCase
 {
     public function testParsesBuild(): void
     {
-        $options = CliOptions::parse(['build', '--root=.', '--paths=src,tests', '--out=map.json', '--backend=mago']);
+        $options = CliOptions::parse(['build', '--root=.', '--paths=src,tests', '--out=map.json']);
 
         self::assertSame('build', $options->command);
         self::assertSame(['src', 'tests'], $options->paths);
         self::assertSame('map.json', $options->out);
-        self::assertSame('mago', $options->backend);
     }
 
     public function testParsesRepeatedExclude(): void
@@ -33,7 +32,6 @@ final class CliOptionsTest extends TestCase
 
         self::assertSame(['.'], $options->paths);
         self::assertSame('.agent-map/php-symbols.json', $options->out);
-        self::assertSame('token', $options->backend);
         self::assertSame('text', $options->format);
         self::assertSame(20, $options->limit);
         self::assertSame(10, $options->symbolLimit);

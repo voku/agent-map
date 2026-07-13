@@ -18,7 +18,6 @@ final readonly class CliOptions
         public string $root,
         public array $paths,
         public string $out,
-        public string $backend,
         public string $index,
         public string $format,
         public int $limit,
@@ -27,7 +26,6 @@ final readonly class CliOptions
         public string $base,
         public array $excludes,
         public bool $help,
-        public int $workers,
     ) {
     }
 
@@ -53,14 +51,12 @@ final readonly class CliOptions
             'root' => getcwd() ?: '.',
             'paths' => '.',
             'out' => '.agent-map/php-symbols.json',
-            'backend' => 'token',
             'index' => '.agent-map/php-symbols.json',
             'format' => 'text',
             'limit' => '20',
             'symbol-limit' => '10',
             'method-limit' => '10',
             'base' => 'main',
-            'workers' => '1',
         ];
         $excludes = [];
         $argument = null;
@@ -102,10 +98,6 @@ final readonly class CliOptions
             throw new InvalidArgumentException('Missing argument for command: ' . $command);
         }
 
-        if (!in_array($values['backend'], ['token', 'mago'], true)) {
-            throw new InvalidArgumentException('Unknown backend: ' . $values['backend']);
-        }
-
         if (!in_array($values['format'], ['text', 'json', 'markdown', 'toon'], true)) {
             throw new InvalidArgumentException('Unknown format: ' . $values['format']);
         }
@@ -125,18 +117,12 @@ final readonly class CliOptions
             throw new InvalidArgumentException('Invalid symbol-limit: ' . $values['symbol-limit']);
         }
 
-        $workers = filter_var($values['workers'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
-        if (!is_int($workers)) {
-            throw new InvalidArgumentException('Invalid workers: ' . $values['workers']);
-        }
-
         return new self(
             $command,
             $argument,
             $values['root'],
             self::splitPaths($values['paths']),
             $values['out'],
-            $values['backend'],
             $values['index'],
             $values['format'],
             $limit,
@@ -145,7 +131,6 @@ final readonly class CliOptions
             $values['base'],
             $excludes,
             $help,
-            $workers,
         );
     }
 

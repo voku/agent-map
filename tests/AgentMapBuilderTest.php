@@ -8,10 +8,8 @@ use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
-use voku\AgentMap\Backend\AstBackend;
-use voku\AgentMap\Backend\AstResult;
-use voku\AgentMap\Backend\ParallelAstBackend;
-use voku\AgentMap\Backend\TokenAstBackend;
+use voku\AgentMap\Extract\ExtractResult;
+use voku\AgentMap\Extract\SymbolExtractor;
 use voku\AgentMap\Index\AgentMapBuilder;
 
 final class AgentMapBuilderTest extends TestCase
@@ -32,53 +30,23 @@ final class AgentMapBuilderTest extends TestCase
         $this->removeDirectory($this->root);
     }
 
-    public function testDefaultWorkersUsesSequentialParseNotParseMany(): void
+    public function testBuildParsesEachFileSequentially(): void
     {
-        $backend = new RecordingParallelBackend();
+        $extractor = new RecordingExtractor();
 
-        (new AgentMapBuilder())->build($this->root, ['src'], [], 'fake', $backend);
+        (new AgentMapBuilder(extractor: $extractor))->build($this->root, ['src'], []);
 
-        self::assertSame(['Alpha.php', 'Beta.php', 'Gamma.php'], $this->relativeCalls($backend->parseCalls));
-        self::assertSame([], $backend->parseManyCalls);
+        self::assertSame(['Alpha.php', 'Beta.php', 'Gamma.php'], $this->relativeCalls($extractor->extractCalls));
     }
 
-    public function testWorkersAboveOneDispatchesThroughParseMany(): void
+    public function testFailureRaisesRuntimeExceptionForFailingFile(): void
     {
-        $backend = new RecordingParallelBackend();
-
-        (new AgentMapBuilder())->build($this->root, ['src'], [], 'fake', $backend, 4);
-
-        self::assertSame([], $backend->parseCalls);
-        self::assertCount(1, $backend->parseManyCalls);
-        self::assertSame(4, $backend->parseManyCalls[0]['workers']);
-        self::assertSame(['Alpha.php', 'Beta.php', 'Gamma.php'], $this->relativeCalls($backend->parseManyCalls[0]['files']));
-    }
-
-    public function testNonParallelBackendIgnoresWorkersAndStillWorks(): void
-    {
-        $index = (new AgentMapBuilder())->build($this->root, ['src'], [], 'token', new TokenAstBackend(), 8);
-
-        self::assertCount(3, $index->files);
-    }
-
-    public function testEntriesFollowSortedFileOrderRegardlessOfParseManyResultOrder(): void
-    {
-        $backend = new ReversedOrderParallelBackend();
-
-        $index = (new AgentMapBuilder())->build($this->root, ['src'], [], 'fake', $backend, 4);
-
-        $paths = array_map(static fn ($file) => $file->path, $index->files);
-        self::assertSame(['src/Alpha.php', 'src/Beta.php', 'src/Gamma.php'], $paths);
-    }
-
-    public function testParallelFailureRaisesRuntimeExceptionForFailingFile(): void
-    {
-        $backend = new FailingParallelBackend('Beta.php', 'boom');
+        $extractor = new FailingExtractor('Beta.php', 'boom');
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('src/Beta.php');
 
-        (new AgentMapBuilder())->build($this->root, ['src'], [], 'fake', $backend, 4);
+        (new AgentMapBuilder(extractor: $extractor))->build($this->root, ['src'], []);
     }
 
     public function testBuildingManyFilesStaysWithinAModestMemoryBudget(): void
@@ -90,7 +58,7 @@ final class AgentMapBuilderTest extends TestCase
         }
 
         $before = memory_get_usage(true);
-        $index = (new AgentMapBuilder())->build($manyRoot, ['src'], [], 'token', new TokenAstBackend());
+        $index = (new AgentMapBuilder(extractor: new RecordingExtractor()))->build($manyRoot, ['src'], []);
         $peak = memory_get_peak_usage(true);
 
         self::assertCount(500, $index->files);
@@ -145,53 +113,20 @@ final class AgentMapBuilderTest extends TestCase
     }
 }
 
-final class RecordingParallelBackend implements AstBackend, ParallelAstBackend
+final class RecordingExtractor implements SymbolExtractor
 {
     /** @var list<string> */
-    public array $parseCalls = [];
+    public array $extractCalls = [];
 
-    /** @var list<array{files: list<string>, workers: int}> */
-    public array $parseManyCalls = [];
-
-    public function parse(string $file): AstResult
+    public function extract(string $file): ExtractResult
     {
-        $this->parseCalls[] = $file;
+        $this->extractCalls[] = $file;
 
-        return new AstResult($file, true);
-    }
-
-    public function parseMany(array $files, int $workers): array
-    {
-        $this->parseManyCalls[] = ['files' => $files, 'workers' => $workers];
-
-        $results = [];
-        foreach ($files as $file) {
-            $results[$file] = new AstResult($file, true);
-        }
-
-        return $results;
+        return new ExtractResult($file, true);
     }
 }
 
-final class ReversedOrderParallelBackend implements AstBackend, ParallelAstBackend
-{
-    public function parse(string $file): AstResult
-    {
-        return new AstResult($file, true);
-    }
-
-    public function parseMany(array $files, int $workers): array
-    {
-        $results = [];
-        foreach (array_reverse($files) as $file) {
-            $results[$file] = new AstResult($file, true);
-        }
-
-        return $results;
-    }
-}
-
-final class FailingParallelBackend implements AstBackend, ParallelAstBackend
+final class FailingExtractor implements SymbolExtractor
 {
     public function __construct(
         private string $failingBasename,
@@ -199,27 +134,12 @@ final class FailingParallelBackend implements AstBackend, ParallelAstBackend
     ) {
     }
 
-    public function parse(string $file): AstResult
-    {
-        return $this->resultFor($file);
-    }
-
-    public function parseMany(array $files, int $workers): array
-    {
-        $results = [];
-        foreach ($files as $file) {
-            $results[$file] = $this->resultFor($file);
-        }
-
-        return $results;
-    }
-
-    private function resultFor(string $file): AstResult
+    public function extract(string $file): ExtractResult
     {
         if (basename($file) === $this->failingBasename) {
-            return new AstResult($file, false, $this->error);
+            return new ExtractResult($file, false, [], $this->error);
         }
 
-        return new AstResult($file, true);
+        return new ExtractResult($file, true);
     }
 }

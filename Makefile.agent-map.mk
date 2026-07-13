@@ -15,7 +15,6 @@ ai-map-build:
 		--root=. \
 		--paths=$(AGENT_MAP_PATHS) \
 		--out=$(AGENT_MAP_INDEX) \
-		--backend=token \
 		--exclude='~(^|/)vendor(/|$$)~' \
 		--exclude='~(^|/)var/cache(/|$$)~'
 

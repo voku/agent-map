@@ -6,8 +6,6 @@ namespace voku\AgentMap\Cli;
 
 use RuntimeException;
 use Throwable;
-use voku\AgentMap\Backend\MagoAstBackend;
-use voku\AgentMap\Backend\TokenAstBackend;
 use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
@@ -54,8 +52,7 @@ final readonly class AgentMapApplication
 
     private function build(CliOptions $options): int
     {
-        $backend = $options->backend === 'mago' ? new MagoAstBackend() : new TokenAstBackend();
-        $index = (new AgentMapBuilder())->build($options->root, $options->paths, $options->excludes, $options->backend, $backend, $options->workers);
+        $index = (new AgentMapBuilder())->build($options->root, $options->paths, $options->excludes);
         (new IndexWriter())->write($index, $options->out);
         echo 'Wrote ' . count($index->files) . ' file(s) to ' . $options->out . "\n";
 
@@ -66,11 +63,13 @@ final readonly class AgentMapApplication
     {
         $index = (new IndexReader())->read($options->index);
         $this->warnIfStale($index->staleEntries());
-        $files = array_slice($index->query((string) $options->argument), 0, $options->limit);
+        $result = $index->query((string) $options->argument);
+        $files = array_slice($result->files, 0, $options->limit);
         echo $this->formatter->render([
             'type' => 'query',
             'title' => (string) $options->argument,
             'query' => (string) $options->argument,
+            'match_type' => $result->matchType,
             'files' => $this->formatter->filesPayload($files, $options->symbolLimit, $options->methodLimit),
             'include_namespace' => false,
         ], $options->format);
@@ -178,16 +177,23 @@ final readonly class AgentMapApplication
     {
         $index = (new IndexReader())->read($options->index);
         $this->warnIfStale($index->staleEntries());
-        $primary = array_slice($index->query((string) $options->argument), 0, $options->limit);
-        $first = $primary[0] ?? null;
-        $likelyTests = $first === null ? [] : $index->likelyTestFiles($first, $options->limit);
-        $sameNamespace = $first === null ? [] : $index->sameNamespaceFiles($first, $options->limit);
-        $mentions = $this->mentionFiles($index, (string) $options->argument, $primary, $options->limit);
+        $result = $index->query((string) $options->argument);
+        $sourceMatches = array_values(array_filter($result->files, fn (FileEntry $file): bool => !$this->looksLikeTestPath($file->path)));
+        if ($sourceMatches === []) {
+            $sourceMatches = $result->files;
+        }
+
+        $primary = array_slice($sourceMatches, 0, $options->limit);
+        $contextSources = array_slice($sourceMatches, 0, max(10, $options->limit * 3));
+        $likelyTests = $index->likelyTestFilesFor($contextSources, $options->limit);
+        $sameNamespace = $index->sameNamespaceFilesFor($contextSources, $options->limit);
+        $mentions = $this->mentionFiles($index, (string) $options->argument, [...$primary, ...$likelyTests], $options->limit);
 
         echo $this->formatter->render([
             'type' => 'related',
             'title' => 'Related: ' . (string) $options->argument,
             'query' => (string) $options->argument,
+            'match_type' => $result->matchType,
             'primary' => $this->formatter->filesPayload($primary, $options->symbolLimit, $options->methodLimit),
             'likely_tests' => $this->formatter->filesPayload($likelyTests, $options->symbolLimit, $options->methodLimit),
             'same_namespace' => $this->formatter->filesPayload($sameNamespace, $options->symbolLimit, $options->methodLimit),
@@ -317,7 +323,7 @@ final readonly class AgentMapApplication
         $primaryPaths = array_map(static fn (FileEntry $file): string => $file->path, $primary);
         $matches = [];
         foreach ($index->files as $file) {
-            if (in_array($file->path, $primaryPaths, true)) {
+            if ($file->symbols === [] || in_array($file->path, $primaryPaths, true)) {
                 continue;
             }
 
@@ -332,6 +338,17 @@ final readonly class AgentMapApplication
         }
 
         return $matches;
+    }
+
+    private function looksLikeTestPath(string $path): bool
+    {
+        $lower = mb_strtolower($path);
+
+        return str_contains($lower, '/tests/')
+            || str_contains($lower, 'test')
+            || str_contains($path, '_UnitCest.php')
+            || str_contains($path, '_AcceptanceCest.php')
+            || str_contains($path, '_ApiCest.php');
     }
 
     private function humanSize(string $path): string
@@ -353,7 +370,7 @@ final readonly class AgentMapApplication
         if ($command === 'build') {
             return <<<'TXT'
             Usage:
-              agent-map build [--root=.] [--paths=src,tests] [--out=.agent-map/php-symbols.json] [--backend=token|mago] [--exclude=REGEX]
+              agent-map build [--root=.] [--paths=src,tests] [--out=.agent-map/php-symbols.json] [--exclude=REGEX]
 
             Build a compact PHP symbol index. --exclude is repeatable.
             TXT;
@@ -363,7 +380,7 @@ final readonly class AgentMapApplication
         agent-map - compact PHP symbol maps for coding agents
 
         Usage:
-          agent-map build --root=. --paths=src,tests --out=.agent-map/php-symbols.json --backend=token
+          agent-map build --root=. --paths=src,tests --out=.agent-map/php-symbols.json
           agent-map query EvidenceValidator --index=.agent-map/php-symbols.json
           agent-map file src/EvidenceValidator.php --index=.agent-map/php-symbols.json
           agent-map stale --index=.agent-map/php-symbols.json
