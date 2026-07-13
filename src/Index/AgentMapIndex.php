@@ -420,6 +420,7 @@ final readonly class AgentMapIndex
         $stale = [];
         foreach ($this->files as $file) {
             $absolute = $this->root . '/' . $file->path;
+            clearstatcache(true, $absolute);
             if (!is_file($absolute)) {
                 $stale[] = ['path' => $file->path, 'reason' => 'missing'];
                 continue;

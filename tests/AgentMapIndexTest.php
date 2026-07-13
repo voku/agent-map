@@ -7,6 +7,7 @@ namespace voku\AgentMap\Tests;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexReader;
@@ -137,6 +138,38 @@ final class AgentMapIndexTest extends TestCase
 
         unlink($this->root . '/src/EvidenceValidator.php');
         self::assertSame([['path' => 'src/EvidenceValidator.php', 'reason' => 'missing']], $index->staleEntries());
+    }
+
+    /**
+     * Reproduces a real (not merely flaky) PHP <8.3 stat-cache regression: a
+     * long-lived consumer builds an index once and keeps it in memory,
+     * checking staleEntries() repeatedly without ever re-reading from disk.
+     * filemtime()/is_file() must not silently reuse a stat cached before the
+     * on-disk change, see clearstatcache() in AgentMapIndex::staleEntries().
+     */
+    public function testStaleDetectsModificationOfInMemoryBuiltIndexWithoutReReadingFromDisk(): void
+    {
+        $index = (new AgentMapBuilder())->build($this->root, [], []);
+        self::assertSame([], $index->staleEntries());
+
+        touch($this->root . '/src/EvidenceValidator.php', time() + 5);
+
+        self::assertSame(
+            [['path' => 'src/EvidenceValidator.php', 'reason' => 'modified']],
+            $index->staleEntries(),
+        );
+    }
+
+    public function testStaleDetectsMissingFileOfInMemoryBuiltIndexWithoutReReadingFromDisk(): void
+    {
+        $index = (new AgentMapBuilder())->build($this->root, [], []);
+
+        unlink($this->root . '/src/EvidenceValidator.php');
+
+        self::assertSame(
+            [['path' => 'src/EvidenceValidator.php', 'reason' => 'missing']],
+            $index->staleEntries(),
+        );
     }
 
     public function testSummaryAndStatsHelpers(): void
