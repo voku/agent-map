@@ -4,9 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## 0.1.0 - 2026-07-13
 
-### Changed
+### Added
+
+- Initial `agent-map` CLI: builds a compact JSON symbol index of a PHP
+  repository and answers `related`, `file`, and `changed` queries.
+- SIGINT/SIGTERM handling in `MagoAstBackend::parseMany` to terminate
+  in-flight `mago` child processes on interrupt.
+
+### Changed (before first release)
 
 - Replaced the `mago`/token-scanner AST backends with a single extractor built
   on `voku/simple-php-code-parser` (nikic/php-parser under the hood), removing
@@ -21,17 +28,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   tests and namespace peers from several top source candidates instead of only
   the first result.
 
-### Removed
+### Removed (before first release)
 
 - `src/Backend/*` (`AstBackend`, `AstResult`, `MagoAstBackend`,
   `ParallelAstBackend`, `TokenAstBackend`) and
   `src/Extract/PhpTokenSymbolExtractor.php`.
-
-## [0.0.0] - 2026-07-08
-
-### Added
-
-- Initial `agent-map` CLI: builds a compact JSON symbol index of a PHP
-  repository and answers `related`, `file`, and `changed` queries.
-- SIGINT/SIGTERM handling in `MagoAstBackend::parseMany` to terminate
-  in-flight `mago` child processes on interrupt.
