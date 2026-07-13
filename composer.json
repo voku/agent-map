@@ -29,6 +29,11 @@
     "post-install-cmd": "@php scripts/install-bin-proxy.php",
     "post-update-cmd": "@php scripts/install-bin-proxy.php",
     "test": "phpunit",
-    "phpstan": "phpstan analyse --configuration=phpstan.neon.dist"
+    "phpstan": "phpstan analyse --configuration=phpstan.neon.dist",
+    "ci": [
+      "@composer validate --strict",
+      "@test",
+      "@phpstan"
+    ]
   }
 }
