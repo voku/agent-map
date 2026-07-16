@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.1.1 - 2026-07-16
+
+### Changed
+
+- `related`'s `likely_tests`, `same_namespace`, and `mentions` sections now
+  render as bare file paths (with an "N more symbol(s)" count when
+  applicable) instead of a full per-file symbol/method dump. Those sections
+  are context around the query, not the answer to it, and dumping full
+  detail on top of `primary` (which keeps it) made a default `related` call
+  far larger than a focused `query` for the same term. `primary`'s detail
+  level is unchanged.
+
 ## 0.1.0 - 2026-07-13
 
 ### Added

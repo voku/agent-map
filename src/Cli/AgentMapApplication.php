@@ -189,15 +189,20 @@ final readonly class AgentMapApplication
         $sameNamespace = $index->sameNamespaceFilesFor($contextSources, $options->limit);
         $mentions = $this->mentionFiles($index, (string) $options->argument, [...$primary, ...$likelyTests], $options->limit);
 
+        // likely_tests/same_namespace/mentions are context, not the answer to
+        // the query: a full per-file symbol/method dump on all three (on top
+        // of primary) is what made a default `related` call ~15x bigger than
+        // a focused query for the same term. They keep the requested --limit
+        // file count but render as bare paths; primary keeps full detail.
         echo $this->formatter->render([
             'type' => 'related',
             'title' => 'Related: ' . (string) $options->argument,
             'query' => (string) $options->argument,
             'match_type' => $result->matchType,
             'primary' => $this->formatter->filesPayload($primary, $options->symbolLimit, $options->methodLimit),
-            'likely_tests' => $this->formatter->filesPayload($likelyTests, $options->symbolLimit, $options->methodLimit),
-            'same_namespace' => $this->formatter->filesPayload($sameNamespace, $options->symbolLimit, $options->methodLimit),
-            'mentions' => $this->formatter->filesPayload($mentions, $options->symbolLimit, $options->methodLimit),
+            'likely_tests' => $this->formatter->filesPayload($likelyTests, 0, 0),
+            'same_namespace' => $this->formatter->filesPayload($sameNamespace, 0, 0),
+            'mentions' => $this->formatter->filesPayload($mentions, 0, 0),
         ], $options->format);
 
         return $primary === [] ? 1 : 0;
