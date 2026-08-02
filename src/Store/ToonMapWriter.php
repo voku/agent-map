@@ -34,9 +34,12 @@ final readonly class ToonMapWriter
             $encoded[$name] = $content;
         }
 
-        $artifactHashes = [];
+        $artifactMetadata = [];
         foreach ($encoded as $name => $content) {
-            $artifactHashes[$name] = 'sha256:' . hash('sha256', $content);
+            $artifactMetadata[$name] = [
+                'path' => $name . '.toon',
+                'sha256' => 'sha256:' . hash('sha256', $content),
+            ];
         }
 
         $mapDigestInput = [];
@@ -57,11 +60,7 @@ final readonly class ToonMapWriter
                     'status' => 'pending',
                 ],
             ],
-            'artifacts' => array_map(
-                static fn (string $hash, string $name): array => ['path' => $name . '.toon', 'sha256' => $hash],
-                $artifactHashes,
-                array_keys($artifactHashes),
-            ),
+            'artifacts' => $artifactMetadata,
         ];
         $manifestContent = $this->encoder->encode($manifest);
 
