@@ -128,14 +128,14 @@ final readonly class MapArtifacts
             'context_start_line' => $symbol->lineStart,
             'line_start' => $symbol->lineStart,
             'line_end' => $symbol->lineEnd,
-            'extends' => array_values($symbol->extends),
-            'implements' => array_values($symbol->implements),
-            'uses' => array_values($symbol->uses),
-            'parameters' => array_values($symbol->params),
+            'extends' => $symbol->extends,
+            'implements' => $symbol->implements,
+            'uses' => $symbol->uses,
+            'parameters' => $symbol->params,
             'native_return_type' => $symbol->returnType,
             'phpdoc_return_type' => null,
             'resolved_return_type' => $symbol->returnType,
-            'attributes' => array_values($symbol->attributes),
+            'attributes' => $symbol->attributes,
             'reconciliation_status' => 'structural_only',
         ];
     }
@@ -157,11 +157,11 @@ final readonly class MapArtifacts
             'line_end' => $method->lineEnd,
             'visibility' => $method->visibility,
             'static' => $method->static,
-            'parameters' => array_values($method->params),
+            'parameters' => $method->params,
             'native_return_type' => $method->returnType,
             'phpdoc_return_type' => null,
             'resolved_return_type' => $method->returnType,
-            'attributes' => array_values($method->attributes),
+            'attributes' => $method->attributes,
             'reconciliation_status' => 'structural_only',
         ];
     }
