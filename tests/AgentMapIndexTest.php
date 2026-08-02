@@ -59,6 +59,22 @@ final class AgentMapIndexTest extends TestCase
         );
     }
 
+    public function testReaderFallsBackToJsonWhenToonExtensionContainsJson(): void
+    {
+        $path = $this->root . '/map.toon';
+        (new IndexWriter())->write($this->index(), $path, 'json');
+
+        self::assertSame('2.0', (new IndexReader())->read($path)->schemaVersion);
+    }
+
+    public function testReaderFallsBackToToonWhenJsonExtensionContainsToon(): void
+    {
+        $path = $this->root . '/map.json';
+        (new IndexWriter())->write($this->index(), $path, 'toon');
+
+        self::assertSame('2.0', (new IndexReader())->read($path)->schemaVersion);
+    }
+
     public function testQueryFindsClassAndMethodIncludingNormalizedName(): void
     {
         self::assertSame('exact', $this->index()->query('EvidenceValidator')->matchType);
