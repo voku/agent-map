@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apply:
-    if: ${{ hashFiles('.github/agent-map-migration.b64') != '' }}
+    if: ${{ hashFiles('.github/agent-map-migration.ready') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -24,11 +24,12 @@ jobs:
           tools: composer:v2
       - name: Apply migration payload
         run: |
-          base64 -d .github/agent-map-migration.b64 > /tmp/agent-map-migration.tar.gz
+          cat .github/agent-map-migration.b64.part-* | base64 -d > /tmp/agent-map-migration.tar.gz
           echo 'd5ea506b8175160baf07c5bc5d1775a6ad21ffdae2217a51378c2328695eb652  /tmp/agent-map-migration.tar.gz' | sha256sum -c -
           tar -xzf /tmp/agent-map-migration.tar.gz
           rm -f \
-            .github/agent-map-migration.b64 \
+            .github/agent-map-migration.b64.part-* \
+            .github/agent-map-migration.ready \
             .github/workflows/apply-agent-map-migration.yml \
             .github/workflows/export-working-copy.yml \
             src/Store/MapArtifacts.php \
