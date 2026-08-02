@@ -19,6 +19,22 @@ final class CliOptionsTest extends TestCase
         self::assertSame('map.json', $options->out);
     }
 
+    public function testBuildToonFormatUsesToonDefaultOutput(): void
+    {
+        $options = CliOptions::parse(['build', '--format=toon']);
+
+        self::assertSame('toon', $options->format);
+        self::assertSame('.agent-map/php-symbols.toon', $options->out);
+    }
+
+    public function testBuildInfersToonFormatFromExplicitOutputExtension(): void
+    {
+        $options = CliOptions::parse(['build', '--out=map.toon']);
+
+        self::assertSame('toon', $options->format);
+        self::assertSame('map.toon', $options->out);
+    }
+
     public function testParsesRepeatedExclude(): void
     {
         $options = CliOptions::parse(['build', '--exclude=~Generated~', '--exclude', '~fixtures~']);
@@ -50,7 +66,6 @@ final class CliOptionsTest extends TestCase
         self::assertSame(3, $options->methodLimit);
         self::assertSame('develop', $options->base);
     }
-
 
     public function testParsesContextOptions(): void
     {
