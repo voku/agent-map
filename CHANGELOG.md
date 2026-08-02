@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- Deterministic multi-file TOON map artifacts (`manifest.toon`, `files.toon`,
+  `symbols.toon`, `relations.toon`, and `diagnostics.toon`) are now published
+  by the existing `agent-map build` command alongside the legacy JSON index.
+- Methods are projected as first-class symbol records in the canonical TOON
+  store, with stable IDs and declaration relations for definitions, methods,
+  inheritance, interfaces, and traits.
+- Generated artifacts are hash-addressed through `manifest.toon`; the reader
+  rejects missing, malformed, duplicate, or tampered records.
+
+### Changed
+
+- PHPStan `^2.2` is now a runtime dependency because it is the semantic engine
+  for the next map-building phase. The structural parser remains in place so
+  both analysis results can be reconciled rather than blindly trusted.
+
 ## 0.1.1 - 2026-07-16
 
 ### Changed
