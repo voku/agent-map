@@ -70,15 +70,15 @@ final class SimplePhpParserSymbolExtractorTest extends TestCase
         self::assertSame('run', $service->methods[0]->name);
         self::assertSame('public', $service->methods[0]->visibility);
         self::assertFalse($service->methods[0]->static);
-        self::assertSame(['string $name', 'int $limit'], $service->methods[0]->params);
-        self::assertSame('bool', $service->methods[0]->returnType);
+        self::assertSame(['string $name', 'int $limit'], $service->methods[0]->displayParameters());
+        self::assertSame('bool', $service->methods[0]->nativeReturnType);
         self::assertSame(9, $service->methods[0]->lineStart);
         self::assertSame(12, $service->methods[0]->lineEnd);
 
         self::assertSame('helper', $service->methods[1]->name);
         self::assertSame('private', $service->methods[1]->visibility);
         self::assertTrue($service->methods[1]->static);
-        self::assertSame('string', $service->methods[1]->returnType);
+        self::assertSame('string', $service->methods[1]->nativeReturnType);
         self::assertSame(14, $service->methods[1]->lineStart);
         self::assertSame(17, $service->methods[1]->lineEnd);
     }
@@ -139,8 +139,8 @@ final class SimplePhpParserSymbolExtractorTest extends TestCase
         self::assertSame('function', $function->kind);
         self::assertSame(24, $function->lineStart);
         self::assertSame(27, $function->lineEnd);
-        self::assertSame(['string $value'], $function->params);
-        self::assertSame('int', $function->returnType);
+        self::assertSame(['string $value'], $function->displayParameters());
+        self::assertSame('int', $function->nativeReturnType);
     }
 
     public function testSkipsAnonymousClassAndKeepsLineEndAlignedForClassesAfterIt(): void

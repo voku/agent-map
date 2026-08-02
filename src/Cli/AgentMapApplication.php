@@ -6,6 +6,8 @@ namespace voku\AgentMap\Cli;
 
 use RuntimeException;
 use Throwable;
+use voku\AgentMap\Context\EditContextPlanner;
+use voku\AgentMap\Context\EditContextPolicy;
 use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
@@ -42,6 +44,9 @@ final readonly class AgentMapApplication
                 'changed' => $this->changed($options),
                 'related' => $this->related($options),
                 'stats' => $this->stats($options),
+                'callers' => $this->relations($options, true),
+                'callees' => $this->relations($options, false),
+                'context' => $this->context($options),
                 default => 1,
             };
         } catch (Throwable $throwable) {
@@ -52,9 +57,9 @@ final readonly class AgentMapApplication
 
     private function build(CliOptions $options): int
     {
-        $index = (new AgentMapBuilder())->build($options->root, $options->paths, $options->excludes);
-        (new IndexWriter())->write($index, $options->out);
-        echo 'Wrote ' . count($index->files) . ' file(s) to ' . $options->out . "\n";
+        $index = (new AgentMapBuilder())->build($options->root, $options->paths, $options->excludes, $options->phpStanConfig);
+        (new IndexWriter())->write($index, $options->out, $options->format);
+        echo 'Wrote ' . count($index->files) . ' file(s), ' . count($index->relations) . ' relation(s), and ' . count($index->diagnostics) . ' diagnostic(s) to ' . $options->out . "\n";
 
         return 0;
     }
@@ -208,6 +213,60 @@ final readonly class AgentMapApplication
         return $primary === [] ? 1 : 0;
     }
 
+    private function relations(CliOptions $options, bool $incoming): int
+    {
+        $index = (new IndexReader())->read($options->index);
+        $this->warnIfStale($index->staleEntries());
+        $method = $index->resolveMethod((string) $options->argument);
+        if ($incoming) {
+            $targetIds = [$method->id => true];
+            foreach ($index->outgoing($method->id, 'overrides') as $contractRelation) {
+                foreach ($contractRelation->targetIds as $targetId) {
+                    $targetIds[$targetId] = true;
+                }
+            }
+            $relationById = [];
+            foreach (array_keys($targetIds) as $targetId) {
+                foreach ($index->incoming($targetId, 'calls') as $relation) {
+                    $relationById[$relation->id] = $relation;
+                }
+            }
+            ksort($relationById, SORT_STRING);
+            $relations = array_values($relationById);
+        } else {
+            $relations = $index->outgoing($method->id, 'calls');
+        }
+        $relations = array_slice($relations, 0, $options->limit);
+        echo $this->formatter->render([
+            'type' => 'relations',
+            'title' => ($incoming ? 'Callers of ' : 'Callees of ') . $method->owner->fqn . '::' . $method->method->name,
+            'target' => $method->id,
+            'relations' => array_map(static fn ($relation): array => $relation->toArray(), $relations),
+        ], $options->format);
+
+        return $relations === [] ? 1 : 0;
+    }
+
+    private function context(CliOptions $options): int
+    {
+        $index = (new IndexReader())->read($options->index);
+        $plan = (new EditContextPlanner())->plan(
+            $index,
+            (string) $options->argument,
+            new EditContextPolicy(
+                maximumSourceBytes: $options->contextBudget,
+                maximumFiles: $options->maxFiles,
+                maximumCallers: $options->maxCallers,
+                maximumCallees: $options->maxCallees,
+                maximumTests: $options->maxTests,
+                maximumTypeDefinitions: $options->maxTypeDefinitions,
+            ),
+        );
+        echo $this->formatter->render($plan->toArray(), $options->format);
+
+        return 0;
+    }
+
     /**
      * @param list<array{path: string, reason: string}> $stale
      */
@@ -347,7 +406,7 @@ final readonly class AgentMapApplication
 
     private function looksLikeTestPath(string $path): bool
     {
-        $lower = mb_strtolower($path);
+        $lower = strtolower($path);
 
         return str_contains($lower, '/tests/')
             || str_contains($lower, 'test')
@@ -375,9 +434,9 @@ final readonly class AgentMapApplication
         if ($command === 'build') {
             return <<<'TXT'
             Usage:
-              agent-map build [--root=.] [--paths=src,tests] [--out=.agent-map/php-symbols.json] [--exclude=REGEX]
+              agent-map build [--root=.] [--paths=src,tests] [--out=.agent-map/php-symbols.json] [--format=json|toon] [--phpstan-config=phpstan.neon] [--exclude=REGEX]
 
-            Build a compact PHP symbol index. --exclude is repeatable.
+            Build a PHPStan-enriched repository map. JSON is the default; TOON is optional. --exclude is repeatable.
             TXT;
         }
 
@@ -393,6 +452,9 @@ final readonly class AgentMapApplication
           agent-map changed --index=.agent-map/php-symbols.json --base=main
           agent-map related EvidenceValidator --index=.agent-map/php-symbols.json
           agent-map stats --index=.agent-map/php-symbols.json
+          agent-map callers 'Foo::bar' --index=.agent-map/php-symbols.json
+          agent-map callees 'Foo::bar' --index=.agent-map/php-symbols.json
+          agent-map context 'Foo::bar' --index=.agent-map/php-symbols.json --format=toon
           agent-map help
 
         Options:
@@ -400,6 +462,8 @@ final readonly class AgentMapApplication
           --limit=20
           --symbol-limit=10
           --method-limit=10
+          --context-budget=60000
+          --max-files=20 --max-callers=10 --max-callees=10 --max-tests=10
 
         TXT;
     }

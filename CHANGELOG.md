@@ -8,20 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Deterministic multi-file TOON map artifacts (`manifest.toon`, `files.toon`,
-  `symbols.toon`, `relations.toon`, and `diagnostics.toon`) are now published
-  by the existing `agent-map build` command alongside the legacy JSON index.
-- Methods are projected as first-class symbol records in the canonical TOON
-  store, with stable IDs and declaration relations for definitions, methods,
-  inheritance, interfaces, and traits.
-- Generated artifacts are hash-addressed through `manifest.toon`; the reader
-  rejects missing, malformed, duplicate, or tampered records.
+- PHPStan 2.2 semantic collection for resolved PHPDoc types, generics, call targets, instantiations, prototypes, and referenced types.
+- Reconciliation between `voku/simple-php-code-parser` structural facts and PHPStan semantic facts, including explicit diagnostics and conflict states.
+- `callers`, `callees`, and `context` commands for exact `Class::method` targets.
+- Deterministic `EditContextPlan` generation with contracts, callers, caller tests, callees, type definitions, blind spots, source hashes, and bounded source slices.
+- Optional TOON persistence for the same map model used by JSON.
 
 ### Changed
 
-- PHPStan `^2.2` is now a runtime dependency because it is the semantic engine
-  for the next map-building phase. The structural parser remains in place so
-  both analysis results can be reconciled rather than blindly trusted.
+- The map schema is now 2.0 and records SHA-256 file hashes, semantic fingerprints, relations, and diagnostics.
+- Methods and functions retain native, PHPDoc, and PHPStan-resolved types separately.
+- JSON remains the default map format; TOON is selected explicitly with `build --format=toon`.
+- PHPStan `^2.2` is a runtime dependency while `voku/simple-php-code-parser` remains the independent structural cross-check.
+- Stale detection now uses SHA-256 content hashes instead of mtimes and SHA-1.
 
 ## 0.1.1 - 2026-07-16
 

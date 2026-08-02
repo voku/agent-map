@@ -65,8 +65,13 @@ final readonly class OutputFormatter
             'extends' => $symbol->extends,
             'implements' => $symbol->implements,
             'uses' => $symbol->uses,
-            'params' => $symbol->params,
-            'return_type' => $symbol->returnType,
+            'params' => $symbol->displayParameters(),
+            'return_type' => $symbol->displayReturnType(),
+            'native_return_type' => $symbol->nativeReturnType,
+            'phpdoc_return_type' => $symbol->phpDocReturnType,
+            'resolved_return_type' => $symbol->resolvedReturnType,
+            'templates' => $symbol->templates,
+            'reconciliation_status' => $symbol->reconciliationStatus,
             'attributes' => $symbol->attributes,
             'methods' => array_map(static fn (MethodEntry $method): array => [
                 'name' => $method->name,
@@ -74,8 +79,12 @@ final readonly class OutputFormatter
                 'line_start' => $method->lineStart,
                 'line_end' => $method->lineEnd,
                 'static' => $method->static,
-                'params' => $method->params,
-                'return_type' => $method->returnType,
+                'params' => $method->displayParameters(),
+                'return_type' => $method->displayReturnType(),
+                'native_return_type' => $method->nativeReturnType,
+                'phpdoc_return_type' => $method->phpDocReturnType,
+                'resolved_return_type' => $method->resolvedReturnType,
+                'reconciliation_status' => $method->reconciliationStatus,
                 'attributes' => $method->attributes,
             ], $methods),
             'methods_omitted' => max(0, count($symbol->methods) - count($methods)),
@@ -106,6 +115,8 @@ final readonly class OutputFormatter
             'related' => $this->relatedText($payload),
             'changed' => $this->changedText($payload),
             'query' => $this->matchTypeNote($payload) . $this->filesText(is_array($payload['files'] ?? null) ? $payload['files'] : [], (bool) ($payload['include_namespace'] ?? false)),
+            'relations' => $this->relationsText($payload),
+            'edit_context' => $this->contextText($payload),
             default => $this->filesText(is_array($payload['files'] ?? null) ? $payload['files'] : [], (bool) ($payload['include_namespace'] ?? false)),
         };
     }
@@ -334,6 +345,65 @@ final readonly class OutputFormatter
         return '(' . $params . ')' . ($returnType !== null ? ': ' . $returnType : '');
     }
 
+
+    /** @param array<string, mixed> $payload */
+    private function relationsText(array $payload): string
+    {
+        $out = (string) ($payload['title'] ?? 'Relations') . "\n\n";
+        foreach (is_array($payload['relations'] ?? null) ? $payload['relations'] : [] as $relation) {
+            if (!is_array($relation)) {
+                continue;
+            }
+            $targets = is_array($relation['target_ids'] ?? null) ? implode(', ', array_map('strval', $relation['target_ids'])) : '';
+            $out .= (string) ($relation['source_id'] ?? '') . ' --' . (string) ($relation['kind'] ?? '') . '--> ' . $targets;
+            if (($relation['file'] ?? '') !== '') {
+                $out .= '  ' . (string) $relation['file'] . ':' . (int) ($relation['line_start'] ?? 0);
+            }
+            $out .= "\n";
+        }
+
+        return $out;
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function contextText(array $payload): string
+    {
+        $target = is_array($payload['target'] ?? null) ? $payload['target'] : [];
+        $out = 'Edit context for ' . (string) ($target['resolved'] ?? $target['requested'] ?? '') . "\n";
+        $out .= 'Map: ' . (string) ($payload['map_digest'] ?? '') . "\n";
+        $out .= 'Source bytes: ' . (int) ($payload['source_bytes'] ?? 0) . "\n\n";
+        foreach (is_array($payload['slices'] ?? null) ? $payload['slices'] : [] as $slice) {
+            if (!is_array($slice)) {
+                continue;
+            }
+            $roles = is_array($slice['roles'] ?? null) ? implode(', ', array_map('strval', $slice['roles'])) : '';
+            $out .= (string) ($slice['path'] ?? '') . ':' . (int) ($slice['line_start'] ?? 0) . '-' . (int) ($slice['line_end'] ?? 0) . ' [' . $roles . "]\n";
+            foreach (is_array($slice['reasons'] ?? null) ? $slice['reasons'] : [] as $reason) {
+                $out .= '  reason: ' . (string) $reason . "\n";
+            }
+            $out .= "\n" . (string) ($slice['content'] ?? '') . "\n";
+        }
+        $blindSpots = is_array($payload['blind_spots'] ?? null) ? $payload['blind_spots'] : [];
+        if ($blindSpots !== []) {
+            $out .= "\nBlind spots:\n";
+            foreach ($blindSpots as $blindSpot) {
+                if (is_array($blindSpot)) {
+                    $out .= '  - ' . (string) ($blindSpot['message'] ?? '') . "\n";
+                }
+            }
+        }
+        $omitted = is_array($payload['omitted'] ?? null) ? $payload['omitted'] : [];
+        if ($omitted !== []) {
+            $out .= "\nOmitted context:\n";
+            foreach ($omitted as $entry) {
+                if (is_array($entry)) {
+                    $out .= '  - ' . (string) ($entry['symbol_id'] ?? '') . ': ' . (string) ($entry['reason'] ?? '') . "\n";
+                }
+            }
+        }
+
+        return $out;
+    }
     private function visibilityMarker(string $visibility): string
     {
         return match ($visibility) {

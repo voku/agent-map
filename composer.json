@@ -18,6 +18,7 @@
   },
   "require": {
     "php": ">=8.2",
+    "composer-runtime-api": "^2.2",
     "helgesverre/toon": "^3.1",
     "phpstan/phpstan": "^2.2",
     "voku/simple-php-code-parser": "^0.22"

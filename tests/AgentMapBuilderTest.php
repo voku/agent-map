@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
+use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
 use voku\AgentMap\Extract\ExtractResult;
 use voku\AgentMap\Extract\SymbolExtractor;
 use voku\AgentMap\Index\AgentMapBuilder;
@@ -34,7 +35,7 @@ final class AgentMapBuilderTest extends TestCase
     {
         $extractor = new RecordingExtractor();
 
-        (new AgentMapBuilder(extractor: $extractor))->build($this->root, ['src'], []);
+        (new AgentMapBuilder(extractor: $extractor, semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build($this->root, ['src'], []);
 
         self::assertSame(['Alpha.php', 'Beta.php', 'Gamma.php'], $this->relativeCalls($extractor->extractCalls));
     }
@@ -46,7 +47,7 @@ final class AgentMapBuilderTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('src/Beta.php');
 
-        (new AgentMapBuilder(extractor: $extractor))->build($this->root, ['src'], []);
+        (new AgentMapBuilder(extractor: $extractor, semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build($this->root, ['src'], []);
     }
 
     public function testBuildingManyFilesStaysWithinAModestMemoryBudget(): void
@@ -58,7 +59,7 @@ final class AgentMapBuilderTest extends TestCase
         }
 
         $before = memory_get_usage(true);
-        $index = (new AgentMapBuilder(extractor: new RecordingExtractor()))->build($manyRoot, ['src'], []);
+        $index = (new AgentMapBuilder(extractor: new RecordingExtractor(), semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build($manyRoot, ['src'], []);
         $peak = memory_get_peak_usage(true);
 
         self::assertCount(500, $index->files);

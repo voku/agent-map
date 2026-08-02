@@ -6,6 +6,7 @@ namespace voku\AgentMap\Extract;
 
 use Throwable;
 use voku\AgentMap\Index\MethodEntry;
+use voku\AgentMap\Index\ParameterEntry;
 use voku\AgentMap\Index\SymbolEntry;
 use voku\SimplePhpParser\Model\BasePHPClass;
 use voku\SimplePhpParser\Model\PHPAttribute;
@@ -134,8 +135,8 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
             fqn: $fqn,
             lineStart: $lineStart,
             lineEnd: $function->endLine ?? $lineStart,
-            params: $this->parameters($function->parameters),
-            returnType: $function->getReturnType(),
+            parameters: $this->parameters($function->parameters),
+            nativeReturnType: $function->getReturnType(),
             attributes: $this->attributes($function->attributes),
         );
     }
@@ -148,11 +149,13 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
             name: $method->name,
             visibility: $method->access !== '' ? $method->access : 'public',
             lineStart: $lineStart,
-            static: $method->is_static ?? false,
-            params: $this->parameters($method->parameters),
-            returnType: $method->getReturnType(),
-            attributes: $this->attributes($method->attributes),
             lineEnd: $method->endLine ?? $lineStart,
+            static: $method->is_static ?? false,
+            abstract: $method->is_abstract ?? false,
+            final: $method->is_final ?? false,
+            parameters: $this->parameters($method->parameters),
+            nativeReturnType: $method->getReturnType(),
+            attributes: $this->attributes($method->attributes),
         );
     }
 
@@ -222,17 +225,20 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
     /**
      * @param array<string, PHPParameter> $parameters
      *
-     * @return list<string>
+     * @return list<ParameterEntry>
      */
     private function parameters(array $parameters): array
     {
-        $formatted = [];
+        $entries = [];
         foreach ($parameters as $parameter) {
-            $type = $parameter->getType();
-            $marker = ($parameter->is_passed_by_ref ? '&' : '') . ($parameter->is_vararg ? '...' : '');
-            $formatted[] = trim(($type !== null ? $type . ' ' : '') . $marker . '$' . $parameter->name);
+            $entries[] = new ParameterEntry(
+                name: $parameter->name,
+                nativeType: $parameter->getType(),
+                byReference: $parameter->is_passed_by_ref ?? false,
+                variadic: $parameter->is_vararg ?? false,
+            );
         }
 
-        return $formatted;
+        return $entries;
     }
 }

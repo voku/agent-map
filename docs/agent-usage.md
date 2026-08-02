@@ -1,55 +1,32 @@
-# Agent Token Hygiene
+# Agent usage
 
-Before reading broad files or running grep loops, prefer compact repo-map
-commands.
-
-## Repository Map
-
-Build or refresh the map:
+Build the map before asking a coding agent to inspect broad portions of the repository:
 
 ```bash
-make ai-map-build
+vendor/bin/agent-map build --root=. --paths=src,tests --out=.agent-map/php-symbols.json
 ```
 
-Check freshness:
+For a planned method edit, use:
 
 ```bash
-make ai-map-stale
+vendor/bin/agent-map context 'App\Service\Foo::bar' --format=toon
 ```
 
-Find symbols/files:
+The context result is deterministic repository evidence. Feed it into `agent-recall-compiler` together with task guidance and tool instructions. Do not ask the model to repeat map discovery unless `blind_spots` says the static result is incomplete.
+
+Useful inspections:
 
 ```bash
-make ai-map-query q=EvidenceValidator
-make ai-map-file f=src/EvidenceValidator.php
-make ai-map-related q=EvidenceValidator
+vendor/bin/agent-map callers 'App\Service\Foo::bar'
+vendor/bin/agent-map callees 'App\Service\Foo::bar'
+vendor/bin/agent-map query Foo
+vendor/bin/agent-map stale
 ```
 
-For changed work:
+Rules:
 
-```bash
-make ai-map-changed base=main
-```
-
-Get compact overview and size hints:
-
-```bash
-make ai-map-summary
-make ai-map-stats
-```
-
-Keep broad queries small:
-
-```bash
-make ai-map-query q=Service limit=10 symbol_limit=5 method_limit=5
-make ai-map-related q=EvidenceValidator format=toon
-```
-
-## Rules
-
-- Do not dump `.agent-map/php-symbols.json` into the prompt.
-- Use map output to choose the smallest relevant file/range.
-- Use `limit`, `symbol_limit`, and `method_limit` when a Make query name is broad.
-- Use RTK for noisy shell commands.
-- Use PHPStan as correctness gate, not agent-map.
-- Use ctx only for historical agent-session evidence.
+- rebuild when `stale` reports changed hashes;
+- use fully qualified class names when target resolution is ambiguous;
+- treat `dynamic` and `multiple_targets` relations as blind spots;
+- do not claim impact analysis is complete when candidates were omitted by the context budget;
+- use the PHP API from `agent-loop`, not CLI-output parsing.

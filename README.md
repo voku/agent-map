@@ -1,82 +1,58 @@
 # agent-map
 
-Compact PHP symbol maps for coding-agent navigation.
+Deterministic PHP repository maps for coding-agent context selection.
 
-`agent-map` builds a small JSON index of PHP files, symbols, and methods, then
-answers targeted questions such as "where is this class?", "what changed?", and
-"what tests look nearby?". It is designed for token hygiene: agents should find
-the right files before reading large chunks of a repository.
+`agent-map` analyses the same source tree with two complementary engines:
 
-agent-map helps agents find the right files faster.
-It does not decide what the repository has learned.
+- `voku/simple-php-code-parser` records physical declarations and source ranges;
+- PHPStan 2.2 resolves PHPDoc types, generics, call targets, inheritance, and semantic relationships.
 
-## Why This Exists
-
-Coding agents often start by running broad searches and reading whole files.
-That works, but it wastes context. `agent-map` gives agents a boring first stop:
+The results are reconciled into one map that can answer focused questions such as:
 
 ```bash
-vendor/bin/agent-map related EvidenceValidator
-vendor/bin/agent-map file src/EvidenceValidator.php
-vendor/bin/agent-map changed --base=main
+vendor/bin/agent-map callers 'App\Service\UserService::save'
+vendor/bin/agent-map callees 'App\Service\UserService::save'
+vendor/bin/agent-map context 'App\Service\UserService::save' --format=toon
 ```
 
-Use the output to choose the smallest useful file or range to inspect next. Do
-not paste the generated index into a prompt.
-
-## What It Is Not
-
-- Not a memory system.
-- Not an LLM caller.
-- Not a daemon.
-- Not a database.
-- Not a PHPStan replacement.
-- Not an `agent-loop` or `agent-learning` dependency.
+The important output is not a grand graph for admiring in meetings. It is a bounded, source-backed edit context that `agent-loop` and `agent-recall-compiler` can use without asking an LLM to rediscover the repository first.
 
 ## Boundaries
 
-`agent-map` builds and queries a compact PHP symbol map.
+`agent-map` owns:
 
-`agent-loop` may later orchestrate workflows and call `agent-map`.
+```text
+repository analysis
+→ reconciled symbols, types, and relations
+→ deterministic queries
+→ EditContextPlan
+```
 
-`agent-learning` stores validated findings, proposals, and decisions. It must
-not own repo maps.
+It does not:
 
-`agent-recall-compiler` may later use map output to select context.
+- call an LLM;
+- write the final implementation prompt;
+- modify source code;
+- execute tests;
+- store durable project learning.
 
-PHPStan remains the authoritative correctness/type validation gate.
-
-RTK handles shell-output compression separately.
-
-`agent-map` guides agent navigation.
-PHPStan judges agent claims.
+Those responsibilities belong to the surrounding `agent-*` packages.
 
 ## Requirements
 
-- PHP 8.3 or newer
+- PHP 8.2 or newer
 - Composer
+- PHPStan 2.2, installed automatically as a runtime dependency of this development tool
 
 ## Installation
 
-In a project:
-
 ```bash
-composer require voku/agent-map --dev
+composer require --dev voku/agent-map
 ```
 
-When working from this repository checkout:
+## Build a map
 
-```bash
-composer install
-```
-
-For root-checkout development, Composer creates `vendor/bin/agent-map` through
-the package post-install/update script. As a dependency, Composer exposes the
-package binary normally.
-
-## Quick Start
-
-Build an index:
+JSON remains the default interoperable storage format:
 
 ```bash
 vendor/bin/agent-map build \
@@ -85,199 +61,196 @@ vendor/bin/agent-map build \
   --out=.agent-map/php-symbols.json
 ```
 
-Inspect the map:
-
-```bash
-vendor/bin/agent-map summary
-vendor/bin/agent-map query EvidenceValidator
-vendor/bin/agent-map related EvidenceValidator
-vendor/bin/agent-map file src/EvidenceValidator.php
-vendor/bin/agent-map stale
-```
-
-For changed work:
-
-```bash
-vendor/bin/agent-map changed --base=main
-```
-
-## Commands
-
-### `build`
-
-Scans PHP files and writes the JSON index.
+TOON is an optional compact serialization of the same model:
 
 ```bash
 vendor/bin/agent-map build \
   --root=. \
   --paths=src,tests \
-  --out=.agent-map/php-symbols.json \
-  --exclude='~Generated.*\.php$~'
+  --out=.agent-map/php-symbols.toon \
+  --format=toon
 ```
 
-Options:
+There is one analysis path and one map model. JSON and TOON are serializers, not competing architectures.
 
-- `--root`: repository root. Defaults to the current working directory.
-- `--paths`: comma-separated directories or PHP files relative to root. Defaults to `.`.
-- `--out`: output JSON file. Defaults to `.agent-map/php-symbols.json`.
-- `--exclude`: repeatable PHP regex applied to normalized relative and absolute paths.
+### Build options
 
-Default excludes:
+- `--root`: repository root, default current directory;
+- `--paths`: comma-separated PHP files or directories, default `.`;
+- `--out`: map file, default `.agent-map/php-symbols.json`;
+- `--format`: `json` or `toon`, default `json`;
+- `--phpstan-config`: explicit PHPStan configuration;
+- `--exclude`: repeatable PHP regular expression applied to normalized paths.
 
-- `vendor/`
-- `.git/`
-- `node_modules/`
-- `var/cache/`
+Configuration discovery uses:
 
-Invalid exclude regexes fail before scanning.
+1. `--phpstan-config`;
+2. `phpstan.neon`;
+3. `phpstan.neon.dist`;
+4. a generated level-0 configuration.
 
-### `query <term>`
+Project PHPStan findings are stored as diagnostics when the semantic export itself succeeds. Parse failures, internal PHPStan failures, or a missing semantic export fail the build.
 
-Finds files by file path, symbol name, fully-qualified name, or method name.
-Literal hits and case/separator-normalized peers are combined, so a DTO named
-`M365EntraApp` does not hide a module named `M365_EntraApp`. Method-only
-queries show only the matching method under its containing symbol, rather than
-spending output on every unrelated method in that class.
+## What the map contains
+
+### Files
+
+- repository-relative path;
+- SHA-256 source hash;
+- namespace;
+- structural and semantic status.
+
+### Symbols
+
+- classes, interfaces, traits, enums, functions, and methods;
+- exact declaration ranges;
+- inheritance, interfaces, traits, and attributes;
+- native, PHPDoc, and PHPStan-resolved parameter and return types;
+- PHPStan template types and resolved generic ancestors;
+- reconciliation state.
+
+For example:
+
+```text
+native return:   Entity|null
+PHPDoc return:   T|null
+resolved return: User|null
+```
+
+Generics are regular PHPStan types. There is no separate ceremonial generic subsystem.
+
+### Relations
+
+- `defines`
+- `declares_method`
+- `extends`
+- `implements`
+- `uses_trait`
+- `overrides`
+- `calls`
+- `instantiates`
+- `references_type`
+
+Relations record source locations and one of these resolution states:
+
+- `structural_only`
+- `phpstan_resolved`
+- `multiple_targets`
+- `dynamic`
+
+Dynamic facts stay visible, but they are never promoted into imaginary certainty.
+
+### Reconciliation
+
+Comparable parser and PHPStan facts are classified as:
+
+- `confirmed`
+- `semantic_enrichment`
+- `structural_only`
+- `phpstan_only`
+- `conflict`
+
+Conflicted symbols cannot be used as edit targets.
+
+## Commands
+
+All read commands accept either a JSON or TOON index. The input format is detected from the file extension, while `--format` controls command output.
+
+### Locate symbols
 
 ```bash
-vendor/bin/agent-map query EvidenceValidator
+vendor/bin/agent-map query UserService
+vendor/bin/agent-map file src/Service/UserService.php
+vendor/bin/agent-map related UserService
 ```
 
-### `file <path>`
-
-Shows indexed symbols for one file.
+### Inspect dependencies
 
 ```bash
-vendor/bin/agent-map file src/EvidenceValidator.php
+vendor/bin/agent-map callers 'App\Service\UserService::save'
+vendor/bin/agent-map callees 'App\Service\UserService::save'
 ```
 
-### `related <term>`
+Method edit targets are exact:
 
-Finds likely related files without pretending to be a semantic graph.
+```text
+Foo::bar
+App\Foo::bar
+\App\Foo::bar
+```
 
-It currently combines:
+A short class name that matches multiple methods fails and lists the fully qualified candidates. Editing the wrong `Foo` faster was not a requested feature.
 
-- exact symbol/file/method matches
-- likely test files with matching basename
-- same-namespace files
-- files that mention the term
+### Generate edit context
 
 ```bash
-vendor/bin/agent-map related EvidenceValidator
+vendor/bin/agent-map context 'App\Service\UserService::save' \
+  --index=.agent-map/php-symbols.json \
+  --context-budget=60000 \
+  --max-files=20 \
+  --max-callers=10 \
+  --max-callees=10 \
+  --max-tests=10 \
+  --format=toon
 ```
 
-### `changed`
+The resulting `EditContextPlan` contains:
 
-Shows changed PHP files against a base branch plus staged and unstaged working
-tree PHP changes.
+- the primary method;
+- implemented or overridden contracts;
+- direct callers that may need adaptation;
+- tests calling the target or its direct callers;
+- direct callees;
+- referenced type definitions;
+- exact source slices and SHA-256 evidence;
+- dynamic or conflicting blind spots;
+- candidates omitted by the configured budget;
+- a deterministic map digest.
 
-```bash
-vendor/bin/agent-map changed --base=main
-```
+The default traversal is intentionally one hop. Context selection is deterministic and methods are never truncated halfway through.
 
-This command requires the index root to be a Git repository.
-
-If the base comparison fails, `changed` warns and still reports working-tree
-changes when possible.
-
-### `summary`
-
-Prints a compact repository overview.
-
-```bash
-vendor/bin/agent-map summary
-```
-
-### `stats`
-
-Prints map size, symbol/method counts, and largest indexed files.
-
-```bash
-vendor/bin/agent-map stats
-```
-
-### `stale`
-
-Checks whether indexed files changed or disappeared.
+### Repository status
 
 ```bash
 vendor/bin/agent-map stale
+vendor/bin/agent-map changed --base=main
+vendor/bin/agent-map summary
+vendor/bin/agent-map stats
 ```
 
-Exit codes:
+`stale` compares current SHA-256 hashes with the map. `context` refuses to materialize source from a stale map.
 
-- `0`: index is fresh
-- `1`: one or more indexed files are stale or missing
+## Output formats
 
-## Shared Options
+Read commands support:
 
-Most read commands accept:
-
-- `--index`: index path. Defaults to `.agent-map/php-symbols.json`.
-- `--format`: `text`, `json`, `markdown`, or `toon`. Defaults to `text`.
-- `--limit`: maximum files/rows. Defaults to `20`.
-- `--symbol-limit`: maximum symbols shown per file. Defaults to `10`.
-- `--method-limit`: maximum methods shown per symbol. Defaults to `10`.
-
-Examples:
-
-```bash
-vendor/bin/agent-map query Service --limit=20
-vendor/bin/agent-map related Service --symbol-limit=5 --method-limit=5
-vendor/bin/agent-map query EvidenceValidator --format=toon
+```text
+text
+json
+markdown
+toon
 ```
 
-Text is the default because it is compact for agents. JSON is opt-in and should
-mostly be used by scripts. TOON output is provided by `helgesverre/toon`.
+Text is the compact human/agent default. JSON is the normal integration format. TOON is useful when the result will be inserted into model context.
 
-`query`, `file`, `summary`, `related`, `changed`, and `stats` warn when the
-index is stale. They still return results so agents can keep moving, but the
-right fix is to rebuild the map.
+## Library API
 
-## Parsing
+The CLI is an inspection layer. Other `agent-*` packages should compose PHP objects directly:
 
-`build` parses every file in-process with `voku/simple-php-code-parser`
-(nikic/php-parser under the hood). If a file fails to parse, the command
-fails clearly rather than silently skipping it.
+```php
+use voku\AgentMap\Context\EditContextPlanner;
+use voku\AgentMap\Index\IndexReader;
 
-Beyond class/interface/trait/enum/function names and line numbers, the index
-records the signature detail an agent needs to judge relevance without
-opening the file:
+$map = (new IndexReader())->read('.agent-map/php-symbols.json');
+$plan = (new EditContextPlanner())->plan(
+    map: $map,
+    target: 'App\\Service\\UserService::save',
+);
+```
 
-- `extends` / `implements` for classes, interfaces, and enums
-- `uses` for the traits a class or trait composes (`use LoggerTrait;`),
-  resolved to the same fully-qualified names used for `extends` and
-  `implements`
-- method and function parameters (`Type $name`) and return types
-- method visibility and `static`
-- `line_start` / `line_end` for every class-like symbol, method, and
-  function — precise enough to `sed -n 'start,endp' file.php` out exactly
-  one method instead of reading the rest of the file. (Leading `#[...]`
-  attribute lines are included in the range.)
-- PHP 8 attributes on classes, interfaces, traits, enums, methods, and
-  functions, rendered as `Name(arg, key: arg, ...)` (e.g.
-  `#[Route('/widgets', priority: 5)]`). Parameter- and property-level
-  attributes are not extracted. Attribute arguments that are enum cases or
-  class constants render as a bare name string (e.g. `Foo` instead of
-  `SomeEnum::Foo`) and array-literal arguments render as `...` — both are
-  limitations of the underlying AST value resolver, not of agent-map.
+`agent-loop` should not shell out to `agent-map` and scrape formatted text. Humans have invented enough avoidable protocols already.
 
-Trait-contributed methods are not merged into a class's own method list —
-if `Widget` composes `LoggerTrait`, only `Widget`'s own directly-declared
-methods appear under `Widget`; `LoggerTrait`'s methods appear only under the
-trait's own entry. The underlying parser resolves trait method inlining at
-runtime/reflection time, not statically, so agent-map doesn't have it either.
-
-## Index File
-
-The JSON index stores:
-
-- relative paths
-- file mtimes and SHA1 hashes
-- namespace
-- symbols, with line numbers, extends/implements, and method/function signatures
-
-It does not store source code or AST blobs.
+## Generated files
 
 Recommended `.gitignore` entry:
 
@@ -285,77 +258,13 @@ Recommended `.gitignore` entry:
 .agent-map/
 ```
 
-Commit the generated index only when a project explicitly wants that.
-
-## Makefile Template
-
-Projects can include [`Makefile.agent-map.mk`](Makefile.agent-map.mk) to expose
-stable agent-facing commands:
-
-```makefile
-include Makefile.agent-map.mk
-```
-
-Then agents can use:
-
-```bash
-make ai-map-build
-make ai-map-stale
-make ai-map-summary
-make ai-map-query q=EvidenceValidator
-make ai-map-file f=src/EvidenceValidator.php
-make ai-map-changed base=main
-make ai-map-related q=EvidenceValidator
-make ai-map-stats
-```
-
-Optional Make variables mirror the CLI read controls:
-
-```bash
-make ai-map-query q=Service limit=10 symbol_limit=5 method_limit=5
-make ai-map-related q=EvidenceValidator format=toon
-```
-
-Project defaults can be overridden with:
-
-```makefile
-AGENT_MAP_PATHS = src,tests,bin
-AGENT_MAP_BASE = develop
-AGENT_MAP_LIMIT = 10
-```
-
-See [`docs/agent-usage.md`](docs/agent-usage.md) for an `AGENTS.md`-ready
-token hygiene snippet.
+Commit a map only when a repository explicitly wants a versioned snapshot.
 
 ## Development
 
-Install dependencies:
-
 ```bash
 composer install
+composer ci
 ```
 
-Run tests and static analysis:
-
-```bash
-vendor/bin/phpunit
-vendor/bin/phpstan analyse --configuration=phpstan.neon.dist
-find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
-```
-
-Dogfood the focused IT-Portal discovery contract when that checkout is
-available alongside this repository:
-
-```bash
-IT_PORTAL_ROOT=../IT-Portal vendor/bin/phpunit --filter ItPortalDogfoodTest
-```
-
-Validate Composer metadata:
-
-```bash
-composer validate --strict
-```
-
-## License
-
-MIT
+CI validates Composer metadata, PHPUnit, and PHPStan on supported PHP versions.

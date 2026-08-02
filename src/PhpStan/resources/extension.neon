@@ -1,0 +1,33 @@
+services:
+    -
+        class: voku\AgentMap\PhpStan\Collector\ClassLikeCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\ClassMethodCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\FunctionCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\MethodCallCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\StaticCallCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\FunctionCallCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\InstantiationCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\CollectedMapExportRule
+        tags:
+            - phpstan.rules.rule
