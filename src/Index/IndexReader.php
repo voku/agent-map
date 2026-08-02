@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Index;
 
+use HelgeSverre\Toon\Exceptions\DecodeException;
 use HelgeSverre\Toon\Toon;
+use JsonException;
 use RuntimeException;
 
 final readonly class IndexReader
@@ -19,20 +21,42 @@ final readonly class IndexReader
             throw new RuntimeException('Unable to read index: ' . $file);
         }
 
-        $data = str_ends_with(strtolower($file), '.toon')
-            ? Toon::decode($content)
-            : json_decode($content, true);
-        if (!is_array($data)) {
-            // Extension-free files are occasionally useful in tooling. Try the
-            // other decoder before admitting defeat.
-            $data = str_ends_with(strtolower($file), '.toon')
-                ? json_decode($content, true)
-                : Toon::decode($content);
+        $toonFirst = str_ends_with(strtolower($file), '.toon');
+        $data = $toonFirst ? $this->decodeToon($content) : $this->decodeJson($content);
+        if ($data === null) {
+            // File extensions are useful hints, not a second map schema. Try
+            // the other serializer so renamed or extension-free indexes still
+            // load without making callers choose a different reader.
+            $data = $toonFirst ? $this->decodeJson($content) : $this->decodeToon($content);
         }
-        if (!is_array($data)) {
+        if ($data === null) {
             throw new RuntimeException('Invalid agent-map index: ' . $file);
         }
 
         return AgentMapIndex::fromArray($data);
+    }
+
+    /** @return array<string, mixed>|null */
+    private function decodeJson(string $content): ?array
+    {
+        try {
+            $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            return null;
+        }
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /** @return array<string, mixed>|null */
+    private function decodeToon(string $content): ?array
+    {
+        try {
+            $decoded = Toon::decode($content);
+        } catch (DecodeException) {
+            return null;
+        }
+
+        return is_array($decoded) ? $decoded : null;
     }
 }
