@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply:
-    if: ${{ hashFiles('.github/agent-map-migration.ready') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -24,6 +23,7 @@ jobs:
           tools: composer:v2
       - name: Apply migration payload
         run: |
+          test -f .github/agent-map-migration.ready
           cat .github/agent-map-migration.b64.part-* | base64 -d > /tmp/agent-map-migration.tar.gz
           echo 'd5ea506b8175160baf07c5bc5d1775a6ad21ffdae2217a51378c2328695eb652  /tmp/agent-map-migration.tar.gz' | sha256sum -c -
           tar -xzf /tmp/agent-map-migration.tar.gz
