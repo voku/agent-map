@@ -72,6 +72,8 @@ final readonly class CliOptions
         $excludes = [];
         $argument = null;
         $help = false;
+        $formatProvided = false;
+        $outProvided = false;
 
         for ($i = 0, $count = count($tokens); $i < $count; ++$i) {
             $token = $tokens[$i];
@@ -98,11 +100,22 @@ final readonly class CliOptions
                 throw new InvalidArgumentException('Unknown option: --' . $name);
             }
             $values[$name] = $value;
+            $formatProvided = $formatProvided || $name === 'format';
+            $outProvided = $outProvided || $name === 'out';
         }
 
         if (in_array($command, ['query', 'file', 'related', 'callers', 'callees', 'context'], true) && !$help && ($argument === null || $argument === '')) {
             throw new InvalidArgumentException('Missing argument for command: ' . $command);
         }
+        if ($command === 'build') {
+            if (!$formatProvided && str_ends_with(strtolower($values['out']), '.toon')) {
+                $values['format'] = 'toon';
+            }
+            if (!$outProvided && $values['format'] === 'toon') {
+                $values['out'] = '.agent-map/php-symbols.toon';
+            }
+        }
+
         $allowedFormats = $command === 'build' ? ['json', 'toon'] : ['text', 'json', 'markdown', 'toon'];
         if (!in_array($values['format'], $allowedFormats, true)) {
             throw new InvalidArgumentException('Unknown format for ' . $command . ': ' . $values['format']);
