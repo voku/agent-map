@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Index;
 
 use RuntimeException;
+use voku\AgentMap\Store\ToonMapWriter;
 
 final readonly class IndexWriter
 {
@@ -23,5 +24,9 @@ final readonly class IndexWriter
         if (file_put_contents($file, $json . "\n") === false) {
             throw new RuntimeException('Unable to write index: ' . $file);
         }
+
+        // Keep the legacy JSON index during the 0.x migration, but publish the
+        // deterministic multi-file TOON store from the same build command.
+        (new ToonMapWriter())->write($index, $directory);
     }
 }
