@@ -59,7 +59,10 @@ jobs:
                   ("'lines' => array_values($lines)", "'lines' => $lines"),
               ],
               'tests/AgentMapIndexTest.php': [
-                  ('fingerprint?->phpStanVersion', 'fingerprint->phpStanVersion'),
+                  (
+                      "self::assertSame('2.2.0', $read->fingerprint?->phpStanVersion);",
+                      "self::assertNotNull($read->fingerprint);\n            self::assertSame('2.2.0', $read->fingerprint->phpStanVersion);",
+                  ),
                   ('fingerprint?->sourceDigest', 'fingerprint->sourceDigest'),
               ],
           }
