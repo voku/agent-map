@@ -36,17 +36,47 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          collector = Path('src/PhpStan/Collector/FunctionCollector.php')
-          collector.write_text(collector.read_text().replace(
-              'ParametersAcceptorSelector::selectSingle($function->getVariants())',
-              'ParametersAcceptorSelector::combineAcceptors($function->getVariants())',
-          ))
+          replacements = {
+              'src/PhpStan/Collector/FunctionCollector.php': [
+                  (
+                      'ParametersAcceptorSelector::selectSingle($function->getVariants())',
+                      'ParametersAcceptorSelector::combineAcceptors($function->getVariants())',
+                  ),
+              ],
+              'tests/SourceMaterializerTest.php': [
+                  (
+                      "self::assertSame(9, $source['start']);",
+                      "self::assertSame(8, $source['start']);",
+                  ),
+              ],
+              'src/Build/PhpStanSemanticAnalyzer.php': [
+                  (
+                      '$currentEnvironment = getenv();\n            $environment = is_array($currentEnvironment) ? $currentEnvironment : [];',
+                      '$environment = getenv();',
+                  ),
+              ],
+              'src/Context/SourceMaterializer.php': [
+                  ("'lines' => array_values($lines)", "'lines' => $lines"),
+              ],
+              'tests/AgentMapIndexTest.php': [
+                  ('fingerprint?->phpStanVersion', 'fingerprint->phpStanVersion'),
+                  ('fingerprint?->sourceDigest', 'fingerprint->sourceDigest'),
+              ],
+          }
 
-          test = Path('tests/SourceMaterializerTest.php')
-          test.write_text(test.read_text().replace(
-              "self::assertSame(9, $source['start']);",
-              "self::assertSame(8, $source['start']);",
-          ))
+          for path in [
+              'src/Cli/AgentMapApplication.php',
+              'src/Context/EditContextPlanner.php',
+              'src/Index/AgentMapIndex.php',
+          ]:
+              replacements[path] = [("$fileName = array_pop($segments) ?? '';", "$fileName = array_pop($segments);")]
+
+          for file_name, file_replacements in replacements.items():
+              path = Path(file_name)
+              content = path.read_text()
+              for old, new in file_replacements:
+                  content = content.replace(old, new)
+              path.write_text(content)
           PY
           rm -rf .github/agent-map-review-fixes
           rm -f .github/workflows/export-review-fixes.yml
