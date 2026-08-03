@@ -8,6 +8,8 @@ use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
+use voku\AgentMap\Build\SemanticAnalysisResult;
+use voku\AgentMap\Build\SemanticAnalyzer;
 use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
 use voku\AgentMap\Extract\ExtractResult;
 use voku\AgentMap\Extract\SymbolExtractor;
@@ -38,6 +40,41 @@ final class AgentMapBuilderTest extends TestCase
         (new AgentMapBuilder(extractor: $extractor, semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build($this->root, ['src'], []);
 
         self::assertSame(['Alpha.php', 'Beta.php', 'Gamma.php'], $this->relativeCalls($extractor->extractCalls));
+    }
+
+    public function testBuildProducesSchemaTwoHashesStatusesAndFingerprint(): void
+    {
+        $index = (new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build($this->root, ['src'], []);
+
+        self::assertSame('2.0', $index->schemaVersion);
+        self::assertStringStartsWith('sha256:', $index->files[0]->sha256);
+        self::assertSame('no_semantic_records', $index->files[0]->semanticStatus);
+        self::assertNotNull($index->fingerprint);
+        self::assertSame('test-none', $index->fingerprint->phpStanVersion);
+        self::assertStringStartsWith('sha256:', $index->fingerprint->sourceDigest);
+    }
+
+    public function testPhpStanConfigurationDiscoveryPrefersPhpstanNeon(): void
+    {
+        file_put_contents($this->root . '/phpstan.neon.dist', "parameters:
+    level: 1
+");
+        file_put_contents($this->root . '/phpstan.neon', "parameters:
+    level: 2
+");
+        $semantic = new RecordingSemanticAnalyzer();
+
+        (new AgentMapBuilder(semanticAnalyzer: $semantic))->build($this->root, ['src'], []);
+
+        self::assertSame($this->root . '/phpstan.neon', $semantic->configurationFile);
+    }
+
+    public function testMissingExplicitPhpStanConfigurationFailsClearly(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('PHPStan configuration not found');
+
+        (new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build($this->root, ['src'], [], 'missing.neon');
     }
 
     public function testFailureRaisesRuntimeExceptionForFailingFile(): void
@@ -142,5 +179,17 @@ final class FailingExtractor implements SymbolExtractor
         }
 
         return new ExtractResult($file, true);
+    }
+}
+
+final class RecordingSemanticAnalyzer implements SemanticAnalyzer
+{
+    public ?string $configurationFile = null;
+
+    public function analyse(string $root, array $relativeFiles, ?string $configurationFile = null): SemanticAnalysisResult
+    {
+        $this->configurationFile = $configurationFile;
+
+        return new SemanticAnalysisResult([], [], 'test-recording', 'sha256:recording');
     }
 }

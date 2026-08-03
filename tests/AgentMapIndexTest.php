@@ -9,6 +9,7 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
+use voku\AgentMap\Index\AnalysisFingerprint;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
@@ -45,6 +46,9 @@ final class AgentMapIndexTest extends TestCase
             self::assertSame('src/EvidenceValidator.php', $read->files[0]->path);
             self::assertSame('User|null', $read->files[0]->symbols[0]->methods[0]->resolvedReturnType);
             self::assertCount(1, $read->relations);
+            self::assertNotNull($read->fingerprint);
+            self::assertSame('2.2.0', $read->fingerprint->phpStanVersion);
+            self::assertSame('sha256:sources', $read->fingerprint->sourceDigest);
         }
     }
 
@@ -73,6 +77,29 @@ final class AgentMapIndexTest extends TestCase
         (new IndexWriter())->write($this->index(), $path, 'toon');
 
         self::assertSame('2.0', (new IndexReader())->read($path)->schemaVersion);
+    }
+
+    public function testTypeLookupNormalizesLeadingBackslash(): void
+    {
+        self::assertNotNull($this->index()->symbolById('type:\Demo\EvidenceValidator'));
+    }
+
+    public function testLikelyTestFilesDoNotMatchProductionPathSubstrings(): void
+    {
+        $production = $this->index()->files[0];
+        $contest = new FileEntry('src/Contest/Entry.php', 'sha256:none', 'Demo', [new SymbolEntry('class', 'Entry', 'Demo\Contest\Entry', 1, 1)]);
+        $latest = new FileEntry('src/Latest/TestimonialService.php', 'sha256:none', 'Demo', [new SymbolEntry('class', 'TestimonialService', 'Demo\Latest\TestimonialService', 1, 1)]);
+        $index = new AgentMapIndex('2.0', $this->root, 'test', [$production, $contest, $latest]);
+
+        self::assertSame([], $index->likelyTestFiles($production));
+    }
+
+    public function testRelationIdentityIncludesReceiverAndResultTypes(): void
+    {
+        $first = RelationEntry::create('method:Demo\Caller::run', 'calls', ['method:Demo\Target::go'], 'src/Caller.php', 10, 10, 'phpstan_resolved', 'Demo\A', 'int');
+        $second = RelationEntry::create('method:Demo\Caller::run', 'calls', ['method:Demo\Target::go'], 'src/Caller.php', 10, 10, 'phpstan_resolved', 'Demo\B', 'string');
+
+        self::assertNotSame($first->id, $second->id);
     }
 
     public function testQueryFindsClassAndMethodIncludingNormalizedName(): void
@@ -157,7 +184,14 @@ final class AgentMapIndexTest extends TestCase
             resolution: 'phpstan_resolved',
         );
 
-        return new AgentMapIndex('2.0', $this->root, 'test', [$production, $test], [$relation]);
+        return new AgentMapIndex(
+            '2.0',
+            $this->root,
+            'test',
+            [$production, $test],
+            [$relation],
+            fingerprint: new AnalysisFingerprint('2.2.0', 'sha256:config', 'sha256:lock', 'sha256:sources'),
+        );
     }
 
     private function hash(string $relative): string

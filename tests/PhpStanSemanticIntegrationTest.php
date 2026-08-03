@@ -49,6 +49,38 @@ final class UserService
     {
         return $repository->find(1);
     }
+
+    public function maybeLoad(?UserRepository $repository): ?Entity
+    {
+        return $repository?->find(1);
+    }
+}
+PHP);
+        file_put_contents($this->root . '/src/Functions.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace {
+    function fallback_helper(): int
+    {
+        return 1;
+    }
+}
+
+namespace Demo {
+    function local_helper(string $value): string
+    {
+        return $value;
+    }
+
+    final class FunctionCaller
+    {
+        public function call(): int
+        {
+            return fallback_helper();
+        }
+    }
 }
 PHP);
     }
@@ -58,24 +90,35 @@ PHP);
         $this->removeDirectory($this->root);
     }
 
-    public function testBuildResolvesGenericTypesAndCalls(): void
+    public function testBuildResolvesGenericTypesCallsFunctionsAndNullsafeCalls(): void
     {
         $index = (new AgentMapBuilder())->build($this->root, ['src'], []);
-        $method = $index->resolveMethod('Demo\\UserRepository::find');
+        $method = $index->resolveMethod('Demo\UserRepository::find');
 
-        self::assertSame('Demo\\User|null', $method->method->phpDocReturnType);
-        self::assertSame('Demo\\User|null', $method->method->resolvedReturnType);
+        self::assertSame('Demo\User|null', $method->method->phpDocReturnType);
+        self::assertSame('Demo\User|null', $method->method->resolvedReturnType);
         self::assertSame('semantic_enrichment', $method->method->reconciliationStatus);
-        self::assertSame(['Demo\\Repository<Demo\\User>'], $method->owner->implements);
+        self::assertSame(['Demo\Repository<Demo\User>'], $method->owner->implements);
 
         $callers = $index->incoming($method->id, 'calls');
-        self::assertCount(1, $callers);
-        self::assertSame('method:Demo\\UserService::load', $callers[0]->sourceId);
-        self::assertSame('Demo\\User|null', $callers[0]->resultType);
+        $callerIds = array_map(static fn ($relation): string => $relation->sourceId, $callers);
+        sort($callerIds, SORT_STRING);
+        self::assertSame([
+            'method:Demo\UserService::load',
+            'method:Demo\UserService::maybeLoad',
+        ], $callerIds);
 
         $contracts = $index->outgoing($method->id, 'overrides');
         self::assertCount(1, $contracts);
-        self::assertSame(['method:Demo\\Repository::find'], $contracts[0]->targetIds);
+        self::assertSame(['method:Demo\Repository::find'], $contracts[0]->targetIds);
+
+        $functionCalls = array_values(array_filter(
+            $index->relations,
+            static fn ($relation): bool => $relation->sourceId === 'method:Demo\FunctionCaller::call' && in_array('function:fallback_helper', $relation->targetIds, true),
+        ));
+        self::assertCount(1, $functionCalls);
+        self::assertSame('phpstan_resolved', $functionCalls[0]->resolution);
+        self::assertNotNull($index->symbolById('function:fallback_helper'));
     }
 
     private function removeDirectory(string $path): void

@@ -75,7 +75,7 @@ final readonly class MethodEntry
                 continue;
             }
             if (is_string($parameter)) {
-                $parameters[] = self::fromLegacyParameter($parameter, is_string($key) ? $key : null);
+                $parameters[] = ParameterEntry::fromLegacyString($parameter, is_string($key) ? $key : null);
             }
         }
 
@@ -100,22 +100,6 @@ final readonly class MethodEntry
             resolvedReturnType: self::nullableString($data['resolved_return_type'] ?? null),
             attributes: $attributes,
             reconciliationStatus: (string) ($data['reconciliation_status'] ?? 'structural_only'),
-        );
-    }
-
-    private static function fromLegacyParameter(string $parameter, ?string $fallbackName): ParameterEntry
-    {
-        $name = $fallbackName ?? '';
-        if (preg_match('/\$([A-Za-z_][A-Za-z0-9_]*)/', $parameter, $match) === 1) {
-            $name = $match[1];
-        }
-        $type = trim((string) preg_replace('/(?:&|\.\.\.)?\$[A-Za-z_][A-Za-z0-9_]*.*/', '', $parameter));
-
-        return new ParameterEntry(
-            name: $name,
-            nativeType: $type !== '' ? $type : null,
-            byReference: str_contains($parameter, '&$'),
-            variadic: str_contains($parameter, '...$'),
         );
     }
 

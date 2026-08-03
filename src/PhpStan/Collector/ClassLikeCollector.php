@@ -25,26 +25,22 @@ final readonly class ClassLikeCollector implements Collector
     {
         $class = $node->getClassReflection();
         $kind = $class->isInterface() ? 'interface' : ($class->isTrait() ? 'trait' : ($class->isEnum() ? 'enum' : 'class'));
-        $parentNames = [];
-        $displayExtends = [];
+
+        $parents = [];
         $parent = $class->getParentClass();
         if ($parent !== null) {
-            $parentNames[] = $parent->getName();
-            $displayExtends[] = $parent->getDisplayName();
+            $parents[$parent->getName()] = $parent->getDisplayName();
         }
         if ($class->isInterface()) {
             foreach ($class->getImmediateInterfaces() as $interface) {
-                $parentNames[] = $interface->getName();
-                $displayExtends[] = $interface->getDisplayName();
+                $parents[$interface->getName()] = $interface->getDisplayName();
             }
         }
 
-        $interfaceNames = [];
-        $displayImplements = [];
+        $interfaces = [];
         if (!$class->isInterface()) {
             foreach ($class->getImmediateInterfaces() as $interface) {
-                $interfaceNames[] = $interface->getName();
-                $displayImplements[] = $interface->getDisplayName();
+                $interfaces[$interface->getName()] = $interface->getDisplayName();
             }
         }
 
@@ -58,10 +54,8 @@ final readonly class ClassLikeCollector implements Collector
             $templates[$name] = TypeProjector::describe($type);
         }
         ksort($templates, SORT_STRING);
-        sort($parentNames, SORT_STRING);
-        sort($displayExtends, SORT_STRING);
-        sort($interfaceNames, SORT_STRING);
-        sort($displayImplements, SORT_STRING);
+        ksort($parents, SORT_STRING);
+        ksort($interfaces, SORT_STRING);
         sort($traitNames, SORT_STRING);
 
         return [
@@ -71,10 +65,10 @@ final readonly class ClassLikeCollector implements Collector
             'file' => $scope->getFile(),
             'line_start' => $node->getOriginalNode()->getStartLine(),
             'line_end' => $node->getOriginalNode()->getEndLine(),
-            'extends' => $displayExtends,
-            'extends_names' => $parentNames,
-            'implements' => $displayImplements,
-            'implements_names' => $interfaceNames,
+            'extends' => array_values($parents),
+            'extends_names' => array_keys($parents),
+            'implements' => array_values($interfaces),
+            'implements_names' => array_keys($interfaces),
             'uses' => $traitNames,
             'templates' => $templates,
         ];

@@ -29,20 +29,14 @@ final readonly class InstantiationCollector implements Collector
         foreach ($type->getObjectClassNames() as $className) {
             $targets[] = 'class:' . $className;
         }
-        $targets = array_values(array_unique($targets));
-        sort($targets, SORT_STRING);
 
-        return [
-            'record_type' => 'relation',
-            'kind' => 'instantiates',
-            'source_id' => Projection::callerId($scope),
-            'target_ids' => $targets,
-            'file' => $scope->getFile(),
-            'line_start' => $node->getStartLine(),
-            'line_end' => $node->getEndLine(),
-            'resolution' => $targets === [] ? 'dynamic' : (count($targets) === 1 ? 'phpstan_resolved' : 'multiple_targets'),
-            'receiver_type' => null,
-            'result_type' => TypeProjector::describe($type),
-        ];
+        return Projection::relation(
+            kind: 'instantiates',
+            scope: $scope,
+            node: $node,
+            targetIds: $targets,
+            receiverType: null,
+            resultType: TypeProjector::describe($type),
+        );
     }
 }

@@ -172,7 +172,7 @@ final readonly class AgentMapIndex
             $fqn = substr($id, 5);
             foreach ($this->files as $file) {
                 foreach ($file->symbols as $symbol) {
-                    if ($symbol->fqn === $fqn) {
+                    if (ltrim($symbol->fqn, '\\') === ltrim($fqn, '\\')) {
                         return ['file' => $file, 'symbol' => $symbol];
                     }
                 }
@@ -474,22 +474,22 @@ final readonly class AgentMapIndex
     private function withMethods(SymbolEntry $symbol, array $methods): SymbolEntry
     {
         return new SymbolEntry(
-            $symbol->kind,
-            $symbol->name,
-            $symbol->fqn,
-            $symbol->lineStart,
-            $symbol->lineEnd,
-            $methods,
-            $symbol->extends,
-            $symbol->implements,
-            $symbol->parameters,
-            $symbol->nativeReturnType,
-            $symbol->phpDocReturnType,
-            $symbol->resolvedReturnType,
-            $symbol->attributes,
-            $symbol->uses,
-            $symbol->templates,
-            $symbol->reconciliationStatus,
+            kind: $symbol->kind,
+            name: $symbol->name,
+            fqn: $symbol->fqn,
+            lineStart: $symbol->lineStart,
+            lineEnd: $symbol->lineEnd,
+            methods: $methods,
+            extends: $symbol->extends,
+            implements: $symbol->implements,
+            parameters: $symbol->parameters,
+            nativeReturnType: $symbol->nativeReturnType,
+            phpDocReturnType: $symbol->phpDocReturnType,
+            resolvedReturnType: $symbol->resolvedReturnType,
+            attributes: $symbol->attributes,
+            uses: $symbol->uses,
+            templates: $symbol->templates,
+            reconciliationStatus: $symbol->reconciliationStatus,
         );
     }
 
@@ -534,7 +534,13 @@ final readonly class AgentMapIndex
 
     private function looksLikeTestPath(string $path): bool
     {
-        $lower = strtolower($path);
-        return str_contains($lower, '/tests/') || str_contains($lower, 'test') || str_contains($path, '_UnitCest.php') || str_contains($path, '_AcceptanceCest.php') || str_contains($path, '_ApiCest.php');
+        $normalized = strtolower(str_replace('\\', '/', $path));
+        $segments = explode('/', $normalized);
+        $fileName = array_pop($segments);
+
+        return in_array('tests', $segments, true)
+            || in_array('test', $segments, true)
+            || str_ends_with($fileName, 'test.php')
+            || str_ends_with($fileName, 'cest.php');
     }
 }

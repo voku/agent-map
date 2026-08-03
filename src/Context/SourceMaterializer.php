@@ -7,8 +7,16 @@ namespace voku\AgentMap\Context;
 use RuntimeException;
 use voku\AgentMap\Index\FileEntry;
 
-final readonly class SourceMaterializer
+final class SourceMaterializer
 {
+    /** @var array<string, array{sha256: string, lines: list<string>}> */
+    private array $fileCache = [];
+
+    public function reset(): void
+    {
+        $this->fileCache = [];
+    }
+
     /** @return array{start: int, end: int, content: string} */
     public function materialize(string $root, FileEntry $file, int $lineStart, int $lineEnd, bool $includeDeclarationContext = true): array
     {
@@ -17,14 +25,27 @@ final readonly class SourceMaterializer
         if (!is_string($absolute) || !is_string($realRoot) || !str_starts_with(str_replace('\\', '/', $absolute), rtrim(str_replace('\\', '/', $realRoot), '/') . '/')) {
             throw new RuntimeException('Source path escapes repository root: ' . $file->path);
         }
-        $hash = hash_file('sha256', $absolute);
-        if (!is_string($hash) || !hash_equals($file->sha256, 'sha256:' . $hash)) {
+
+        $cacheKey = str_replace('\\', '/', $absolute) . "\0" . $file->sha256;
+        $cached = $this->fileCache[$cacheKey] ?? null;
+        if ($cached === null) {
+            $hash = hash_file('sha256', $absolute);
+            if (!is_string($hash) || !hash_equals($file->sha256, 'sha256:' . $hash)) {
+                throw new RuntimeException('Source file is stale; rebuild agent-map: ' . $file->path);
+            }
+            $lines = file($absolute);
+            if (!is_array($lines)) {
+                throw new RuntimeException('Unable to read source file: ' . $file->path);
+            }
+            $cached = ['sha256' => 'sha256:' . $hash, 'lines' => $lines];
+            $this->fileCache[$cacheKey] = $cached;
+        }
+
+        if (!hash_equals($file->sha256, $cached['sha256'])) {
             throw new RuntimeException('Source file is stale; rebuild agent-map: ' . $file->path);
         }
-        $lines = file($absolute);
-        if (!is_array($lines)) {
-            throw new RuntimeException('Unable to read source file: ' . $file->path);
-        }
+
+        $lines = $cached['lines'];
         $lineStart = max(1, $lineStart);
         $lineEnd = max($lineStart, min($lineEnd, count($lines)));
         if ($includeDeclarationContext) {
@@ -50,6 +71,10 @@ final readonly class SourceMaterializer
                 continue;
             }
             if ($text === '' || str_starts_with($text, '#[') || str_starts_with($text, '//')) {
+                $start = $line;
+                continue;
+            }
+            if (str_starts_with($text, '/**') && str_ends_with($text, '*/')) {
                 $start = $line;
                 continue;
             }

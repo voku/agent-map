@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace voku\AgentMap\Build;
 
 use Composer\InstalledVersions;
+use JsonException;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use RuntimeException;
+use Throwable;
 
 final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
 {
@@ -30,32 +34,27 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
             throw new RuntimeException('Unable to create PHPStan temporary directory.');
         }
 
-        $exportFile = $temporaryDirectory . '/semantic-export.json';
-        $overlayConfiguration = $temporaryDirectory . '/agent-map.neon';
-        file_put_contents($overlayConfiguration, $this->overlayConfiguration($configurationFile));
-
-        $command = [PHP_BINARY, $phar, 'analyse'];
-        foreach ($relativeFiles as $relativeFile) {
-            $command[] = $root . '/' . $relativeFile;
-        }
-        $command[] = '--configuration=' . $overlayConfiguration;
-        $command[] = '--autoload-file=' . $autoload;
-        $command[] = '--no-progress';
-        $command[] = '--error-format=raw';
-
-        $previousExport = getenv('AGENT_MAP_PHPSTAN_EXPORT');
-        putenv('AGENT_MAP_PHPSTAN_EXPORT=' . $exportFile);
         try {
-            [$exitCode, $stdout, $stderr] = $this->run($command, $root);
-        } finally {
-            if ($previousExport === false) {
-                putenv('AGENT_MAP_PHPSTAN_EXPORT');
-            } else {
-                putenv('AGENT_MAP_PHPSTAN_EXPORT=' . $previousExport);
+            $exportFile = $temporaryDirectory . '/semantic-export.json';
+            $overlayConfiguration = $temporaryDirectory . '/agent-map.neon';
+            if (file_put_contents($overlayConfiguration, $this->overlayConfiguration($configurationFile)) === false) {
+                throw new RuntimeException('Unable to write PHPStan overlay configuration: ' . $overlayConfiguration);
             }
-        }
 
-        try {
+            $command = [PHP_BINARY, $phar, 'analyse'];
+            foreach ($relativeFiles as $relativeFile) {
+                $command[] = $root . '/' . $relativeFile;
+            }
+            $command[] = '--configuration=' . $overlayConfiguration;
+            $command[] = '--autoload-file=' . $autoload;
+            $command[] = '--no-progress';
+            $command[] = '--error-format=raw';
+
+            $environment = getenv();
+            $environment['AGENT_MAP_PHPSTAN_EXPORT'] = $exportFile;
+
+            [$exitCode, $stdout, $stderr] = $this->run($command, $root, $environment);
+
             if (!is_file($exportFile)) {
                 throw new RuntimeException(
                     'PHPStan semantic export was not created.'
@@ -63,8 +62,17 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
                     . ($stdout !== '' ? ' ' . trim($stdout) : ''),
                 );
             }
+
             $json = file_get_contents($exportFile);
-            $data = is_string($json) ? json_decode($json, true) : null;
+            if (!is_string($json)) {
+                throw new RuntimeException('Unable to read PHPStan semantic export.');
+            }
+
+            try {
+                $data = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+            } catch (JsonException $exception) {
+                throw new RuntimeException('PHPStan semantic export is malformed.', 0, $exception);
+            }
             if (!is_array($data) || !is_array($data['records'] ?? null)) {
                 throw new RuntimeException('PHPStan semantic export is malformed.');
             }
@@ -76,44 +84,83 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
                 }
             }
 
-            $findings = $this->findings($stdout, $stderr, $exitCode);
-
             return new SemanticAnalysisResult(
                 records: $records,
-                findings: $findings,
+                findings: $this->findings($stdout, $stderr, $exitCode),
                 phpStanVersion: $this->phpStanVersion(),
                 configurationSha256: $this->configurationHash($configurationFile),
             );
         } finally {
-            @unlink($exportFile);
-            @unlink($overlayConfiguration);
-            @rmdir($temporaryDirectory);
+            $this->removeDirectory($temporaryDirectory);
         }
     }
 
     /**
      * @param list<string> $command
+     * @param array<string, string> $environment
      * @return array{0: int, 1: string, 2: string}
      */
-    private function run(array $command, string $workingDirectory): array
+    private function run(array $command, string $workingDirectory, array $environment): array
     {
         $process = proc_open(
             $command,
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
             $pipes,
             $workingDirectory,
+            $environment,
         );
         if (!is_resource($process)) {
             throw new RuntimeException('Unable to start PHPStan.');
         }
 
-        $stdout = stream_get_contents($pipes[1]);
-        $stderr = stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        $exitCode = proc_close($process);
+        /** @var array<int, resource> $streams */
+        $streams = [1 => $pipes[1], 2 => $pipes[2]];
+        foreach ($streams as $stream) {
+            stream_set_blocking($stream, false);
+        }
+        $buffers = [1 => '', 2 => ''];
 
-        return [$exitCode, is_string($stdout) ? $stdout : '', is_string($stderr) ? $stderr : ''];
+        try {
+            while ($streams !== []) {
+                $read = array_values($streams);
+                $write = null;
+                $except = null;
+                $selected = stream_select($read, $write, $except, 1);
+                if ($selected === false) {
+                    throw new RuntimeException('Unable to read PHPStan process output.');
+                }
+
+                foreach ($read as $stream) {
+                    $key = array_search($stream, $streams, true);
+                    if (!is_int($key)) {
+                        continue;
+                    }
+                    $chunk = stream_get_contents($stream);
+                    if ($chunk === false) {
+                        throw new RuntimeException('Unable to read PHPStan process output.');
+                    }
+                    $buffers[$key] .= $chunk;
+                }
+
+                foreach ($streams as $key => $stream) {
+                    if (!feof($stream)) {
+                        continue;
+                    }
+                    fclose($stream);
+                    unset($streams[$key]);
+                }
+            }
+        } catch (Throwable $exception) {
+            foreach ($streams as $stream) {
+                fclose($stream);
+            }
+            proc_terminate($process);
+            proc_close($process);
+
+            throw $exception;
+        }
+
+        return [proc_close($process), $buffers[1], $buffers[2]];
     }
 
     private function overlayConfiguration(?string $configurationFile): string
@@ -194,7 +241,31 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
             return 'sha256:' . hash('sha256', 'default-level-0');
         }
         $hash = hash_file('sha256', $configurationFile);
+        if (!is_string($hash)) {
+            throw new RuntimeException('Unable to hash PHPStan configuration: ' . $configurationFile);
+        }
 
-        return is_string($hash) ? 'sha256:' . $hash : '';
+        return 'sha256:' . $hash;
+    }
+
+    private function removeDirectory(string $path): void
+    {
+        if (!is_dir($path)) {
+            return;
+        }
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST,
+        );
+        foreach ($iterator as $item) {
+            $removed = $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+            if (!$removed) {
+                throw new RuntimeException('Unable to remove temporary PHPStan path: ' . $item->getPathname());
+            }
+        }
+        if (!rmdir($path)) {
+            throw new RuntimeException('Unable to remove PHPStan temporary directory: ' . $path);
+        }
     }
 }

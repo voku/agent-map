@@ -40,20 +40,14 @@ final readonly class StaticCallCollector implements Collector
                 }
             }
         }
-        $targets = array_values(array_unique($targets));
-        sort($targets, SORT_STRING);
 
-        return [
-            'record_type' => 'relation',
-            'kind' => 'calls',
-            'source_id' => Projection::callerId($scope),
-            'target_ids' => $targets,
-            'file' => $scope->getFile(),
-            'line_start' => $node->getStartLine(),
-            'line_end' => $node->getEndLine(),
-            'resolution' => $targets === [] ? 'dynamic' : (count($targets) === 1 ? 'phpstan_resolved' : 'multiple_targets'),
-            'receiver_type' => $receiverType,
-            'result_type' => TypeProjector::describe($scope->getType($node)),
-        ];
+        return Projection::relation(
+            kind: 'calls',
+            scope: $scope,
+            node: $node,
+            targetIds: $targets,
+            receiverType: $receiverType,
+            resultType: TypeProjector::describe($scope->getType($node)),
+        );
     }
 }

@@ -91,7 +91,7 @@ final readonly class AgentMapBuilder
     private function resolvePhpStanConfiguration(string $root, ?string $configuration): ?string
     {
         if ($configuration !== null) {
-            $candidate = str_starts_with($configuration, '/') ? $configuration : $root . '/' . $configuration;
+            $candidate = $this->isAbsolutePath($configuration) ? $configuration : $root . '/' . $configuration;
             if (!is_file($candidate)) {
                 throw new RuntimeException('PHPStan configuration not found: ' . $configuration);
             }
@@ -106,6 +106,14 @@ final readonly class AgentMapBuilder
         }
 
         return null;
+    }
+
+
+    private function isAbsolutePath(string $path): bool
+    {
+        return str_starts_with($path, '/')
+            || str_starts_with($path, '\\\\')
+            || preg_match('~^[A-Za-z]:[\\\\/]~', $path) === 1;
     }
 
     /**

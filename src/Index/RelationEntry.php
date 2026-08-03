@@ -46,6 +46,8 @@ final readonly class RelationEntry
             (string) $lineStart,
             (string) $lineEnd,
             $resolution,
+            $receiverType ?? '',
+            $resultType ?? '',
         ]);
 
         return new self(

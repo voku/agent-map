@@ -19,6 +19,7 @@ final readonly class EditContextPlanner
     public function plan(AgentMapIndex $map, string $target, ?EditContextPolicy $policy = null): EditContextPlan
     {
         $policy ??= new EditContextPolicy();
+        $this->materializer->reset();
         if ($map->staleEntries() !== []) {
             throw new RuntimeException('Agent map is stale. Rebuild it before planning an edit.');
         }
@@ -43,7 +44,7 @@ final readonly class EditContextPlanner
             $contractIds[$relation->sourceId] = true;
             $contract = $map->resolvedMethodById($relation->sourceId);
             if ($contract !== null) {
-                $candidates[] = $this->methodCandidate($contract, ContextRole::CONTRACT, 'method overriding the requested target', [$relation->id], 10, true);
+                $candidates[] = $this->methodCandidate($contract, ContextRole::CONTRACT, 'method overriding the requested target', [$relation->id], 10, false);
             }
         }
 
@@ -313,7 +314,13 @@ final readonly class EditContextPlanner
     }
     private function looksLikeTestPath(string $path): bool
     {
-        $lower = strtolower($path);
-        return str_contains($lower, '/tests/') || str_contains($lower, 'test') || str_contains($path, '_UnitCest.php') || str_contains($path, '_AcceptanceCest.php') || str_contains($path, '_ApiCest.php');
+        $normalized = strtolower(str_replace('\\', '/', $path));
+        $segments = explode('/', $normalized);
+        $fileName = array_pop($segments);
+
+        return in_array('tests', $segments, true)
+            || in_array('test', $segments, true)
+            || str_ends_with($fileName, 'test.php')
+            || str_ends_with($fileName, 'cest.php');
     }
 }

@@ -258,6 +258,39 @@ final class SimplePhpParserSymbolExtractorTest extends TestCase
         self::assertSame(['Demo\Map\Deprecated'], $function->attributes);
     }
 
+    public function testExtractsAbstractFinalByReferenceAndVariadicMetadata(): void
+    {
+        $file = $this->write('Metadata', <<<'PHP'
+        <?php
+
+        declare(strict_types=1);
+
+        namespace Demo\Map;
+
+        abstract class Handler
+        {
+            abstract public function collect(array &$out, string ...$rest): void;
+
+            final public function finish(): void
+            {
+            }
+        }
+        PHP);
+
+        $result = (new SimplePhpParserSymbolExtractor())->extract($file);
+        self::assertTrue($result->ok);
+
+        $handler = $result->symbols[0];
+        self::assertTrue($handler->methods[0]->abstract);
+        self::assertFalse($handler->methods[0]->final);
+        self::assertTrue($handler->methods[0]->parameters[0]->byReference);
+        self::assertFalse($handler->methods[0]->parameters[0]->variadic);
+        self::assertFalse($handler->methods[0]->parameters[1]->byReference);
+        self::assertTrue($handler->methods[0]->parameters[1]->variadic);
+        self::assertFalse($handler->methods[1]->abstract);
+        self::assertTrue($handler->methods[1]->final);
+    }
+
     public function testReportsFailureForInvalidSyntax(): void
     {
         $file = $this->root . '/Broken.php';

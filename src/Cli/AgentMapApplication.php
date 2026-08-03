@@ -225,6 +225,9 @@ final readonly class AgentMapApplication
                     $targetIds[$targetId] = true;
                 }
             }
+            foreach ($index->incoming($method->id, 'overrides') as $overrideRelation) {
+                $targetIds[$overrideRelation->sourceId] = true;
+            }
             $relationById = [];
             foreach (array_keys($targetIds) as $targetId) {
                 foreach ($index->incoming($targetId, 'calls') as $relation) {
@@ -406,13 +409,14 @@ final readonly class AgentMapApplication
 
     private function looksLikeTestPath(string $path): bool
     {
-        $lower = strtolower($path);
+        $normalized = strtolower(str_replace('\\', '/', $path));
+        $segments = explode('/', $normalized);
+        $fileName = array_pop($segments);
 
-        return str_contains($lower, '/tests/')
-            || str_contains($lower, 'test')
-            || str_contains($path, '_UnitCest.php')
-            || str_contains($path, '_AcceptanceCest.php')
-            || str_contains($path, '_ApiCest.php');
+        return in_array('tests', $segments, true)
+            || in_array('test', $segments, true)
+            || str_ends_with($fileName, 'test.php')
+            || str_ends_with($fileName, 'cest.php');
     }
 
     private function humanSize(string $path): string
@@ -464,6 +468,7 @@ final readonly class AgentMapApplication
           --method-limit=10
           --context-budget=60000
           --max-files=20 --max-callers=10 --max-callees=10 --max-tests=10
+          --max-type-definitions=10
 
         TXT;
     }

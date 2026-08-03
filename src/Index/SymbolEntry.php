@@ -101,7 +101,7 @@ final readonly class SymbolEntry
             if (is_array($parameter)) {
                 $parameters[] = ParameterEntry::fromArray($parameter);
             } elseif (is_string($parameter)) {
-                $parameters[] = MethodEntry::fromArray(['name' => '_', 'params' => [$parameter]])->parameters[0];
+                $parameters[] = ParameterEntry::fromLegacyString($parameter);
             }
         }
 

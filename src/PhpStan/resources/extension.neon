@@ -16,6 +16,10 @@ services:
         tags:
             - phpstan.collector
     -
+        class: voku\AgentMap\PhpStan\Collector\NullsafeMethodCallCollector
+        tags:
+            - phpstan.collector
+    -
         class: voku\AgentMap\PhpStan\Collector\StaticCallCollector
         tags:
             - phpstan.collector

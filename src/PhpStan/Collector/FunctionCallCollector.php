@@ -8,6 +8,7 @@ use PhpParser\Node;
 use PhpParser\Node\Expr\FuncCall;
 use PHPStan\Analyser\Scope;
 use PHPStan\Collectors\Collector;
+use PHPStan\Reflection\ReflectionProvider;
 use voku\AgentMap\PhpStan\Projection;
 use voku\AgentMap\PhpStan\TypeProjector;
 
@@ -16,6 +17,10 @@ use voku\AgentMap\PhpStan\TypeProjector;
  */
 final readonly class FunctionCallCollector implements Collector
 {
+    public function __construct(private ReflectionProvider $reflectionProvider)
+    {
+    }
+
     public function getNodeType(): string
     {
         return FuncCall::class;
@@ -26,20 +31,19 @@ final readonly class FunctionCallCollector implements Collector
     {
         $targets = [];
         if ($node->name instanceof Node\Name) {
-            $targets[] = 'function:' . ltrim($scope->resolveName($node->name), '\\');
+            $resolvedName = $this->reflectionProvider->resolveFunctionName($node->name, $scope);
+            if ($resolvedName !== null) {
+                $targets[] = 'function:' . ltrim($resolvedName, '\\');
+            }
         }
 
-        return [
-            'record_type' => 'relation',
-            'kind' => 'calls',
-            'source_id' => Projection::callerId($scope),
-            'target_ids' => $targets,
-            'file' => $scope->getFile(),
-            'line_start' => $node->getStartLine(),
-            'line_end' => $node->getEndLine(),
-            'resolution' => $targets === [] ? 'dynamic' : 'phpstan_resolved',
-            'receiver_type' => null,
-            'result_type' => TypeProjector::describe($scope->getType($node)),
-        ];
+        return Projection::relation(
+            kind: 'calls',
+            scope: $scope,
+            node: $node,
+            targetIds: $targets,
+            receiverType: null,
+            resultType: TypeProjector::describe($scope->getType($node)),
+        );
     }
 }

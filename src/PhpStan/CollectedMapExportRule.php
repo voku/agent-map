@@ -15,6 +15,7 @@ use voku\AgentMap\PhpStan\Collector\FunctionCallCollector;
 use voku\AgentMap\PhpStan\Collector\FunctionCollector;
 use voku\AgentMap\PhpStan\Collector\InstantiationCollector;
 use voku\AgentMap\PhpStan\Collector\MethodCallCollector;
+use voku\AgentMap\PhpStan\Collector\NullsafeMethodCallCollector;
 use voku\AgentMap\PhpStan\Collector\StaticCallCollector;
 
 /**
@@ -40,6 +41,7 @@ final readonly class CollectedMapExportRule implements Rule
             ClassMethodCollector::class,
             FunctionCollector::class,
             MethodCallCollector::class,
+            NullsafeMethodCallCollector::class,
             StaticCallCollector::class,
             FunctionCallCollector::class,
             InstantiationCollector::class,
@@ -52,22 +54,11 @@ final readonly class CollectedMapExportRule implements Rule
         }
 
         usort($records, static function (array $left, array $right): int {
-            $leftKey = implode('|', [
-                (string) ($left['record_type'] ?? ''),
-                (string) ($left['file'] ?? ''),
-                (string) ($left['line_start'] ?? 0),
-                (string) ($left['name'] ?? $left['kind'] ?? ''),
-                (string) ($left['source_id'] ?? ''),
-            ]);
-            $rightKey = implode('|', [
-                (string) ($right['record_type'] ?? ''),
-                (string) ($right['file'] ?? ''),
-                (string) ($right['line_start'] ?? 0),
-                (string) ($right['name'] ?? $right['kind'] ?? ''),
-                (string) ($right['source_id'] ?? ''),
-            ]);
-
-            return $leftKey <=> $rightKey;
+            return ((string) ($left['record_type'] ?? '')) <=> ((string) ($right['record_type'] ?? ''))
+                ?: ((string) ($left['file'] ?? '')) <=> ((string) ($right['file'] ?? ''))
+                ?: ((int) ($left['line_start'] ?? 0)) <=> ((int) ($right['line_start'] ?? 0))
+                ?: ((string) ($left['name'] ?? $left['kind'] ?? '')) <=> ((string) ($right['name'] ?? $right['kind'] ?? ''))
+                ?: ((string) ($left['source_id'] ?? '')) <=> ((string) ($right['source_id'] ?? ''));
         });
 
         $json = json_encode(['schema_version' => '1.0', 'records' => $records], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);

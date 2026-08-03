@@ -17,7 +17,7 @@ final readonly class EditContextPolicy
         public int $maximumTypeDefinitions = 10,
     ) {
         foreach (get_object_vars($this) as $name => $value) {
-            if ($value < 0 || ($name === 'maximumSourceBytes' && $value < 1)) {
+            if ($value < 0 || (in_array($name, ['maximumSourceBytes', 'maximumFiles'], true) && $value < 1)) {
                 throw new InvalidArgumentException('Invalid edit-context policy value: ' . $name);
             }
         }

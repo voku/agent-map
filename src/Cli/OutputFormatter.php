@@ -350,7 +350,11 @@ final readonly class OutputFormatter
     private function relationsText(array $payload): string
     {
         $out = (string) ($payload['title'] ?? 'Relations') . "\n\n";
-        foreach (is_array($payload['relations'] ?? null) ? $payload['relations'] : [] as $relation) {
+        $relations = is_array($payload['relations'] ?? null) ? $payload['relations'] : [];
+        if ($relations === []) {
+            return $out . "No matches\n";
+        }
+        foreach ($relations as $relation) {
             if (!is_array($relation)) {
                 continue;
             }

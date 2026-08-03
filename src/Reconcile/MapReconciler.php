@@ -50,6 +50,7 @@ final readonly class MapReconciler
         foreach ($structuralFiles as $file) {
             $symbols = [];
             $semanticSeen = false;
+            $missingSemanticDiagnostics = [];
             foreach ($file->symbols as $symbol) {
                 $semanticRecord = $semanticSymbols[$symbol->id()] ?? null;
                 if ($symbol->kind === 'function') {
@@ -59,7 +60,7 @@ final readonly class MapReconciler
                     $semanticSeen = true;
                     $symbol = $this->mergeSymbol($symbol, $semanticRecord, $diagnostics, $file->path);
                 } else {
-                    $diagnostics[] = DiagnosticEntry::create(
+                    $missingSemanticDiagnostics[] = DiagnosticEntry::create(
                         severity: 'warning',
                         kind: 'structural_only_symbol',
                         message: 'Symbol was not present in PHPStan semantic output.',
@@ -77,7 +78,7 @@ final readonly class MapReconciler
                         $semanticSeen = true;
                         $method = $this->mergeMethod($method, $methodRecord, $diagnostics, $methodId, $file->path);
                     } else {
-                        $diagnostics[] = DiagnosticEntry::create(
+                        $missingSemanticDiagnostics[] = DiagnosticEntry::create(
                             severity: 'warning',
                             kind: 'structural_only_method',
                             message: 'Method was not present in PHPStan semantic output.',
@@ -93,6 +94,17 @@ final readonly class MapReconciler
                 $symbols[] = $symbol;
                 $knownSymbolIds[$symbol->id()] = true;
                 $knownFqns[$symbol->fqn] = $symbol->id();
+            }
+
+            if (!$semanticSeen && $missingSemanticDiagnostics !== []) {
+                $diagnostics[] = DiagnosticEntry::create(
+                    severity: 'warning',
+                    kind: 'no_semantic_records',
+                    message: 'PHPStan produced no semantic records for this file.',
+                    file: $file->path,
+                );
+            } else {
+                $diagnostics = [...$diagnostics, ...$missingSemanticDiagnostics];
             }
 
             $files[$file->path] = new FileEntry(
@@ -131,7 +143,7 @@ final readonly class MapReconciler
             );
         }
 
-        $relations = $this->structuralRelations(array_values($files));
+        $relations = $this->structuralRelations(array_values($files), $knownFqns);
         foreach ($semanticMethods as $methodId => $record) {
             $prototypeId = $record['prototype_id'] ?? null;
             if (!is_string($prototypeId) || $prototypeId === '') {
@@ -272,11 +284,14 @@ final readonly class MapReconciler
             );
         }
 
-        $extends = $this->stringList($record['extends'] ?? $symbol->extends);
-        $implements = $this->stringList($record['implements'] ?? $symbol->implements);
-        $uses = $this->stringList($record['uses'] ?? $symbol->uses);
+        $structuralExtends = $this->stringList($symbol->extends);
+        $structuralImplements = $this->stringList($symbol->implements);
+        $structuralUses = $this->stringList($symbol->uses);
+        $extends = $this->stringList($record['extends'] ?? $structuralExtends);
+        $implements = $this->stringList($record['implements'] ?? $structuralImplements);
+        $uses = $this->stringList($record['uses'] ?? $structuralUses);
         $templates = $this->stringMap($record['templates'] ?? []);
-        if ($templates !== [] || $extends !== $symbol->extends || $implements !== $symbol->implements) {
+        if ($templates !== [] || $extends !== $structuralExtends || $implements !== $structuralImplements || $uses !== $structuralUses) {
             $status = $status === 'conflict' ? $status : 'semantic_enrichment';
         }
 
@@ -331,7 +346,7 @@ final readonly class MapReconciler
         $native = $this->nullableString($record['native_return_type'] ?? null) ?? $method->nativeReturnType;
         $phpDoc = $this->nullableString($record['phpdoc_return_type'] ?? null);
         $resolved = $this->nullableString($record['resolved_return_type'] ?? null);
-        $enriched = $phpDoc !== null || ($resolved !== null && $resolved !== $native) || $parameters !== $method->parameters;
+        $enriched = $phpDoc !== null || ($resolved !== null && $resolved !== $native) || !$this->parametersEqual($parameters, $method->parameters);
 
         return new MethodEntry(
             name: $method->name,
@@ -405,9 +420,10 @@ final readonly class MapReconciler
 
     /**
      * @param list<FileEntry> $files
+     * @param array<string, string> $knownFqns
      * @return list<RelationEntry>
      */
-    private function structuralRelations(array $files): array
+    private function structuralRelations(array $files, array $knownFqns): array
     {
         $relations = [];
         foreach ($files as $file) {
@@ -417,13 +433,13 @@ final readonly class MapReconciler
                     $relations[] = RelationEntry::create($symbol->id(), 'declares_method', [$symbol->methodId($method)], $file->path, $method->lineStart, $method->lineEnd, 'structural_only');
                 }
                 foreach ($symbol->extends as $target) {
-                    $relations[] = RelationEntry::create($symbol->id(), 'extends', ['type:' . $this->baseTypeName($target)], $file->path, $symbol->lineStart, $symbol->lineEnd, 'structural_only');
+                    $relations[] = RelationEntry::create($symbol->id(), 'extends', [$this->targetId($target, $knownFqns)], $file->path, $symbol->lineStart, $symbol->lineEnd, 'structural_only');
                 }
                 foreach ($symbol->implements as $target) {
-                    $relations[] = RelationEntry::create($symbol->id(), 'implements', ['type:' . $this->baseTypeName($target)], $file->path, $symbol->lineStart, $symbol->lineEnd, 'structural_only');
+                    $relations[] = RelationEntry::create($symbol->id(), 'implements', [$this->targetId($target, $knownFqns)], $file->path, $symbol->lineStart, $symbol->lineEnd, 'structural_only');
                 }
                 foreach ($symbol->uses as $target) {
-                    $relations[] = RelationEntry::create($symbol->id(), 'uses_trait', ['type:' . $this->baseTypeName($target)], $file->path, $symbol->lineStart, $symbol->lineEnd, 'structural_only');
+                    $relations[] = RelationEntry::create($symbol->id(), 'uses_trait', [$this->targetId($target, $knownFqns)], $file->path, $symbol->lineStart, $symbol->lineEnd, 'structural_only');
                 }
             }
         }
@@ -435,6 +451,24 @@ final readonly class MapReconciler
     {
         $position = strpos($type, '<');
         return ltrim($position === false ? $type : substr($type, 0, $position), '\\');
+    }
+
+    /** @param array<string, string> $knownFqns */
+    private function targetId(string $target, array $knownFqns): string
+    {
+        $base = $this->baseTypeName($target);
+
+        return $knownFqns[$base] ?? 'type:' . $base;
+    }
+
+    /**
+     * @param list<ParameterEntry> $left
+     * @param list<ParameterEntry> $right
+     */
+    private function parametersEqual(array $left, array $right): bool
+    {
+        return array_map(static fn (ParameterEntry $parameter): array => $parameter->toArray(), $left)
+            === array_map(static fn (ParameterEntry $parameter): array => $parameter->toArray(), $right);
     }
 
     /**
