@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feat/toon-map-store
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
