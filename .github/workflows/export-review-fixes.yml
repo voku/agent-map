@@ -1,0 +1,21 @@
+name: Export review-fix working copy
+
+on:
+  push:
+    branches:
+      - feat/toon-map-store
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: tar --exclude-vcs -czf /tmp/agent-map-review-fixes.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-map-review-fixes
+          path: /tmp/agent-map-review-fixes.tar.gz
+          retention-days: 1
