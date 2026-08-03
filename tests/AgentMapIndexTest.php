@@ -66,17 +66,19 @@ final class AgentMapIndexTest extends TestCase
     public function testReaderFallsBackToJsonWhenToonExtensionContainsJson(): void
     {
         $path = $this->root . '/map.toon';
-        (new IndexWriter())->write($this->index(), $path, 'json');
+        $index = $this->index();
+        (new IndexWriter())->write($index, $path, 'json');
 
-        self::assertSame('2.0', (new IndexReader())->read($path)->schemaVersion);
+        self::assertSame($index->toArray(), (new IndexReader())->read($path)->toArray());
     }
 
     public function testReaderFallsBackToToonWhenJsonExtensionContainsToon(): void
     {
         $path = $this->root . '/map.json';
-        (new IndexWriter())->write($this->index(), $path, 'toon');
+        $index = $this->index();
+        (new IndexWriter())->write($index, $path, 'toon');
 
-        self::assertSame('2.0', (new IndexReader())->read($path)->schemaVersion);
+        self::assertSame($index->toArray(), (new IndexReader())->read($path)->toArray());
     }
 
     public function testTypeLookupNormalizesLeadingBackslash(): void
