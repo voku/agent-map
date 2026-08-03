@@ -3,6 +3,7 @@ AGENT_MAP_INDEX ?= .agent-map/php-symbols.json
 AGENT_MAP_PATHS ?= src,tests
 AGENT_MAP_BASE ?= main
 AGENT_MAP_FORMAT ?= text
+AGENT_MAP_STORAGE_FORMAT ?= json
 AGENT_MAP_LIMIT ?= 20
 AGENT_MAP_SYMBOL_LIMIT ?= 10
 AGENT_MAP_METHOD_LIMIT ?= 10
@@ -15,6 +16,7 @@ ai-map-build:
 		--root=. \
 		--paths=$(AGENT_MAP_PATHS) \
 		--out=$(AGENT_MAP_INDEX) \
+		--format=$(AGENT_MAP_STORAGE_FORMAT) \
 		--exclude='~(^|/)vendor(/|$$)~' \
 		--exclude='~(^|/)var/cache(/|$$)~'
 
@@ -48,3 +50,18 @@ ai-map-related:
 .PHONY: ai-map-stats
 ai-map-stats:
 	$(AGENT_MAP) stats --index=$(AGENT_MAP_INDEX) $(AGENT_MAP_READ_OPTIONS)
+
+.PHONY: ai-map-callers
+ai-map-callers:
+	@test -n "$(q)" || (echo "Usage: make ai-map-callers q='App\\Foo::bar'" && exit 2)
+	$(AGENT_MAP) callers "$(q)" --index=$(AGENT_MAP_INDEX) $(AGENT_MAP_READ_OPTIONS)
+
+.PHONY: ai-map-callees
+ai-map-callees:
+	@test -n "$(q)" || (echo "Usage: make ai-map-callees q='App\\Foo::bar'" && exit 2)
+	$(AGENT_MAP) callees "$(q)" --index=$(AGENT_MAP_INDEX) $(AGENT_MAP_READ_OPTIONS)
+
+.PHONY: ai-map-context
+ai-map-context:
+	@test -n "$(q)" || (echo "Usage: make ai-map-context q='App\\Foo::bar'" && exit 2)
+	$(AGENT_MAP) context "$(q)" --index=$(AGENT_MAP_INDEX) $(AGENT_MAP_READ_OPTIONS)

@@ -7,31 +7,59 @@ namespace voku\AgentMap\Index;
 final readonly class SymbolEntry
 {
     /**
+     * @param list<MethodEntry> $methods
      * @param list<string> $extends
      * @param list<string> $implements
-     * @param list<string> $uses
-     * @param list<MethodEntry> $methods
-     * @param list<string> $params
+     * @param list<ParameterEntry> $parameters
      * @param list<string> $attributes
+     * @param list<string> $uses
+     * @param array<string, string> $templates
      */
     public function __construct(
         public string $kind,
         public string $name,
         public string $fqn,
         public int $lineStart,
-        public int $lineEnd,
+        public int $lineEnd = 0,
         public array $methods = [],
         public array $extends = [],
         public array $implements = [],
-        public array $params = [],
-        public ?string $returnType = null,
+        public array $parameters = [],
+        public ?string $nativeReturnType = null,
+        public ?string $phpDocReturnType = null,
+        public ?string $resolvedReturnType = null,
         public array $attributes = [],
         public array $uses = [],
+        public array $templates = [],
+        public string $reconciliationStatus = 'structural_only',
     ) {
     }
 
+    public function id(): string
+    {
+        return $this->kind . ':' . ltrim($this->fqn, '\\');
+    }
+
+    public function methodId(MethodEntry $method): string
+    {
+        return 'method:' . ltrim($this->fqn, '\\') . '::' . $method->name;
+    }
+
     /**
-     * @return array{kind: string, name: string, fqn: string, line_start: int, line_end: int, extends: list<string>, implements: list<string>, uses: list<string>, params: list<string>, return_type: ?string, attributes: list<string>, methods: list<array{name: string, visibility: string, line_start: int, line_end: int, static: bool, params: list<string>, return_type: ?string, attributes: list<string>}>}
+     * @return list<string>
+     */
+    public function displayParameters(): array
+    {
+        return array_map(static fn (ParameterEntry $parameter): string => $parameter->display(), $this->parameters);
+    }
+
+    public function displayReturnType(): ?string
+    {
+        return $this->resolvedReturnType ?? $this->phpDocReturnType ?? $this->nativeReturnType;
+    }
+
+    /**
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
@@ -44,15 +72,19 @@ final readonly class SymbolEntry
             'extends' => $this->extends,
             'implements' => $this->implements,
             'uses' => $this->uses,
-            'params' => $this->params,
-            'return_type' => $this->returnType,
+            'parameters' => array_map(static fn (ParameterEntry $parameter): array => $parameter->toArray(), $this->parameters),
+            'native_return_type' => $this->nativeReturnType,
+            'phpdoc_return_type' => $this->phpDocReturnType,
+            'resolved_return_type' => $this->resolvedReturnType,
             'attributes' => $this->attributes,
+            'templates' => $this->templates,
+            'reconciliation_status' => $this->reconciliationStatus,
             'methods' => array_map(static fn (MethodEntry $method): array => $method->toArray(), $this->methods),
         ];
     }
 
     /**
-     * @param array{kind?: mixed, name?: mixed, fqn?: mixed, line_start?: mixed, line_end?: mixed, extends?: mixed, implements?: mixed, uses?: mixed, params?: mixed, return_type?: mixed, attributes?: mixed, methods?: mixed} $data
+     * @param array<string, mixed> $data
      */
     public static function fromArray(array $data): self
     {
@@ -63,44 +95,64 @@ final readonly class SymbolEntry
             }
         }
 
-        $extends = [];
-        foreach (is_array($data['extends'] ?? null) ? $data['extends'] : [] as $type) {
-            $extends[] = (string) $type;
+        $parameters = [];
+        $rawParameters = $data['parameters'] ?? $data['params'] ?? [];
+        foreach (is_array($rawParameters) ? $rawParameters : [] as $parameter) {
+            if (is_array($parameter)) {
+                $parameters[] = ParameterEntry::fromArray($parameter);
+            } elseif (is_string($parameter)) {
+                $parameters[] = ParameterEntry::fromLegacyString($parameter);
+            }
         }
 
-        $implements = [];
-        foreach (is_array($data['implements'] ?? null) ? $data['implements'] : [] as $type) {
-            $implements[] = (string) $type;
-        }
-
-        $uses = [];
-        foreach (is_array($data['uses'] ?? null) ? $data['uses'] : [] as $type) {
-            $uses[] = (string) $type;
-        }
-
-        $params = [];
-        foreach (is_array($data['params'] ?? null) ? $data['params'] : [] as $param) {
-            $params[] = (string) $param;
-        }
-
-        $attributes = [];
-        foreach (is_array($data['attributes'] ?? null) ? $data['attributes'] : [] as $attribute) {
-            $attributes[] = (string) $attribute;
-        }
+        $legacyReturnType = self::nullableString($data['return_type'] ?? null);
 
         return new self(
-            (string) ($data['kind'] ?? ''),
-            (string) ($data['name'] ?? ''),
-            (string) ($data['fqn'] ?? ''),
-            (int) ($data['line_start'] ?? 0),
-            (int) ($data['line_end'] ?? 0),
-            $methods,
-            $extends,
-            $implements,
-            $params,
-            isset($data['return_type']) ? (string) $data['return_type'] : null,
-            $attributes,
-            $uses,
+            kind: (string) ($data['kind'] ?? ''),
+            name: (string) ($data['name'] ?? ''),
+            fqn: (string) ($data['fqn'] ?? ''),
+            lineStart: (int) ($data['line_start'] ?? 0),
+            lineEnd: (int) ($data['line_end'] ?? 0),
+            methods: $methods,
+            extends: self::stringList($data['extends'] ?? []),
+            implements: self::stringList($data['implements'] ?? []),
+            parameters: $parameters,
+            nativeReturnType: self::nullableString($data['native_return_type'] ?? null) ?? $legacyReturnType,
+            phpDocReturnType: self::nullableString($data['phpdoc_return_type'] ?? null),
+            resolvedReturnType: self::nullableString($data['resolved_return_type'] ?? null),
+            attributes: self::stringList($data['attributes'] ?? []),
+            uses: self::stringList($data['uses'] ?? []),
+            templates: self::stringMap($data['templates'] ?? []),
+            reconciliationStatus: (string) ($data['reconciliation_status'] ?? 'structural_only'),
         );
+    }
+
+    /** @return list<string> */
+    private static function stringList(mixed $value): array
+    {
+        $result = [];
+        foreach (is_array($value) ? $value : [] as $item) {
+            $result[] = (string) $item;
+        }
+
+        return $result;
+    }
+
+    /** @return array<string, string> */
+    private static function stringMap(mixed $value): array
+    {
+        $result = [];
+        foreach (is_array($value) ? $value : [] as $key => $item) {
+            if (is_string($key)) {
+                $result[$key] = (string) $item;
+            }
+        }
+
+        return $result;
+    }
+
+    private static function nullableString(mixed $value): ?string
+    {
+        return is_string($value) && $value !== '' ? $value : null;
     }
 }

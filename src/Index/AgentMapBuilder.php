@@ -5,17 +5,22 @@ declare(strict_types=1);
 namespace voku\AgentMap\Index;
 
 use RuntimeException;
+use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
+use voku\AgentMap\Build\SemanticAnalyzer;
 use voku\AgentMap\Extract\SimplePhpParserSymbolExtractor;
 use voku\AgentMap\Extract\SymbolExtractor;
 use voku\AgentMap\IO\PhpFileFinder;
+use voku\AgentMap\Reconcile\MapReconciler;
 
 final readonly class AgentMapBuilder
 {
-    private const BACKEND = 'simple';
+    private const BACKEND = 'simple-php-code-parser+phpstan';
 
     public function __construct(
         private PhpFileFinder $finder = new PhpFileFinder(),
         private SymbolExtractor $extractor = new SimplePhpParserSymbolExtractor(),
+        private SemanticAnalyzer $semanticAnalyzer = new PhpStanSemanticAnalyzer(),
+        private MapReconciler $reconciler = new MapReconciler(),
     ) {
     }
 
@@ -23,7 +28,7 @@ final readonly class AgentMapBuilder
      * @param list<string> $paths
      * @param list<string> $excludes
      */
-    public function build(string $root, array $paths, array $excludes): AgentMapIndex
+    public function build(string $root, array $paths, array $excludes, ?string $phpStanConfiguration = null): AgentMapIndex
     {
         $realRoot = realpath($root);
         if (!is_string($realRoot)) {
@@ -33,7 +38,8 @@ final readonly class AgentMapBuilder
         $realRoot = str_replace('\\', '/', $realRoot);
         $relatives = $this->finder->find($realRoot, $paths, $excludes);
 
-        $entries = [];
+        $structuralFiles = [];
+        $sourceHashes = [];
         foreach ($relatives as $relative) {
             $absolute = $realRoot . '/' . $relative;
             $result = $this->extractor->extract($absolute);
@@ -41,16 +47,73 @@ final readonly class AgentMapBuilder
                 throw new RuntimeException('Parsing failed for ' . $relative . '.' . ($result->error === null ? '' : ' ' . $result->error));
             }
 
-            $entries[] = new FileEntry(
-                $relative,
-                (int) filemtime($absolute),
-                (string) sha1_file($absolute),
-                $this->namespaceFromSymbols($result->symbols),
-                $result->symbols,
+            $sha256 = hash_file('sha256', $absolute);
+            if (!is_string($sha256)) {
+                throw new RuntimeException('Unable to hash PHP file: ' . $relative);
+            }
+            $sourceHashes[$relative] = $sha256;
+            $structuralFiles[] = new FileEntry(
+                path: $relative,
+                sha256: 'sha256:' . $sha256,
+                namespace: $this->namespaceFromSymbols($result->symbols),
+                symbols: $result->symbols,
+                semanticStatus: 'pending',
             );
         }
 
-        return new AgentMapIndex('1.0', date('c'), $realRoot, self::BACKEND, $entries);
+        $configuration = $this->resolvePhpStanConfiguration($realRoot, $phpStanConfiguration);
+        $semantic = $this->semanticAnalyzer->analyse($realRoot, $relatives, $configuration);
+        $reconciled = $this->reconciler->reconcile($realRoot, $structuralFiles, $semantic);
+
+        ksort($sourceHashes, SORT_STRING);
+        $sourceDigestParts = [];
+        foreach ($sourceHashes as $relative => $hash) {
+            $sourceDigestParts[] = $relative . "\0" . $hash;
+        }
+        $composerLockHash = is_file($realRoot . '/composer.lock') ? hash_file('sha256', $realRoot . '/composer.lock') : false;
+
+        return new AgentMapIndex(
+            schemaVersion: '2.0',
+            root: $realRoot,
+            backend: self::BACKEND,
+            files: $reconciled['files'],
+            relations: $reconciled['relations'],
+            diagnostics: $reconciled['diagnostics'],
+            fingerprint: new AnalysisFingerprint(
+                phpStanVersion: $semantic->phpStanVersion,
+                phpStanConfigSha256: $semantic->configurationSha256,
+                composerLockSha256: is_string($composerLockHash) ? 'sha256:' . $composerLockHash : 'sha256:none',
+                sourceDigest: 'sha256:' . hash('sha256', implode("\n", $sourceDigestParts)),
+            ),
+        );
+    }
+
+    private function resolvePhpStanConfiguration(string $root, ?string $configuration): ?string
+    {
+        if ($configuration !== null) {
+            $candidate = $this->isAbsolutePath($configuration) ? $configuration : $root . '/' . $configuration;
+            if (!is_file($candidate)) {
+                throw new RuntimeException('PHPStan configuration not found: ' . $configuration);
+            }
+
+            return $candidate;
+        }
+
+        foreach (['phpstan.neon', 'phpstan.neon.dist'] as $name) {
+            if (is_file($root . '/' . $name)) {
+                return $root . '/' . $name;
+            }
+        }
+
+        return null;
+    }
+
+
+    private function isAbsolutePath(string $path): bool
+    {
+        return str_starts_with($path, '/')
+            || str_starts_with($path, '\\\\')
+            || preg_match('~^[A-Za-z]:[\\\\/]~', $path) === 1;
     }
 
     /**

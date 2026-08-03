@@ -19,6 +19,22 @@ final class CliOptionsTest extends TestCase
         self::assertSame('map.json', $options->out);
     }
 
+    public function testBuildToonFormatUsesToonDefaultOutput(): void
+    {
+        $options = CliOptions::parse(['build', '--format=toon']);
+
+        self::assertSame('toon', $options->format);
+        self::assertSame('.agent-map/php-symbols.toon', $options->out);
+    }
+
+    public function testBuildInfersToonFormatFromExplicitOutputExtension(): void
+    {
+        $options = CliOptions::parse(['build', '--out=map.toon']);
+
+        self::assertSame('toon', $options->format);
+        self::assertSame('map.toon', $options->out);
+    }
+
     public function testParsesRepeatedExclude(): void
     {
         $options = CliOptions::parse(['build', '--exclude=~Generated~', '--exclude', '~fixtures~']);
@@ -32,7 +48,7 @@ final class CliOptionsTest extends TestCase
 
         self::assertSame(['.'], $options->paths);
         self::assertSame('.agent-map/php-symbols.json', $options->out);
-        self::assertSame('text', $options->format);
+        self::assertSame('json', $options->format);
         self::assertSame(20, $options->limit);
         self::assertSame(10, $options->symbolLimit);
         self::assertSame(10, $options->methodLimit);
@@ -51,10 +67,22 @@ final class CliOptionsTest extends TestCase
         self::assertSame('develop', $options->base);
     }
 
+    public function testParsesContextOptions(): void
+    {
+        $options = CliOptions::parse(['context', 'Foo::bar', '--context-budget=1234', '--max-callers=3', '--max-callees=4', '--max-tests=5', '--max-files=6']);
+
+        self::assertSame('Foo::bar', $options->argument);
+        self::assertSame(1234, $options->contextBudget);
+        self::assertSame(3, $options->maxCallers);
+        self::assertSame(4, $options->maxCallees);
+        self::assertSame(5, $options->maxTests);
+        self::assertSame(6, $options->maxFiles);
+    }
+
     public function testRejectsUnknownFormat(): void
     {
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Unknown format: xml');
+        $this->expectExceptionMessage('Unknown format for query: xml');
 
         CliOptions::parse(['query', 'Foo', '--format=xml']);
     }

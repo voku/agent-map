@@ -11,29 +11,29 @@ final readonly class FileEntry
      */
     public function __construct(
         public string $path,
-        public int $modifiedAt,
-        public string $sha1,
+        public string $sha256,
         public string $namespace,
         public array $symbols,
+        public string $semanticStatus = 'analysed',
     ) {
     }
 
     /**
-     * @return array{path: string, modified_at: int, sha1: string, namespace: string, symbols: list<array{kind: string, name: string, fqn: string, line_start: int, line_end: int, extends: list<string>, implements: list<string>, uses: list<string>, params: list<string>, return_type: ?string, attributes: list<string>, methods: list<array{name: string, visibility: string, line_start: int, line_end: int, static: bool, params: list<string>, return_type: ?string, attributes: list<string>}>}>}
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
         return [
             'path' => $this->path,
-            'modified_at' => $this->modifiedAt,
-            'sha1' => $this->sha1,
+            'sha256' => $this->sha256,
             'namespace' => $this->namespace,
+            'semantic_status' => $this->semanticStatus,
             'symbols' => array_map(static fn (SymbolEntry $symbol): array => $symbol->toArray(), $this->symbols),
         ];
     }
 
     /**
-     * @param array{path?: mixed, modified_at?: mixed, sha1?: mixed, namespace?: mixed, symbols?: mixed} $data
+     * @param array<string, mixed> $data
      */
     public static function fromArray(array $data): self
     {
@@ -44,12 +44,17 @@ final readonly class FileEntry
             }
         }
 
+        $sha256 = (string) ($data['sha256'] ?? '');
+        if ($sha256 === '' && is_string($data['sha1'] ?? null)) {
+            $sha256 = 'legacy-sha1:' . $data['sha1'];
+        }
+
         return new self(
-            (string) ($data['path'] ?? ''),
-            (int) ($data['modified_at'] ?? 0),
-            (string) ($data['sha1'] ?? ''),
-            (string) ($data['namespace'] ?? ''),
-            $symbols,
+            path: (string) ($data['path'] ?? ''),
+            sha256: $sha256,
+            namespace: (string) ($data['namespace'] ?? ''),
+            symbols: $symbols,
+            semanticStatus: (string) ($data['semantic_status'] ?? 'unknown'),
         );
     }
 }

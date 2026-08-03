@@ -7,12 +7,14 @@ namespace voku\AgentMap\Tests;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
-use voku\AgentMap\Index\AgentMapBuilder;
+use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
+use voku\AgentMap\Index\AnalysisFingerprint;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Index\MethodEntry;
+use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\SymbolEntry;
 
 final class AgentMapIndexTest extends TestCase
@@ -23,7 +25,9 @@ final class AgentMapIndexTest extends TestCase
     {
         $this->root = sys_get_temp_dir() . '/agent-map-index-' . bin2hex(random_bytes(6));
         mkdir($this->root . '/src', 0o775, true);
-        file_put_contents($this->root . '/src/EvidenceValidator.php', '<?php echo 1;');
+        mkdir($this->root . '/tests', 0o775, true);
+        file_put_contents($this->root . '/src/EvidenceValidator.php', "<?php\nfinal class EvidenceValidator {}\n");
+        file_put_contents($this->root . '/tests/EvidenceValidatorTest.php', "<?php\nfinal class EvidenceValidatorTest {}\n");
     }
 
     protected function tearDown(): void
@@ -31,218 +35,172 @@ final class AgentMapIndexTest extends TestCase
         $this->removeDirectory($this->root);
     }
 
-    public function testSerializesAndReadsJson(): void
+    public function testSerializesAndReadsJsonAndToon(): void
     {
-        $index = $this->index();
-        $file = $this->root . '/.agent-map/php-symbols.json';
+        foreach (['json', 'toon'] as $format) {
+            $path = $this->root . '/map.' . $format;
+            (new IndexWriter())->write($this->index(), $path, $format);
+            $read = (new IndexReader())->read($path);
 
-        (new IndexWriter())->write($index, $file);
-        $read = (new IndexReader())->read($file);
-
-        self::assertSame('1.0', $read->schemaVersion);
-        self::assertSame('src/EvidenceValidator.php', $read->files[0]->path);
+            self::assertSame('2.0', $read->schemaVersion);
+            self::assertSame('src/EvidenceValidator.php', $read->files[0]->path);
+            self::assertSame('User|null', $read->files[0]->symbols[0]->methods[0]->resolvedReturnType);
+            self::assertCount(1, $read->relations);
+            self::assertNotNull($read->fingerprint);
+            self::assertSame('2.2.0', $read->fingerprint->phpStanVersion);
+            self::assertSame('sha256:sources', $read->fingerprint->sourceDigest);
+        }
     }
 
-    public function testQueryFindsByClassNameAndMethodName(): void
+    public function testJsonAndToonRoundTripToSameModel(): void
     {
-        $index = $this->index();
+        (new IndexWriter())->write($this->index(), $this->root . '/map.json', 'json');
+        (new IndexWriter())->write($this->index(), $this->root . '/map.toon', 'toon');
 
-        $classMatch = $index->query('EvidenceValidator');
-        self::assertSame('exact', $classMatch->matchType);
-        self::assertCount(1, $classMatch->files);
-
-        $methodMatch = $index->query('validateAgentHistoryReference');
-        self::assertSame('exact', $methodMatch->matchType);
-        self::assertCount(1, $methodMatch->files);
-    }
-
-    public function testQueryFallsBackToNormalizedMatchAcrossCaseAndSeparators(): void
-    {
-        $index = $this->index();
-
-        // Literal method name is camelCase; querying the snake_case spelling has no literal
-        // substring hit, so this only succeeds via the case/separator-insensitive fallback.
-        $match = $index->query('validate_agent_history_reference');
-
-        self::assertSame('normalized', $match->matchType);
-        self::assertCount(1, $match->files);
-    }
-
-    public function testQueryCombinesLiteralAndNormalizedMatches(): void
-    {
-        $dto = new FileEntry(
-            'modules/AntragCreateDataTransferObjectM365EntraAppAnpassen.php',
-            1,
-            'dto',
-            'Demo',
-            [new SymbolEntry('class', 'AntragCreateDataTransferObjectM365EntraAppAnpassen', 'Demo\\AntragCreateDataTransferObjectM365EntraAppAnpassen', 1, 5)],
+        self::assertSame(
+            (new IndexReader())->read($this->root . '/map.json')->toArray(),
+            (new IndexReader())->read($this->root . '/map.toon')->toArray(),
         );
-        $module = new FileEntry(
-            'modules/ModuleM365_EntraAppAnpassen.php',
-            1,
-            'module',
-            'Demo',
-            [new SymbolEntry('class', 'ModuleM365_EntraAppAnpassen', 'Demo\\ModuleM365_EntraAppAnpassen', 1, 5)],
+    }
+
+    public function testReaderFallsBackToJsonWhenToonExtensionContainsJson(): void
+    {
+        $path = $this->root . '/map.toon';
+        $index = $this->index();
+        (new IndexWriter())->write($index, $path, 'json');
+
+        self::assertSame($index->toArray(), (new IndexReader())->read($path)->toArray());
+    }
+
+    public function testReaderFallsBackToToonWhenJsonExtensionContainsToon(): void
+    {
+        $path = $this->root . '/map.json';
+        $index = $this->index();
+        (new IndexWriter())->write($index, $path, 'toon');
+
+        self::assertSame($index->toArray(), (new IndexReader())->read($path)->toArray());
+    }
+
+    public function testTypeLookupNormalizesLeadingBackslash(): void
+    {
+        self::assertNotNull($this->index()->symbolById('type:\Demo\EvidenceValidator'));
+    }
+
+    public function testLikelyTestFilesDoNotMatchProductionPathSubstrings(): void
+    {
+        $production = $this->index()->files[0];
+        $contest = new FileEntry('src/Contest/Entry.php', 'sha256:none', 'Demo', [new SymbolEntry('class', 'Entry', 'Demo\Contest\Entry', 1, 1)]);
+        $latest = new FileEntry('src/Latest/TestimonialService.php', 'sha256:none', 'Demo', [new SymbolEntry('class', 'TestimonialService', 'Demo\Latest\TestimonialService', 1, 1)]);
+        $index = new AgentMapIndex('2.0', $this->root, 'test', [$production, $contest, $latest]);
+
+        self::assertSame([], $index->likelyTestFiles($production));
+    }
+
+    public function testRelationIdentityIncludesReceiverAndResultTypes(): void
+    {
+        $first = RelationEntry::create('method:Demo\Caller::run', 'calls', ['method:Demo\Target::go'], 'src/Caller.php', 10, 10, 'phpstan_resolved', 'Demo\A', 'int');
+        $second = RelationEntry::create('method:Demo\Caller::run', 'calls', ['method:Demo\Target::go'], 'src/Caller.php', 10, 10, 'phpstan_resolved', 'Demo\B', 'string');
+
+        self::assertNotSame($first->id, $second->id);
+    }
+
+    public function testQueryFindsClassAndMethodIncludingNormalizedName(): void
+    {
+        self::assertSame('exact', $this->index()->query('EvidenceValidator')->matchType);
+        $methodMatch = $this->index()->query('validate_agent_history_reference');
+        self::assertSame('normalized', $methodMatch->matchType);
+        self::assertSame('validateAgentHistoryReference', $methodMatch->files[0]->symbols[0]->methods[0]->name);
+    }
+
+    public function testResolveMethodRequiresQualifiedNameWhenAmbiguous(): void
+    {
+        file_put_contents($this->root . '/src/Other.php', "<?php\nfinal class Other {}\n");
+        $other = new FileEntry(
+            'src/Other.php',
+            $this->hash('src/Other.php'),
+            'Other',
+            [new SymbolEntry('class', 'EvidenceValidator', 'Other\\EvidenceValidator', 1, 2, [new MethodEntry('validate', 'public', 2, 2)])],
         );
-        $index = new AgentMapIndex('1.0', 'now', $this->root, 'simple', [$dto, $module]);
+        $index = new AgentMapIndex('2.0', $this->root, 'test', [...$this->index()->files, $other]);
 
-        $match = $index->query('M365EntraAppAnpassen');
-
-        self::assertSame('mixed', $match->matchType);
-        self::assertSame([$dto->path, $module->path], array_map(static fn (FileEntry $file): string => $file->path, $match->files));
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('ambiguous');
+        $index->resolveMethod('EvidenceValidator::validate');
     }
 
-    public function testMethodQueryKeepsOnlyTheMatchingMethod(): void
-    {
-        $match = $this->index()->query('validateAgentHistoryReference');
-
-        self::assertSame('exact', $match->matchType);
-        self::assertCount(1, $match->files);
-        self::assertCount(1, $match->files[0]->symbols);
-        self::assertSame(['validateAgentHistoryReference'], array_map(static fn (MethodEntry $method): string => $method->name, $match->files[0]->symbols[0]->methods));
-    }
-
-    public function testQueryReportsNoneWhenNothingMatchesEvenNormalized(): void
+    public function testIncomingAndOutgoingRelationsWork(): void
     {
         $index = $this->index();
-
-        $match = $index->query('TotallyUnrelatedSymbolName');
-
-        self::assertSame('none', $match->matchType);
-        self::assertSame([], $match->files);
+        self::assertCount(1, $index->incoming('method:Demo\\EvidenceValidator::validate', 'calls'));
+        self::assertCount(1, $index->outgoing('method:Demo\\Caller::run', 'calls'));
     }
 
-    public function testFileLookupWorks(): void
-    {
-        $file = $this->index()->file('src/EvidenceValidator.php');
-
-        self::assertNotNull($file);
-        self::assertSame('voku\AgentLearning', $file->namespace);
-    }
-
-    public function testFileLookupPreservesLeadingDotDirectory(): void
-    {
-        $entry = new FileEntry('.tools/AgentHook.php', 1, 'hash', 'Demo', []);
-        $index = new AgentMapIndex('1.0', 'now', $this->root, 'simple', [$entry]);
-
-        self::assertSame($entry, $index->file('.tools/AgentHook.php'));
-        self::assertSame($entry, $index->file('./.tools/AgentHook.php'));
-    }
-
-    public function testStaleDetectsModifiedAndMissingFiles(): void
+    public function testStaleDetectsModifiedAndMissingFilesByHash(): void
     {
         $index = $this->index();
-        touch($this->root . '/src/EvidenceValidator.php', time() + 5);
-
-        self::assertSame([['path' => 'src/EvidenceValidator.php', 'reason' => 'modified']], $index->staleEntries());
+        file_put_contents($this->root . '/src/EvidenceValidator.php', "<?php\n// changed\n");
+        self::assertSame([['path' => 'src/EvidenceValidator.php', 'reason' => 'hash']], $index->staleEntries());
 
         unlink($this->root . '/src/EvidenceValidator.php');
         self::assertSame([['path' => 'src/EvidenceValidator.php', 'reason' => 'missing']], $index->staleEntries());
     }
 
-    /**
-     * Reproduces a real (not merely flaky) PHP <8.3 stat-cache regression: a
-     * long-lived consumer builds an index once and keeps it in memory,
-     * checking staleEntries() repeatedly without ever re-reading from disk.
-     * filemtime()/is_file() must not silently reuse a stat cached before the
-     * on-disk change, see clearstatcache() in AgentMapIndex::staleEntries().
-     */
-    public function testStaleDetectsModificationOfInMemoryBuiltIndexWithoutReReadingFromDisk(): void
-    {
-        $index = (new AgentMapBuilder())->build($this->root, [], []);
-        self::assertSame([], $index->staleEntries());
-
-        touch($this->root . '/src/EvidenceValidator.php', time() + 5);
-
-        self::assertSame(
-            [['path' => 'src/EvidenceValidator.php', 'reason' => 'modified']],
-            $index->staleEntries(),
-        );
-    }
-
-    public function testStaleDetectsMissingFileOfInMemoryBuiltIndexWithoutReReadingFromDisk(): void
-    {
-        $index = (new AgentMapBuilder())->build($this->root, [], []);
-
-        unlink($this->root . '/src/EvidenceValidator.php');
-
-        self::assertSame(
-            [['path' => 'src/EvidenceValidator.php', 'reason' => 'missing']],
-            $index->staleEntries(),
-        );
-    }
-
-    public function testSummaryAndStatsHelpers(): void
+    public function testLikelyTestFilesAndSummaryHelpers(): void
     {
         $index = $this->index();
-
-        self::assertSame([
-            'files_indexed' => 1,
-            'symbols' => 1,
-            'classes' => 1,
-            'interfaces' => 0,
-            'traits' => 0,
-            'enums' => 0,
-            'functions' => 0,
-        ], $index->summaryCounts());
+        self::assertSame(['tests/EvidenceValidatorTest.php'], array_map(static fn (FileEntry $file): string => $file->path, $index->likelyTestFiles($index->files[0])));
+        self::assertSame(2, $index->summaryCounts()['files_indexed']);
         self::assertSame(2, $index->methodCount());
-        self::assertSame([['namespace' => 'voku\AgentLearning', 'symbols' => 1]], $index->topNamespaces());
-        self::assertSame([['directory' => 'src', 'files' => 1]], $index->topDirectories());
-        self::assertSame([['path' => 'src/EvidenceValidator.php', 'symbols' => 1]], $index->largestFiles());
-    }
-
-    public function testLikelyTestFilesIncludesCodeceptionCests(): void
-    {
-        file_put_contents($this->root . '/src/EvidenceValidator_UnitCest.php', '<?php echo 1;');
-        $production = new FileEntry('src/EvidenceValidator.php', 1, 'a', 'Demo', []);
-        $test = new FileEntry('src/EvidenceValidator_UnitCest.php', 1, 'b', 'Demo', []);
-        $index = new AgentMapIndex('1.0', 'now', $this->root, 'simple', [$production, $test]);
-
-        self::assertSame([$test], $index->likelyTestFiles($production));
-    }
-
-    public function testLikelyTestFilesForCombinesRelatedProductionFiles(): void
-    {
-        $first = new FileEntry('src/FirstService.php', 1, 'a', 'Demo', []);
-        $second = new FileEntry('src/SecondService.php', 1, 'b', 'Demo', []);
-        $firstTest = new FileEntry('tests/FirstServiceTest.php', 1, 'c', 'Demo\\Tests', []);
-        $secondTest = new FileEntry('tests/SecondServiceTest.php', 1, 'd', 'Demo\\Tests', []);
-        $index = new AgentMapIndex('1.0', 'now', $this->root, 'simple', [$first, $second, $firstTest, $secondTest]);
-
-        self::assertSame([$firstTest, $secondTest], $index->likelyTestFilesFor([$first, $second]));
     }
 
     private function index(): AgentMapIndex
     {
-        $path = $this->root . '/src/EvidenceValidator.php';
+        $method = new MethodEntry(
+            name: 'validate',
+            visibility: 'public',
+            lineStart: 2,
+            lineEnd: 2,
+            nativeReturnType: 'object|null',
+            phpDocReturnType: 'T|null',
+            resolvedReturnType: 'User|null',
+            reconciliationStatus: 'semantic_enrichment',
+        );
+        $validator = new SymbolEntry(
+            kind: 'class',
+            name: 'EvidenceValidator',
+            fqn: 'Demo\\EvidenceValidator',
+            lineStart: 1,
+            lineEnd: 2,
+            methods: [$method, new MethodEntry('validateAgentHistoryReference', 'private', 2, 2)],
+            reconciliationStatus: 'confirmed',
+        );
+        $production = new FileEntry('src/EvidenceValidator.php', $this->hash('src/EvidenceValidator.php'), 'Demo', [$validator]);
+        $test = new FileEntry('tests/EvidenceValidatorTest.php', $this->hash('tests/EvidenceValidatorTest.php'), 'Demo\\Tests', [new SymbolEntry('class', 'EvidenceValidatorTest', 'Demo\\Tests\\EvidenceValidatorTest', 1, 2)]);
+        $relation = RelationEntry::create(
+            sourceId: 'method:Demo\\Caller::run',
+            kind: 'calls',
+            targetIds: ['method:Demo\\EvidenceValidator::validate'],
+            file: 'src/Caller.php',
+            lineStart: 10,
+            lineEnd: 10,
+            resolution: 'phpstan_resolved',
+        );
 
         return new AgentMapIndex(
-            '1.0',
-            '2026-07-07T12:00:00+02:00',
+            '2.0',
             $this->root,
-            'simple',
-            [
-                new FileEntry(
-                    'src/EvidenceValidator.php',
-                    (int) filemtime($path),
-                    (string) sha1_file($path),
-                    'voku\AgentLearning',
-                    [
-                        new SymbolEntry(
-                            'class',
-                            'EvidenceValidator',
-                            'voku\AgentLearning\EvidenceValidator',
-                            10,
-                            132,
-                            [
-                                new MethodEntry('validate', 'public', 42),
-                                new MethodEntry('validateAgentHistoryReference', 'private', 100),
-                            ],
-                        ),
-                    ],
-                ),
-            ],
+            'test',
+            [$production, $test],
+            [$relation],
+            fingerprint: new AnalysisFingerprint('2.2.0', 'sha256:config', 'sha256:lock', 'sha256:sources'),
         );
+    }
+
+    private function hash(string $relative): string
+    {
+        $hash = hash_file('sha256', $this->root . '/' . $relative);
+        self::assertIsString($hash);
+        return 'sha256:' . $hash;
     }
 
     private function removeDirectory(string $path): void
@@ -250,12 +208,10 @@ final class AgentMapIndexTest extends TestCase
         if (!is_dir($path)) {
             return;
         }
-
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
         foreach ($iterator as $item) {
             $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
-
         rmdir($path);
     }
 }

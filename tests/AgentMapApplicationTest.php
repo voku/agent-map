@@ -50,6 +50,53 @@ final class AgentMapApplicationTest extends TestCase
         self::assertStringContainsString('query: EvidenceValidator', $toon['output']);
     }
 
+    public function testCallersIncludesConcreteOverrideCallersForInterfaceTarget(): void
+    {
+        file_put_contents($this->root . '/src/Contracts.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace Demo;
+
+interface Contract
+{
+    public function run(): void;
+}
+
+final class Implementation implements Contract
+{
+    public function run(): void
+    {
+    }
+}
+
+final class Caller
+{
+    public function call(Implementation $implementation): void
+    {
+        $implementation->run();
+    }
+}
+PHP);
+        $this->runApp(['agent-map', 'build', '--root=' . $this->root, '--paths=src', '--out=' . $this->root . '/map.json']);
+
+        $callers = $this->runApp(['agent-map', 'callers', 'Demo\Contract::run', '--index=' . $this->root . '/map.json']);
+
+        self::assertSame(0, $callers['exit']);
+        self::assertStringContainsString('method:Demo\Caller::call', $callers['output']);
+    }
+
+    public function testCallersWithNoMatchesPrintsEmptyState(): void
+    {
+        $this->runApp(['agent-map', 'build', '--root=' . $this->root, '--paths=src', '--out=' . $this->root . '/map.json']);
+
+        $callers = $this->runApp(['agent-map', 'callers', 'Demo\EvidenceValidator::run', '--index=' . $this->root . '/map.json']);
+
+        self::assertSame(1, $callers['exit']);
+        self::assertStringContainsString('No matches', $callers['output']);
+    }
+
     public function testChangedUsesGitDiffAgainstBase(): void
     {
         $this->git(['init', '-b', 'main']);
