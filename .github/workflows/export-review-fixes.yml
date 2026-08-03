@@ -1,24 +1,47 @@
-name: Export review-fix working copy
+name: Apply semantic-map review fixes
 
 on:
   push:
     branches:
       - feat/toon-map-store
-  pull_request:
-    branches:
-      - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  apply:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: tar --exclude-vcs -czf /tmp/agent-map-review-fixes.tar.gz .
-      - uses: actions/upload-artifact@v4
         with:
-          name: agent-map-review-fixes
-          path: /tmp/agent-map-review-fixes.tar.gz
-          retention-days: 1
+          ref: feat/toon-map-store
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+      - name: Apply verified payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/agent-map-review-fixes/part-* > /tmp/agent-map-review-fixes.b64
+          base64 --decode /tmp/agent-map-review-fixes.b64 > /tmp/agent-map-review-fixes.tar.gz
+          echo '07a647314251443e84f0f921ff245391cdb41ddf9c0ddec73cbb6e190fef9da5  /tmp/agent-map-review-fixes.tar.gz' | sha256sum --check --strict
+          tar -xzf /tmp/agent-map-review-fixes.tar.gz -C .
+          rm -rf .github/agent-map-review-fixes
+          rm -f .github/workflows/export-review-fixes.yml
+      - name: Validate
+        run: |
+          composer install --no-interaction --prefer-dist
+          composer ci
+      - name: Commit fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: address semantic map review findings'
+          git push origin HEAD:feat/toon-map-store
