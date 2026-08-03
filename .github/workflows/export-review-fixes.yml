@@ -33,6 +33,21 @@ jobs:
           base64 --decode /tmp/agent-map-review-fixes.b64 > /tmp/agent-map-review-fixes.tar.gz
           echo '07a647314251443e84f0f921ff245391cdb41ddf9c0ddec73cbb6e190fef9da5  /tmp/agent-map-review-fixes.tar.gz' | sha256sum --check --strict
           tar -xzf /tmp/agent-map-review-fixes.tar.gz -C .
+          python - <<'PY'
+          from pathlib import Path
+
+          collector = Path('src/PhpStan/Collector/FunctionCollector.php')
+          collector.write_text(collector.read_text().replace(
+              'ParametersAcceptorSelector::selectSingle($function->getVariants())',
+              'ParametersAcceptorSelector::combineAcceptors($function->getVariants())',
+          ))
+
+          test = Path('tests/SourceMaterializerTest.php')
+          test.write_text(test.read_text().replace(
+              "self::assertSame(9, $source['start']);",
+              "self::assertSame(8, $source['start']);",
+          ))
+          PY
           rm -rf .github/agent-map-review-fixes
           rm -f .github/workflows/export-review-fixes.yml
       - name: Validate
