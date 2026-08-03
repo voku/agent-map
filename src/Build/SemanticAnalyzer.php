@@ -9,5 +9,10 @@ interface SemanticAnalyzer
     /**
      * @param list<string> $relativeFiles
      */
-    public function analyse(string $root, array $relativeFiles, ?string $configurationFile = null): SemanticAnalysisResult;
+    public function analyse(
+        string $root,
+        array $relativeFiles,
+        ?string $configurationFile = null,
+        ?string $memoryLimit = null,
+    ): SemanticAnalysisResult;
 }

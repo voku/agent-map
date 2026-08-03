@@ -60,7 +60,13 @@ final readonly class AgentMapApplication
 
     private function build(CliOptions $options): int
     {
-        $index = (new AgentMapBuilder())->build($options->root, $options->paths, $options->excludes, $options->phpStanConfig);
+        $index = (new AgentMapBuilder())->build(
+            $options->root,
+            $options->paths,
+            $options->excludes,
+            $options->phpStanConfig,
+            $options->phpStanMemoryLimit,
+        );
         (new IndexWriter())->write($index, $options->out, $options->format);
         echo 'Wrote ' . count($index->files) . ' file(s), ' . count($index->relations) . ' relation(s), and ' . count($index->diagnostics) . ' diagnostic(s) to ' . $options->out . "\n";
 
@@ -481,7 +487,7 @@ final readonly class AgentMapApplication
         if ($command === 'build') {
             return <<<'TXT'
             Usage:
-              agent-map build [--root=.] [--paths=src,tests] [--out=.agent-map/php-symbols.json] [--format=json|toon] [--phpstan-config=phpstan.neon] [--exclude=REGEX]
+              agent-map build [--root=.] [--paths=src,tests] [--out=.agent-map/php-symbols.json] [--format=json|toon] [--phpstan-config=phpstan.neon] [--phpstan-memory-limit=512M] [--exclude=REGEX]
 
             Build a PHPStan-enriched repository map. JSON is the default; TOON is optional. --exclude is repeatable.
             TXT;

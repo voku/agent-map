@@ -28,7 +28,9 @@ final readonly class EditContextPlanner
         $blindSpots = [];
         $omitted = [];
 
-        $candidates[] = $this->methodCandidate($resolved, ContextRole::PRIMARY, 'requested edit target', [], 0, true);
+        foreach ($this->primaryCandidates($map, $resolved, $policy) as $candidate) {
+            $candidates[] = $candidate;
+        }
 
         $contractIds = [];
         foreach ($map->outgoing($resolved->id, 'overrides') as $relation) {
@@ -133,7 +135,6 @@ final readonly class EditContextPlanner
                 }
             }
         }
-
         foreach ($map->diagnostics as $diagnostic) {
             if ($diagnostic->symbolId !== $resolved->id && $diagnostic->symbolId !== $resolved->owner->id()) {
                 continue;
@@ -142,6 +143,12 @@ final readonly class EditContextPlanner
         }
 
         $candidates = $this->deduplicateCandidates($candidates);
+        if (!$policy->includeRelatedContext) {
+            $candidates = array_values(array_filter(
+                $candidates,
+                static fn (array $candidate): bool => $candidate['role'] === ContextRole::PRIMARY,
+            ));
+        }
         usort($candidates, static fn (array $left, array $right): int => $left['priority'] <=> $right['priority'] ?: $left['file']->path <=> $right['file']->path ?: $left['line_start'] <=> $right['line_start'] ?: $left['symbol_id'] <=> $right['symbol_id']);
         $selected = [];
         $selectedFiles = [];
@@ -216,6 +223,50 @@ final readonly class EditContextPlanner
             'priority' => $priority,
             'mandatory' => $mandatory,
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function primaryCandidates(AgentMapIndex $map, ResolvedMethod $method, EditContextPolicy $policy): array
+    {
+        if ($policy->focusTerms === []) {
+            return [$this->methodCandidate($method, ContextRole::PRIMARY, 'requested edit target', [], 0, true)];
+        }
+
+        $source = $this->materializer->materialize(
+            $map->root,
+            $method->file,
+            $method->method->lineStart,
+            $method->method->lineEnd,
+            false,
+        );
+        $candidates = [];
+        foreach (array_values(array_unique($policy->focusTerms)) as $focusTerm) {
+            $offset = 0;
+            $matches = 0;
+            while (($match = strpos($source['content'], $focusTerm, $offset)) !== false && $matches < $policy->maximumFocusMatches) {
+                $line = $source['start'] + substr_count(substr($source['content'], 0, $match), "\n");
+                $endLine = $source['start'] + substr_count(substr($source['content'], 0, $match + strlen($focusTerm)), "\n");
+                $candidates[] = [
+                    'symbol_id' => $method->id,
+                    'file' => $method->file,
+                    'line_start' => max($method->method->lineStart, $line - $policy->focusContextLines),
+                    'line_end' => min($method->method->lineEnd, $endLine + $policy->focusContextLines),
+                    'role' => ContextRole::PRIMARY,
+                    'reason' => 'requested edit target focus',
+                    'evidence_ids' => [],
+                    'priority' => 0,
+                    'mandatory' => true,
+                ];
+                $offset = $match + strlen($focusTerm);
+                ++$matches;
+            }
+        }
+
+        return $candidates === []
+            ? [$this->methodCandidate($method, ContextRole::PRIMARY, 'requested edit target; focus not found', [], 0, true)]
+            : $candidates;
     }
 
     /** @param array<string, int> $counts */

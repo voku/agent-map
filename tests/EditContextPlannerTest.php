@@ -139,6 +139,65 @@ PHP);
         new EditContextPolicy(maximumFiles: 0);
     }
 
+    public function testPlanNarrowsPrimaryContextToTheRequestedFocus(): void
+    {
+        file_put_contents($this->root . '/src/FocusedService.php', <<<'PHP'
+<?php
+
+namespace Demo;
+
+final class FocusedService
+{
+    public function update(): void
+    {
+        $before = 'before';
+        $deprecated = legacy_value();
+        $after = 'after';
+    }
+}
+PHP);
+
+        $index = (new AgentMapBuilder())->build($this->root, ['src'], []);
+        $plan = (new EditContextPlanner())->plan(
+            $index,
+            'Demo\FocusedService::update',
+            new EditContextPolicy(focusTerms: ['$deprecated = legacy_value()'], focusContextLines: 0),
+        );
+
+        self::assertCount(1, $plan->slices);
+        self::assertSame(10, $plan->slices[0]->lineStart);
+        self::assertSame(10, $plan->slices[0]->lineEnd);
+        self::assertSame("        \$deprecated = legacy_value();\n", $plan->slices[0]->content);
+        self::assertSame([ContextRole::PRIMARY], $plan->slices[0]->roles);
+    }
+
+    public function testPlanCanKeepFocusedContextIndependentOfRelatedSymbols(): void
+    {
+        $index = (new AgentMapBuilder())->build($this->root, ['src', 'tests'], []);
+        $plan = (new EditContextPlanner())->plan(
+            $index,
+            'Demo\\UserService::save',
+            new EditContextPolicy(focusTerms: ['$this->repository->persist'], includeRelatedContext: false),
+        );
+
+        self::assertCount(1, $plan->slices);
+        self::assertSame([ContextRole::PRIMARY], $plan->slices[0]->roles);
+    }
+
+    public function testPlanFallsBackToTheCompleteTargetWhenFocusIsMissing(): void
+    {
+        $index = (new AgentMapBuilder())->build($this->root, ['src'], []);
+        $plan = (new EditContextPlanner())->plan(
+            $index,
+            'Demo\\UserService::save',
+            new EditContextPolicy(focusTerms: ['$missing'], includeRelatedContext: false),
+        );
+
+        self::assertCount(1, $plan->slices);
+        self::assertSame([ContextRole::PRIMARY], $plan->slices[0]->roles);
+        self::assertStringContainsString('$this->repository->persist($user);', $plan->slices[0]->content);
+    }
+
     public function testManyOverridesCanBeOmittedInsteadOfMakingThePlanFail(): void
     {
         file_put_contents($this->root . '/src/ManyService.php', "<?php\nnamespace Demo;\ninterface ManyService { public function run(): void; }\n");

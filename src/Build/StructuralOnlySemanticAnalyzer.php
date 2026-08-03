@@ -7,7 +7,12 @@ namespace voku\AgentMap\Build;
 /** Intended for focused unit tests; production builds use PHPStanSemanticAnalyzer. */
 final readonly class StructuralOnlySemanticAnalyzer implements SemanticAnalyzer
 {
-    public function analyse(string $root, array $relativeFiles, ?string $configurationFile = null): SemanticAnalysisResult
+    public function analyse(
+        string $root,
+        array $relativeFiles,
+        ?string $configurationFile = null,
+        ?string $memoryLimit = null,
+    ): SemanticAnalysisResult
     {
         return new SemanticAnalysisResult([], [], 'test-none', 'sha256:none');
     }

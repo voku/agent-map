@@ -12,11 +12,12 @@ final class CliOptionsTest extends TestCase
 {
     public function testParsesBuild(): void
     {
-        $options = CliOptions::parse(['build', '--root=.', '--paths=src,tests', '--out=map.json']);
+        $options = CliOptions::parse(['build', '--root=.', '--paths=src,tests', '--out=map.json', '--phpstan-memory-limit=512m']);
 
         self::assertSame('build', $options->command);
         self::assertSame(['src', 'tests'], $options->paths);
         self::assertSame('map.json', $options->out);
+        self::assertSame('512M', $options->phpStanMemoryLimit);
     }
 
     public function testBuildToonFormatUsesToonDefaultOutput(): void
@@ -101,5 +102,13 @@ final class CliOptionsTest extends TestCase
         $this->expectExceptionMessage('Unknown command: nope');
 
         CliOptions::parse(['nope']);
+    }
+
+    public function testRejectsInvalidPhpStanMemoryLimit(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid phpstan-memory-limit');
+
+        CliOptions::parse(['build', '--phpstan-memory-limit=-1']);
     }
 }

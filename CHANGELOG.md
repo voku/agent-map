@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.2.1 - 2026-08-03
+
+- Added `--phpstan-memory-limit` to `agent-map build`, forwarding the bounded
+  value to the PHPStan semantic-export child process.
+- Added bounded literal focus windows to `EditContextPolicy`, allowing
+  consumers to send a surgical primary-source excerpt instead of a large
+  method while retaining the full target if no literal matches.
+- Replaced the package-specific dogfood fixture with package-owned self-dogfood
+  coverage.
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## 0.2.0 - 2026-08-03

@@ -13,7 +13,12 @@ use Throwable;
 
 final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
 {
-    public function analyse(string $root, array $relativeFiles, ?string $configurationFile = null): SemanticAnalysisResult
+    public function analyse(
+        string $root,
+        array $relativeFiles,
+        ?string $configurationFile = null,
+        ?string $memoryLimit = null,
+    ): SemanticAnalysisResult
     {
         if ($relativeFiles === []) {
             return new SemanticAnalysisResult([], [], $this->phpStanVersion(), $this->configurationHash($configurationFile));
@@ -49,6 +54,9 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
             $command[] = '--autoload-file=' . $autoload;
             $command[] = '--no-progress';
             $command[] = '--error-format=raw';
+            if ($memoryLimit !== null) {
+                $command[] = '--memory-limit=' . $memoryLimit;
+            }
 
             $environment = getenv();
             $environment['AGENT_MAP_PHPSTAN_EXPORT'] = $exportFile;

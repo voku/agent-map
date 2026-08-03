@@ -27,6 +27,7 @@ final readonly class CliOptions
         public array $excludes,
         public bool $help,
         public ?string $phpStanConfig,
+        public ?string $phpStanMemoryLimit,
         public int $contextBudget,
         public int $maxFiles,
         public int $maxCallers,
@@ -62,6 +63,7 @@ final readonly class CliOptions
             'method-limit' => '10',
             'base' => 'main',
             'phpstan-config' => '',
+            'phpstan-memory-limit' => '',
             'context-budget' => '60000',
             'max-files' => '20',
             'max-callers' => '10',
@@ -136,6 +138,7 @@ final readonly class CliOptions
             excludes: $excludes,
             help: $help,
             phpStanConfig: $values['phpstan-config'] !== '' ? $values['phpstan-config'] : null,
+            phpStanMemoryLimit: self::memoryLimit($values['phpstan-memory-limit']),
             contextBudget: self::positiveInt('context-budget', $values['context-budget'], 1),
             maxFiles: self::positiveInt('max-files', $values['max-files'], 1),
             maxCallers: self::positiveInt('max-callers', $values['max-callers'], 0),
@@ -170,6 +173,18 @@ final readonly class CliOptions
             throw new InvalidArgumentException('Invalid ' . $name . ': ' . $value);
         }
         return $integer;
+    }
+
+    private static function memoryLimit(string $value): ?string
+    {
+        if ($value === '') {
+            return null;
+        }
+        if (preg_match('/\A[1-9][0-9]*(?:[KMG])?\z/i', $value) !== 1) {
+            throw new InvalidArgumentException('Invalid phpstan-memory-limit: ' . $value);
+        }
+
+        return strtoupper($value);
     }
 
     /** @return list<string> */

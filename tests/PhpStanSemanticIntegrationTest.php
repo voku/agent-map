@@ -92,7 +92,7 @@ PHP);
 
     public function testBuildResolvesGenericTypesCallsFunctionsAndNullsafeCalls(): void
     {
-        $index = (new AgentMapBuilder())->build($this->root, ['src'], []);
+        $index = (new AgentMapBuilder())->build($this->root, ['src'], [], null, '512M');
         $method = $index->resolveMethod('Demo\UserRepository::find');
 
         self::assertSame('Demo\User|null', $method->method->phpDocReturnType);

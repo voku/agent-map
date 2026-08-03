@@ -28,7 +28,13 @@ final readonly class AgentMapBuilder
      * @param list<string> $paths
      * @param list<string> $excludes
      */
-    public function build(string $root, array $paths, array $excludes, ?string $phpStanConfiguration = null): AgentMapIndex
+    public function build(
+        string $root,
+        array $paths,
+        array $excludes,
+        ?string $phpStanConfiguration = null,
+        ?string $phpStanMemoryLimit = null,
+    ): AgentMapIndex
     {
         $realRoot = realpath($root);
         if (!is_string($realRoot)) {
@@ -62,7 +68,12 @@ final readonly class AgentMapBuilder
         }
 
         $configuration = $this->resolvePhpStanConfiguration($realRoot, $phpStanConfiguration);
-        $semantic = $this->semanticAnalyzer->analyse($realRoot, $relatives, $configuration);
+        $semantic = $this->semanticAnalyzer->analyse(
+            $realRoot,
+            $relatives,
+            $configuration,
+            $phpStanMemoryLimit,
+        );
         $reconciled = $this->reconciler->reconcile($realRoot, $structuralFiles, $semantic);
 
         ksort($sourceHashes, SORT_STRING);

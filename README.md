@@ -80,6 +80,7 @@ There is one analysis path and one map model. JSON and TOON are serializers, not
 - `--out`: map file, default `.agent-map/php-symbols.json`;
 - `--format`: `json` or `toon`, default `json`;
 - `--phpstan-config`: explicit PHPStan configuration;
+- `--phpstan-memory-limit`: explicit positive PHPStan memory limit, for example `512M` or `2G`;
 - `--exclude`: repeatable PHP regular expression applied to normalized paths.
 
 Configuration discovery uses:

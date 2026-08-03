@@ -64,9 +64,10 @@ final class AgentMapBuilderTest extends TestCase
 ");
         $semantic = new RecordingSemanticAnalyzer();
 
-        (new AgentMapBuilder(semanticAnalyzer: $semantic))->build($this->root, ['src'], []);
+        (new AgentMapBuilder(semanticAnalyzer: $semantic))->build($this->root, ['src'], [], null, '512M');
 
         self::assertSame($this->root . '/phpstan.neon', $semantic->configurationFile);
+        self::assertSame('512M', $semantic->memoryLimit);
     }
 
     public function testMissingExplicitPhpStanConfigurationFailsClearly(): void
@@ -185,10 +186,17 @@ final class FailingExtractor implements SymbolExtractor
 final class RecordingSemanticAnalyzer implements SemanticAnalyzer
 {
     public ?string $configurationFile = null;
+    public ?string $memoryLimit = null;
 
-    public function analyse(string $root, array $relativeFiles, ?string $configurationFile = null): SemanticAnalysisResult
+    public function analyse(
+        string $root,
+        array $relativeFiles,
+        ?string $configurationFile = null,
+        ?string $memoryLimit = null,
+    ): SemanticAnalysisResult
     {
         $this->configurationFile = $configurationFile;
+        $this->memoryLimit = $memoryLimit;
 
         return new SemanticAnalysisResult([], [], 'test-recording', 'sha256:recording');
     }
