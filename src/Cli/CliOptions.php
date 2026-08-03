@@ -46,7 +46,7 @@ final readonly class CliOptions
         if (in_array($command, ['-h', '--help'], true)) {
             $command = 'help';
         }
-        $commands = ['help', 'build', 'query', 'file', 'stale', 'summary', 'changed', 'related', 'stats', 'callers', 'callees', 'context'];
+        $commands = ['help', 'build', 'query', 'file', 'stale', 'summary', 'changed', 'related', 'stats', 'scope', 'callers', 'callees', 'context'];
         if (!in_array($command, $commands, true)) {
             throw new InvalidArgumentException('Unknown command: ' . $command);
         }
@@ -57,7 +57,7 @@ final readonly class CliOptions
             'out' => '.agent-map/php-symbols.json',
             'index' => '.agent-map/php-symbols.json',
             'format' => $command === 'build' ? 'json' : 'text',
-            'limit' => '20',
+            'limit' => $command === 'scope' ? '10' : '20',
             'symbol-limit' => '10',
             'method-limit' => '10',
             'base' => 'main',
@@ -104,7 +104,7 @@ final readonly class CliOptions
             $outProvided = $outProvided || $name === 'out';
         }
 
-        if (in_array($command, ['query', 'file', 'related', 'callers', 'callees', 'context'], true) && !$help && ($argument === null || $argument === '')) {
+        if (in_array($command, ['query', 'file', 'related', 'scope', 'callers', 'callees', 'context'], true) && !$help && ($argument === null || $argument === '')) {
             throw new InvalidArgumentException('Missing argument for command: ' . $command);
         }
         if ($command === 'build') {

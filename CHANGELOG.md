@@ -4,13 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.2.0 - 2026-08-03
 
 ### Added
 
 - PHPStan 2.2 semantic collection for resolved PHPDoc types, generics, call targets, instantiations, prototypes, and referenced types.
 - Reconciliation between `voku/simple-php-code-parser` structural facts and PHPStan semantic facts, including explicit diagnostics and conflict states.
 - `callers`, `callees`, and `context` commands for exact `Class::method` targets.
+- `scope` now enriches syntax-derived calls with persisted PHPStan targets, resolution states, and inferred receiver/result types while retaining AST-only SQL-table and template hints.
 - Deterministic `EditContextPlan` generation with contracts, callers, caller tests, callees, type definitions, blind spots, source hashes, and bounded source slices.
 - Optional TOON persistence for the same map model used by JSON.
 
@@ -21,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - JSON remains the default map format; TOON is selected explicitly with `build --format=toon`.
 - PHPStan `^2.2` is a runtime dependency while `voku/simple-php-code-parser` remains the independent structural cross-check.
 - Stale detection now uses SHA-256 content hashes instead of mtimes and SHA-1.
+- `scope` rejects stale maps rather than combining current source with outdated semantic ranges.
 
 ### Fixed
 

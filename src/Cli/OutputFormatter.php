@@ -114,6 +114,8 @@ final readonly class OutputFormatter
             'stats' => $this->statsText($payload),
             'related' => $this->relatedText($payload),
             'changed' => $this->changedText($payload),
+            'scope' => $this->scopeText($payload),
+            'scope_ambiguous' => $this->scopeAmbiguousText($payload),
             'query' => $this->matchTypeNote($payload) . $this->filesText(is_array($payload['files'] ?? null) ? $payload['files'] : [], (bool) ($payload['include_namespace'] ?? false)),
             'relations' => $this->relationsText($payload),
             'edit_context' => $this->contextText($payload),
@@ -277,6 +279,105 @@ final readonly class OutputFormatter
         $out .= $this->filesText(is_array($payload['files'] ?? null) ? $payload['files'] : [], false);
         foreach (is_array($payload['unindexed'] ?? null) ? $payload['unindexed'] : [] as $path) {
             $out .= (string) $path . "\n  not indexed\n";
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function scopeText(array $payload): string
+    {
+        $target = is_array($payload['target'] ?? null) ? $payload['target'] : [];
+        $out = (string) ($target['label'] ?? '') . "\n";
+        $out .= (string) ($target['file'] ?? '') . ':' . (int) ($target['line_start'] ?? 0) . '-' . (int) ($target['line_end'] ?? 0) . "\n\n";
+
+        $out .= "Calls:\n" . $this->scopeCallsText($payload);
+        $out .= "\nTables:\n" . $this->scopeTablesText($payload);
+        $out .= "\nTemplates:\n" . $this->scopeTemplatesText($payload);
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function scopeCallsText(array $payload): string
+    {
+        $calls = is_array($payload['calls'] ?? null) ? $payload['calls'] : [];
+        if ($calls === []) {
+            return "  (none)\n";
+        }
+
+        $out = '';
+        foreach ($calls as $call) {
+            if (is_array($call)) {
+                $out .= '  ' . str_pad((string) ($call['label'] ?? ''), 28) . ' line ' . (int) ($call['line'] ?? 0);
+                $targets = is_array($call['target_ids'] ?? null) ? $call['target_ids'] : [];
+                if ($targets !== []) {
+                    $out .= ' -> ' . implode(', ', array_map(static fn (mixed $target): string => (string) $target, $targets));
+                }
+                $out .= ' [' . (string) ($call['resolution'] ?? 'structural_only') . "]\n";
+            }
+        }
+
+        return $out . $this->omittedLine((int) ($payload['calls_omitted'] ?? 0));
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function scopeTablesText(array $payload): string
+    {
+        $tables = is_array($payload['tables'] ?? null) ? $payload['tables'] : [];
+        if ($tables === []) {
+            return "  (none)\n";
+        }
+
+        $out = '';
+        foreach ($tables as $table) {
+            if (is_array($table)) {
+                $out .= '  ' . str_pad((string) ($table['table'] ?? ''), 20) . str_pad((string) ($table['action'] ?? ''), 10) . 'line ' . (int) ($table['line'] ?? 0) . "\n";
+            }
+        }
+
+        return $out . $this->omittedLine((int) ($payload['tables_omitted'] ?? 0));
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function scopeTemplatesText(array $payload): string
+    {
+        $templates = is_array($payload['templates'] ?? null) ? $payload['templates'] : [];
+        if ($templates === []) {
+            return "  (none)\n";
+        }
+
+        $out = '';
+        foreach ($templates as $template) {
+            if (is_array($template)) {
+                $out .= '  ' . str_pad((string) ($template['path'] ?? ''), 28) . ' line ' . (int) ($template['line'] ?? 0) . "\n";
+            }
+        }
+
+        return $out . $this->omittedLine((int) ($payload['templates_omitted'] ?? 0));
+    }
+
+    private function omittedLine(int $omitted): string
+    {
+        return $omitted > 0 ? '  ... ' . $omitted . " more\n" : '';
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function scopeAmbiguousText(array $payload): string
+    {
+        $out = 'Ambiguous: ' . (string) ($payload['query'] ?? '') . "\n\nCandidates:\n";
+        foreach (is_array($payload['candidates'] ?? null) ? $payload['candidates'] : [] as $candidate) {
+            $out .= '  ' . (string) $candidate . "\n";
         }
 
         return $out;

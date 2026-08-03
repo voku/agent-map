@@ -13,6 +13,8 @@ use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
+use voku\AgentMap\Inspect\ScopeInspector;
+use voku\AgentMap\Inspect\ScopeSelector;
 
 final readonly class AgentMapApplication
 {
@@ -44,6 +46,7 @@ final readonly class AgentMapApplication
                 'changed' => $this->changed($options),
                 'related' => $this->related($options),
                 'stats' => $this->stats($options),
+                'scope' => $this->scope($options),
                 'callers' => $this->relations($options, true),
                 'callees' => $this->relations($options, false),
                 'context' => $this->context($options),
@@ -211,6 +214,46 @@ final readonly class AgentMapApplication
         ], $options->format);
 
         return $primary === [] ? 1 : 0;
+    }
+
+    private function scope(CliOptions $options): int
+    {
+        $index = (new IndexReader())->read($options->index);
+        if ($index->staleEntries() !== []) {
+            throw new RuntimeException('Agent map is stale. Rebuild it before inspecting a scope.');
+        }
+
+        $selection = (new ScopeSelector())->select($index, (string) $options->argument);
+        if ($selection->status === 'not_found') {
+            fwrite(STDERR, 'No indexed class, method, or function matches: ' . $options->argument . "\n");
+
+            return 1;
+        }
+
+        if ($selection->status === 'ambiguous') {
+            echo $this->formatter->render([
+                'type' => 'scope_ambiguous',
+                'title' => 'Ambiguous: ' . (string) $options->argument,
+                'query' => (string) $options->argument,
+                'candidates' => $selection->candidates,
+            ], $options->format);
+
+            return 1;
+        }
+
+        $target = $selection->target;
+        if ($target === null) {
+            return 1;
+        }
+
+        $inspection = (new ScopeInspector())->inspect($index, $target, $options->limit);
+        echo $this->formatter->render([
+            'type' => 'scope',
+            'title' => $target->label,
+            ...$inspection->toArray(),
+        ], $options->format);
+
+        return 0;
     }
 
     private function relations(CliOptions $options, bool $incoming): int
@@ -456,6 +499,7 @@ final readonly class AgentMapApplication
           agent-map changed --index=.agent-map/php-symbols.json --base=main
           agent-map related EvidenceValidator --index=.agent-map/php-symbols.json
           agent-map stats --index=.agent-map/php-symbols.json
+          agent-map scope 'App\Service\UserService::save' --index=.agent-map/php-symbols.json
           agent-map callers 'Foo::bar' --index=.agent-map/php-symbols.json
           agent-map callees 'Foo::bar' --index=.agent-map/php-symbols.json
           agent-map context 'Foo::bar' --index=.agent-map/php-symbols.json --format=toon
