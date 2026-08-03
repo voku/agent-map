@@ -22,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - PHPStan `^2.2` is a runtime dependency while `voku/simple-php-code-parser` remains the independent structural cross-check.
 - Stale detection now uses SHA-256 content hashes instead of mtimes and SHA-1.
 
+### Fixed
+
+- Hardened PHPStan subprocess execution, function and nullsafe-call collection, relation reconciliation, override traversal, source slicing, test-path detection, and context-budget handling after review.
+
 ## 0.1.1 - 2026-07-16
 
 ### Changed
