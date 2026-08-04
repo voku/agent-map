@@ -14,6 +14,8 @@ use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
 use voku\AgentMap\Extract\ExtractResult;
 use voku\AgentMap\Extract\SymbolExtractor;
 use voku\AgentMap\Index\AgentMapBuilder;
+use voku\AgentMap\Index\AgentMapIndex;
+use voku\AgentMap\Index\FileEntry;
 
 final class AgentMapBuilderTest extends TestCase
 {
@@ -52,6 +54,42 @@ final class AgentMapBuilderTest extends TestCase
         self::assertNotNull($index->fingerprint);
         self::assertSame('test-none', $index->fingerprint->phpStanVersion);
         self::assertStringStartsWith('sha256:', $index->fingerprint->sourceDigest);
+    }
+
+    public function testMergeKeepsUntouchedFilesAndDropsDeletedOnes(): void
+    {
+        $builder = new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer());
+        $previous = $builder->build($this->root, ['src'], []);
+
+        file_put_contents($this->root . '/src/Beta.php', $this->source('Beta') . "\n// changed\n");
+        file_put_contents($this->root . '/src/Delta.php', $this->source('Delta'));
+        unlink($this->root . '/src/Gamma.php');
+
+        $merged = $builder->build($this->root, ['src/Beta.php', 'src/Delta.php'], [], null, null, $previous);
+
+        self::assertSame(
+            ['src/Alpha.php', 'src/Beta.php', 'src/Delta.php'],
+            array_map(static fn (FileEntry $file): string => $file->path, $merged->files),
+        );
+        self::assertNotSame(
+            $this->fileByPath($previous, 'src/Beta.php')->sha256,
+            $this->fileByPath($merged, 'src/Beta.php')->sha256,
+        );
+        self::assertSame(
+            $this->fileByPath($previous, 'src/Alpha.php')->sha256,
+            $this->fileByPath($merged, 'src/Alpha.php')->sha256,
+        );
+    }
+
+    private function fileByPath(AgentMapIndex $index, string $path): FileEntry
+    {
+        foreach ($index->files as $file) {
+            if ($file->path === $path) {
+                return $file;
+            }
+        }
+
+        throw new RuntimeException('File missing from index: ' . $path);
     }
 
     public function testPhpStanConfigurationDiscoveryPrefersPhpstanNeon(): void
@@ -193,6 +231,8 @@ final class RecordingSemanticAnalyzer implements SemanticAnalyzer
         array $relativeFiles,
         ?string $configurationFile = null,
         ?string $memoryLimit = null,
+        array $analyseDirectories = [],
+        array $scanDirectories = [],
     ): SemanticAnalysisResult
     {
         $this->configurationFile = $configurationFile;

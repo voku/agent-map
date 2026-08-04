@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Extract;
 
+use Composer\Autoload\ClassLoader;
 use Throwable;
 use voku\AgentMap\Index\MethodEntry;
 use voku\AgentMap\Index\ParameterEntry;
@@ -36,7 +37,7 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
         try {
             // Pass the already-read $code rather than $file: getPhpFiles()
             // would otherwise re-read the file itself, doubling disk I/O.
-            $container = PhpCodeParser::getPhpFiles($code);
+            $container = $this->withoutApplicationAutoloaders(static fn (): ParserContainer => PhpCodeParser::getPhpFiles($code));
         } catch (Throwable $e) {
             return new ExtractResult($file, false, [], $e->getMessage());
         }
@@ -47,6 +48,49 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
         }
 
         return new ExtractResult($file, true, $this->symbols($container));
+    }
+
+    /**
+     * Runs the parse with every non-Composer autoloader suspended.
+     *
+     * Extraction must stay a pure read of the source file. `PhpCodeParser` resolves
+     * `{@inheritdoc}` parents through `class_exists($parent, true)`, so a host project whose
+     * autoloader maps class names onto procedural legacy files turns "parse one file" into
+     * "include and execute that parent file": page output, database connections, network calls.
+     * The reflected parent also leaks into the container and would be indexed as a symbol of the
+     * child file. Composer's own loader stays registered because the parser needs its own classes;
+     * unresolved parents simply stay unresolved here, and PHPStan supplies the inherited types.
+     *
+     * @param callable(): ParserContainer $parse
+     */
+    private function withoutApplicationAutoloaders(callable $parse): ParserContainer
+    {
+        $registered = spl_autoload_functions();
+        $suspended = [];
+        foreach ($registered as $autoloader) {
+            if (is_array($autoloader) && $autoloader[0] instanceof ClassLoader) {
+                continue;
+            }
+            spl_autoload_unregister($autoloader);
+            $suspended[] = $autoloader;
+        }
+
+        if ($suspended === []) {
+            return $parse();
+        }
+
+        try {
+            return $parse();
+        } finally {
+            // Re-register everything in the original order: appending only the suspended
+            // entries would silently move them behind Composer's loader.
+            foreach ($registered as $autoloader) {
+                spl_autoload_unregister($autoloader);
+            }
+            foreach ($registered as $autoloader) {
+                spl_autoload_register($autoloader);
+            }
+        }
     }
 
     /**

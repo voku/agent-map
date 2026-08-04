@@ -4,6 +4,45 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.3.0 - 2026-08-04
+
+### Added
+
+- `agent-map refresh` re-analyses only the files whose hash moved plus the ones
+  that appeared since the last build, and patches them into the existing index;
+  deleted files drop out. `agent-map build --merge` does the same for an
+  explicit `--paths` scope. Keeping a large map current no longer means paying
+  for a full rebuild.
+- `--scan=<dirs>` maps to PHPStan's `scanDirectories`, so a scope that
+  references classes living outside it resolves their types instead of failing
+  with "Class X was not found ... discovering symbols is probably not
+  configured properly".
+
+### Changed
+
+- Symbol extraction now suspends every non-Composer autoloader while parsing.
+  `voku/simple-php-code-parser` resolves `{@inheritdoc}` parents through
+  `class_exists($parent, true)`, so in a project whose autoloader maps class
+  names onto procedural legacy files, "parse one file" used to `include` and
+  *execute* that parent - rendering pages, opening database connections - and
+  then indexed the reflected parent as a symbol of the child file. On a real
+  code base that accounted for roughly half of all `declares_method` relations
+  and 19 000 bogus `structural_only_method` diagnostics.
+- The PHPStan child process receives the scope directories instead of the
+  expanded file list whenever no `--exclude` is set. PHPStan disables its
+  result cache completely when only files are passed ("Result cache not used
+  because only files were passed as analysed paths"), which made every rebuild
+  a cold rebuild; a no-change rebuild of a 3 300-file project dropped from over
+  15 minutes to under a minute.
+- `IndexWriter` starts every top-level section on its own line (the output is
+  still ordinary JSON), and `IndexReader::readSections()` decodes only the
+  sections a command needs. `file`, `query`, `stale`, and `summary` now skip
+  the relation list - the largest section by far - which took their runtime on
+  a 66 MB index from ~6.7 s to ~2 s at 75 MB instead of >1 GB peak memory.
+- `SemanticAnalyzer::analyse()` takes two additional optional parameters
+  (`$analyseDirectories`, `$scanDirectories`). Custom implementations must
+  extend their signature.
+
 ## 0.2.1 - 2026-08-04
 
 - Added `--phpstan-memory-limit` to `agent-map build`, forwarding the bounded

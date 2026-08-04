@@ -10,6 +10,7 @@ final readonly class CliOptions
 {
     /**
      * @param list<string> $paths
+     * @param list<string> $scanPaths
      * @param list<string> $excludes
      */
     public function __construct(
@@ -17,6 +18,7 @@ final readonly class CliOptions
         public ?string $argument,
         public string $root,
         public array $paths,
+        public array $scanPaths,
         public string $out,
         public string $index,
         public string $format,
@@ -26,6 +28,7 @@ final readonly class CliOptions
         public string $base,
         public array $excludes,
         public bool $help,
+        public bool $merge,
         public ?string $phpStanConfig,
         public ?string $phpStanMemoryLimit,
         public int $contextBudget,
@@ -47,7 +50,7 @@ final readonly class CliOptions
         if (in_array($command, ['-h', '--help'], true)) {
             $command = 'help';
         }
-        $commands = ['help', 'build', 'query', 'file', 'stale', 'summary', 'changed', 'related', 'stats', 'scope', 'callers', 'callees', 'context'];
+        $commands = ['help', 'build', 'refresh', 'query', 'file', 'stale', 'summary', 'changed', 'related', 'stats', 'scope', 'callers', 'callees', 'context'];
         if (!in_array($command, $commands, true)) {
             throw new InvalidArgumentException('Unknown command: ' . $command);
         }
@@ -55,9 +58,10 @@ final readonly class CliOptions
         $values = [
             'root' => getcwd() ?: '.',
             'paths' => '.',
+            'scan' => '',
             'out' => '.agent-map/php-symbols.json',
             'index' => '.agent-map/php-symbols.json',
-            'format' => $command === 'build' ? 'json' : 'text',
+            'format' => in_array($command, ['build', 'refresh'], true) ? 'json' : 'text',
             'limit' => $command === 'scope' ? '10' : '20',
             'symbol-limit' => '10',
             'method-limit' => '10',
@@ -74,6 +78,7 @@ final readonly class CliOptions
         $excludes = [];
         $argument = null;
         $help = false;
+        $merge = false;
         $formatProvided = false;
         $outProvided = false;
 
@@ -81,6 +86,10 @@ final readonly class CliOptions
             $token = $tokens[$i];
             if ($token === '--help' || $token === '-h') {
                 $help = true;
+                continue;
+            }
+            if ($token === '--merge') {
+                $merge = true;
                 continue;
             }
             if (!str_starts_with($token, '--')) {
@@ -109,7 +118,7 @@ final readonly class CliOptions
         if (in_array($command, ['query', 'file', 'related', 'scope', 'callers', 'callees', 'context'], true) && !$help && ($argument === null || $argument === '')) {
             throw new InvalidArgumentException('Missing argument for command: ' . $command);
         }
-        if ($command === 'build') {
+        if ($command === 'build' || $command === 'refresh') {
             if (!$formatProvided && str_ends_with(strtolower($values['out']), '.toon')) {
                 $values['format'] = 'toon';
             }
@@ -118,7 +127,7 @@ final readonly class CliOptions
             }
         }
 
-        $allowedFormats = $command === 'build' ? ['json', 'toon'] : ['text', 'json', 'markdown', 'toon'];
+        $allowedFormats = in_array($command, ['build', 'refresh'], true) ? ['json', 'toon'] : ['text', 'json', 'markdown', 'toon'];
         if (!in_array($values['format'], $allowedFormats, true)) {
             throw new InvalidArgumentException('Unknown format for ' . $command . ': ' . $values['format']);
         }
@@ -128,6 +137,7 @@ final readonly class CliOptions
             argument: $argument,
             root: $values['root'],
             paths: self::splitPaths($values['paths']),
+            scanPaths: self::splitList($values['scan']),
             out: $values['out'],
             index: $values['index'],
             format: $values['format'],
@@ -137,6 +147,7 @@ final readonly class CliOptions
             base: $values['base'],
             excludes: $excludes,
             help: $help,
+            merge: $merge,
             phpStanConfig: $values['phpstan-config'] !== '' ? $values['phpstan-config'] : null,
             phpStanMemoryLimit: self::memoryLimit($values['phpstan-memory-limit']),
             contextBudget: self::positiveInt('context-budget', $values['context-budget'], 1),
@@ -188,7 +199,7 @@ final readonly class CliOptions
     }
 
     /** @return list<string> */
-    private static function splitPaths(string $paths): array
+    private static function splitList(string $paths): array
     {
         $result = [];
         foreach (explode(',', $paths) as $path) {
@@ -197,6 +208,15 @@ final readonly class CliOptions
                 $result[] = $path;
             }
         }
+
+        return $result;
+    }
+
+    /** @return list<string> */
+    private static function splitPaths(string $paths): array
+    {
+        $result = self::splitList($paths);
+
         return $result === [] ? ['.'] : $result;
     }
 }

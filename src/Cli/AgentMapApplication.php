@@ -13,6 +13,7 @@ use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
+use voku\AgentMap\IO\PhpFileFinder;
 use voku\AgentMap\Inspect\ScopeInspector;
 use voku\AgentMap\Inspect\ScopeSelector;
 
@@ -39,6 +40,7 @@ final readonly class AgentMapApplication
 
             return match ($options->command) {
                 'build' => $this->build($options),
+                'refresh' => $this->refresh($options),
                 'query' => $this->query($options),
                 'file' => $this->file($options),
                 'stale' => $this->stale($options),
@@ -60,12 +62,19 @@ final readonly class AgentMapApplication
 
     private function build(CliOptions $options): int
     {
+        $previous = null;
+        if ($options->merge && is_file($options->out)) {
+            $previous = (new IndexReader())->read($options->out);
+        }
+
         $index = (new AgentMapBuilder())->build(
             $options->root,
             $options->paths,
             $options->excludes,
             $options->phpStanConfig,
             $options->phpStanMemoryLimit,
+            $previous,
+            $options->scanPaths,
         );
         (new IndexWriter())->write($index, $options->out, $options->format);
         echo 'Wrote ' . count($index->files) . ' file(s), ' . count($index->relations) . ' relation(s), and ' . count($index->diagnostics) . ' diagnostic(s) to ' . $options->out . "\n";
@@ -73,9 +82,84 @@ final readonly class AgentMapApplication
         return 0;
     }
 
-    private function query(CliOptions $options): int
+    /**
+     * Rebuilds only what the index no longer matches.
+     *
+     * A full semantic build of a real code base runs for minutes, so keeping the map current has to
+     * cost about as much as the change that invalidated it: this re-analyses the files whose hash
+     * moved plus the ones that appeared since the last build, and patches them into the existing
+     * index. Deleted files drop out through the same merge.
+     */
+    private function refresh(CliOptions $options): int
     {
         $index = (new IndexReader())->read($options->index);
+
+        $indexed = [];
+        foreach ($index->files as $file) {
+            $indexed[$file->path] = true;
+        }
+
+        $changed = [];
+        $removed = 0;
+        foreach ($index->staleEntries() as $entry) {
+            if ($entry['reason'] === 'missing') {
+                ++$removed;
+                continue;
+            }
+
+            $changed[$entry['path']] = true;
+        }
+
+        // Without an explicit scope, look for new files exactly where the index already reaches:
+        // walking the whole root would drag vendor directories into every refresh, and widening to
+        // the top-level directory would pull in siblings the original build deliberately left out.
+        $searchPaths = $options->paths === ['.'] ? $this->indexedDirectories($index->files) : $options->paths;
+        foreach ((new PhpFileFinder())->find($options->root, $searchPaths, $options->excludes) as $relative) {
+            if (!isset($indexed[$relative])) {
+                $changed[$relative] = true;
+            }
+        }
+
+        if ($changed === [] && $removed === 0) {
+            echo 'Index is up to date: ' . $options->index . "\n";
+
+            return 0;
+        }
+
+        $rebuilt = (new AgentMapBuilder())->build(
+            $options->root,
+            array_keys($changed),
+            $options->excludes,
+            $options->phpStanConfig,
+            $options->phpStanMemoryLimit,
+            $index,
+            $options->scanPaths,
+        );
+        (new IndexWriter())->write($rebuilt, $options->out, $options->format);
+        echo 'Refreshed ' . count($changed) . ' changed and dropped ' . $removed . ' removed file(s); ' . count($rebuilt->files) . ' file(s) indexed in ' . $options->out . "\n";
+
+        return 0;
+    }
+
+    /**
+     * @param list<FileEntry> $files
+     *
+     * @return list<string>
+     */
+    private function indexedDirectories(array $files): array
+    {
+        $directories = [];
+        foreach ($files as $file) {
+            $separator = strrpos($file->path, '/');
+            $directories[$separator === false ? '.' : substr($file->path, 0, $separator)] = true;
+        }
+
+        return array_keys($directories);
+    }
+
+    private function query(CliOptions $options): int
+    {
+        $index = (new IndexReader())->readSections($options->index, ['files']);
         $this->warnIfStale($index->staleEntries());
         $result = $index->query((string) $options->argument);
         $files = array_slice($result->files, 0, $options->limit);
@@ -93,7 +177,7 @@ final readonly class AgentMapApplication
 
     private function file(CliOptions $options): int
     {
-        $index = (new IndexReader())->read($options->index);
+        $index = (new IndexReader())->readSections($options->index, ['files']);
         $file = $index->file((string) $options->argument);
         if ($file === null) {
             fwrite(STDERR, 'File not found in index: ' . $options->argument . "\n");
@@ -113,7 +197,7 @@ final readonly class AgentMapApplication
 
     private function stale(CliOptions $options): int
     {
-        $index = (new IndexReader())->read($options->index);
+        $index = (new IndexReader())->readSections($options->index, ['files']);
         $stale = $index->staleEntries();
         if ($stale === []) {
             echo "OK\n";
@@ -129,7 +213,7 @@ final readonly class AgentMapApplication
 
     private function summary(CliOptions $options): int
     {
-        $index = (new IndexReader())->read($options->index);
+        $index = (new IndexReader())->readSections($options->index, ['files']);
         $this->warnIfStale($index->staleEntries());
         echo $this->formatter->render([
             'type' => 'summary',
@@ -484,12 +568,23 @@ final readonly class AgentMapApplication
 
     private function help(string $command): string
     {
-        if ($command === 'build') {
+        if ($command === 'build' || $command === 'refresh') {
             return <<<'TXT'
             Usage:
-              agent-map build [--root=.] [--paths=src,tests] [--out=.agent-map/php-symbols.json] [--format=json|toon] [--phpstan-config=phpstan.neon] [--phpstan-memory-limit=512M] [--exclude=REGEX]
+              agent-map build [--root=.] [--paths=src,tests] [--scan=vendor/acme] [--out=.agent-map/php-symbols.json] [--format=json|toon] [--phpstan-config=phpstan.neon] [--phpstan-memory-limit=512M] [--exclude=REGEX] [--merge]
+              agent-map refresh [--root=.] [--index=.agent-map/php-symbols.json] [--out=.agent-map/php-symbols.json]
 
             Build a PHPStan-enriched repository map. JSON is the default; TOON is optional. --exclude is repeatable.
+
+            --scan lists directories that only have to resolve symbols (never indexed): use it when the
+            analysed scope references classes living outside it, otherwise their types stay unresolved.
+
+            --merge patches the existing --out index instead of replacing it, so a narrow --paths scope
+            keeps everything it did not cover. refresh does the same automatically for the files whose
+            hash moved, plus new files, minus deleted ones - the cheap way to keep a large map current.
+
+            Keeping --paths on directories (no --exclude) lets PHPStan reuse its result cache; passing
+            individual files disables that cache and re-analyses everything from scratch.
             TXT;
         }
 
@@ -498,6 +593,7 @@ final readonly class AgentMapApplication
 
         Usage:
           agent-map build --root=. --paths=src,tests --out=.agent-map/php-symbols.json
+          agent-map refresh --root=. --index=.agent-map/php-symbols.json
           agent-map query EvidenceValidator --index=.agent-map/php-symbols.json
           agent-map file src/EvidenceValidator.php --index=.agent-map/php-symbols.json
           agent-map stale --index=.agent-map/php-symbols.json
@@ -513,6 +609,7 @@ final readonly class AgentMapApplication
 
         Options:
           --format=text|json|markdown|toon
+          --scan=lib,vendor/acme --merge
           --limit=20
           --symbol-limit=10
           --method-limit=10

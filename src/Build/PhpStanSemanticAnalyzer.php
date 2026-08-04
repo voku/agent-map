@@ -18,6 +18,8 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         array $relativeFiles,
         ?string $configurationFile = null,
         ?string $memoryLimit = null,
+        array $analyseDirectories = [],
+        array $scanDirectories = [],
     ): SemanticAnalysisResult
     {
         if ($relativeFiles === []) {
@@ -42,14 +44,20 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         try {
             $exportFile = $temporaryDirectory . '/semantic-export.json';
             $overlayConfiguration = $temporaryDirectory . '/agent-map.neon';
-            if (file_put_contents($overlayConfiguration, $this->overlayConfiguration($configurationFile)) === false) {
+            $overlay = $this->overlayConfiguration(
+                $configurationFile,
+                $analyseDirectories !== [] ? $this->absoluteFiles($root, $analyseDirectories) : $this->absoluteFiles($root, $relativeFiles),
+                $this->absoluteFiles($root, $scanDirectories),
+                $this->resultCacheDirectory($root),
+            );
+            if (file_put_contents($overlayConfiguration, $overlay) === false) {
                 throw new RuntimeException('Unable to write PHPStan overlay configuration: ' . $overlayConfiguration);
             }
 
+            // The analysed paths travel inside the overlay configuration instead of the command
+            // line: a long file list blows the operating system argument limit, and PHPStan skips
+            // writing its result cache whenever paths are passed as arguments.
             $command = [PHP_BINARY, $phar, 'analyse'];
-            foreach ($relativeFiles as $relativeFile) {
-                $command[] = $root . '/' . $relativeFile;
-            }
             $command[] = '--configuration=' . $overlayConfiguration;
             $command[] = '--autoload-file=' . $autoload;
             $command[] = '--no-progress';
@@ -171,7 +179,11 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         return [proc_close($process), $buffers[1], $buffers[2]];
     }
 
-    private function overlayConfiguration(?string $configurationFile): string
+    /**
+     * @param list<string> $absolutePaths
+     * @param list<string> $absoluteScanPaths
+     */
+    private function overlayConfiguration(?string $configurationFile, array $absolutePaths, array $absoluteScanPaths, string $cacheDirectory): string
     {
         $extension = dirname(__DIR__) . '/PhpStan/resources/extension.neon';
         $includes = [];
@@ -188,11 +200,50 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         foreach ($includes as $include) {
             $content .= '    - ' . json_encode(str_replace('\\', '/', $include), JSON_THROW_ON_ERROR) . "\n";
         }
+
+        $content .= "parameters:\n";
         if ($configurationFile === null) {
-            $content .= "parameters:\n    level: 0\n";
+            $content .= "    level: 0\n";
+        }
+        // An own result cache directory keeps repeated map builds incremental without invalidating
+        // the cache of the surrounding project configuration, which analyses different rules.
+        $content .= '    tmpDir: ' . json_encode(str_replace('\\', '/', $cacheDirectory), JSON_THROW_ON_ERROR) . "\n";
+        $content .= "    paths:\n";
+        foreach ($absolutePaths as $absolutePath) {
+            $content .= '        - ' . json_encode(str_replace('\\', '/', $absolutePath), JSON_THROW_ON_ERROR) . "\n";
+        }
+        if ($absoluteScanPaths !== []) {
+            $content .= "    scanDirectories:\n";
+            foreach ($absoluteScanPaths as $absoluteScanPath) {
+                $content .= '        - ' . json_encode(str_replace('\\', '/', $absoluteScanPath), JSON_THROW_ON_ERROR) . "\n";
+            }
         }
 
         return $content;
+    }
+
+    /**
+     * @param list<string> $relativePaths
+     * @return list<string>
+     */
+    private function absoluteFiles(string $root, array $relativePaths): array
+    {
+        $absolute = [];
+        foreach ($relativePaths as $relativePath) {
+            $absolute[] = $relativePath === '.' ? $root : $root . '/' . $relativePath;
+        }
+
+        return $absolute;
+    }
+
+    private function resultCacheDirectory(string $root): string
+    {
+        $directory = $root . '/.agent-map/phpstan-cache';
+        if (!is_dir($directory) && !mkdir($directory, 0o775, true) && !is_dir($directory)) {
+            throw new RuntimeException('Unable to create PHPStan result cache directory: ' . $directory);
+        }
+
+        return $directory;
     }
 
     private function findComposerAutoload(): string

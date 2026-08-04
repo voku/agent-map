@@ -81,7 +81,21 @@ There is one analysis path and one map model. JSON and TOON are serializers, not
 - `--format`: `json` or `toon`, default `json`;
 - `--phpstan-config`: explicit PHPStan configuration;
 - `--phpstan-memory-limit`: explicit positive PHPStan memory limit, for example `512M` or `2G`;
+- `--scan`: comma-separated directories that only have to resolve symbols and are never indexed;
+- `--merge`: patch the existing `--out` map instead of replacing it;
 - `--exclude`: repeatable PHP regular expression applied to normalized paths.
+
+Keep `--paths` on directories when you can. PHPStan turns its result cache off as soon as it is
+handed individual files, so a file-list scope re-analyses everything on every build, while a
+directory scope makes an unchanged rebuild close to free. `--exclude` falls back to the file list.
+
+Use `--scan` when the analysed scope references classes that live outside it. Without it PHPStan
+cannot resolve those types and reports `Class X was not found ... discovering symbols is probably
+not configured properly`, which silently costs call edges:
+
+```bash
+vendor/bin/agent-map build --paths=src --scan=lib,vendor/acme
+```
 
 Configuration discovery uses:
 
@@ -209,6 +223,22 @@ The resulting `EditContextPlan` contains:
 - a deterministic map digest.
 
 The default traversal is intentionally one hop. Context selection is deterministic and methods are never truncated halfway through.
+
+## Keep a map current
+
+A full semantic build of a large repository costs minutes. `refresh` re-analyses only the files
+whose hash moved plus the ones that appeared since the last build, drops deleted ones, and patches
+the result into the existing map:
+
+```bash
+vendor/bin/agent-map refresh --root=. --index=.agent-map/php-symbols.json
+```
+
+It reports `Index is up to date` and skips the analysis entirely when nothing changed. Without an
+explicit `--paths`, new files are looked for in the directories the map already covers.
+
+Relations are keyed by their source file, so edges pointing *into* a refreshed file keep the shape
+they had at their own last analysis. Rebuild fully now and then to make incoming edges exact.
 
 ### Repository status
 

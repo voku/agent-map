@@ -25,30 +25,88 @@ final readonly class IndexWriter
 
         $format ??= str_ends_with(strtolower($file), '.toon') ? 'toon' : 'json';
         $payload = $index->toArray();
-        $content = match ($format) {
-            'json' => $this->json($payload),
-            'toon' => $this->toonEncoder->encode($payload),
+
+        $temporary = $file . '.tmp-' . getmypid();
+        match ($format) {
+            'json' => $this->writeJson($payload, $temporary),
+            'toon' => $this->writeString($this->toonEncoder->encode($payload), $temporary),
             default => throw new RuntimeException('Unsupported index format: ' . $format),
         };
 
-        $temporary = $file . '.tmp-' . getmypid();
-        if (file_put_contents($temporary, $content) === false) {
-            throw new RuntimeException('Unable to write temporary index: ' . $temporary);
-        }
         if (!rename($temporary, $file)) {
             @unlink($temporary);
             throw new RuntimeException('Unable to publish index: ' . $file);
         }
     }
 
-    /** @param array<string, mixed> $payload */
-    private function json(array $payload): string
+    /**
+     * Encodes one list element at a time: a whole-map JSON string doubles the peak memory of a
+     * large index, which is exactly where builds used to die.
+     *
+     * Every top-level section starts on its own line, and the closing brace gets one too. The result
+     * is still ordinary JSON, but a reader that only needs `files` can skip the relation list - by
+     * far the largest section - without decoding it. See IndexReader::readSections().
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function writeJson(array $payload, string $temporary): void
     {
-        $json = json_encode($this->normalizer->normalize($payload), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        $handle = fopen($temporary, 'wb');
+        if ($handle === false) {
+            throw new RuntimeException('Unable to write temporary index: ' . $temporary);
+        }
+
+        try {
+            /** @var array<string, mixed> $normalized */
+            $normalized = $this->normalizer->normalize($payload);
+
+            $this->put($handle, '{', $temporary);
+            $first = true;
+            foreach ($normalized as $key => $value) {
+                $this->put($handle, ($first ? '' : ",\n") . $this->encode($key) . ':', $temporary);
+                $first = false;
+
+                if (!is_array($value) || !array_is_list($value)) {
+                    $this->put($handle, $this->encode($value), $temporary);
+                    continue;
+                }
+
+                $this->put($handle, '[', $temporary);
+                $firstItem = true;
+                foreach ($value as $item) {
+                    $this->put($handle, ($firstItem ? '' : ',') . $this->encode($item), $temporary);
+                    $firstItem = false;
+                }
+                $this->put($handle, ']', $temporary);
+            }
+            $this->put($handle, "\n}\n", $temporary);
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    private function writeString(string $content, string $temporary): void
+    {
+        if (file_put_contents($temporary, $content) === false) {
+            throw new RuntimeException('Unable to write temporary index: ' . $temporary);
+        }
+    }
+
+    /** @param resource $handle */
+    private function put($handle, string $content, string $temporary): void
+    {
+        if (fwrite($handle, $content) === false) {
+            throw new RuntimeException('Unable to write temporary index: ' . $temporary);
+        }
+    }
+
+    private function encode(mixed $value): string
+    {
+        $json = json_encode($value, JSON_UNESCAPED_SLASHES);
         if (!is_string($json)) {
             throw new RuntimeException('Unable to encode index JSON.');
         }
 
-        return $json . "\n";
+        return $json;
     }
 }

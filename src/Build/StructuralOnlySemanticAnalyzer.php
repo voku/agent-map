@@ -12,6 +12,8 @@ final readonly class StructuralOnlySemanticAnalyzer implements SemanticAnalyzer
         array $relativeFiles,
         ?string $configurationFile = null,
         ?string $memoryLimit = null,
+        array $analyseDirectories = [],
+        array $scanDirectories = [],
     ): SemanticAnalysisResult
     {
         return new SemanticAnalysisResult([], [], 'test-none', 'sha256:none');

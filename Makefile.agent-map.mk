@@ -20,6 +20,14 @@ ai-map-build:
 		--exclude='~(^|/)vendor(/|$$)~' \
 		--exclude='~(^|/)var/cache(/|$$)~'
 
+.PHONY: ai-map-refresh
+ai-map-refresh:
+	$(AGENT_MAP) refresh \
+		--root=. \
+		--index=$(AGENT_MAP_INDEX) \
+		--out=$(AGENT_MAP_INDEX) \
+		--format=$(AGENT_MAP_STORAGE_FORMAT)
+
 .PHONY: ai-map-stale
 ai-map-stale:
 	$(AGENT_MAP) stale --index=$(AGENT_MAP_INDEX)
