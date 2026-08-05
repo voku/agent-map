@@ -237,6 +237,23 @@ final class SearchIndexTest extends TestCase
         }
     }
 
+    public function testShortIdentifiersAndStopWordsInQueryPlannerAndSearchStore(): void
+    {
+        $planner = new QueryPlanner();
+        $plan = $planner->plan('Accounting für D3?');
+
+        self::assertContains('Accounting', $plan['structural_terms']);
+        self::assertContains('D3', $plan['structural_terms']);
+
+        $stopWords = QueryPlanner::getStopWords();
+        self::assertContains('für', $stopWords);
+        self::assertContains('about', $stopWords);
+
+        $store = $this->store();
+        $lexicalHits = $store->searchLexical('Accounting für D3?', 5);
+        self::assertNotEmpty($lexicalHits);
+    }
+
     private function index(): AgentMapIndex
     {
         return (new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))

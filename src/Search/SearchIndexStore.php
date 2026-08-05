@@ -140,7 +140,8 @@ final class SearchIndexStore
     public function storeVectors(array $vectorsByChunkId, EmbeddingModel $model): void
     {
         $rowid = $this->pdo->prepare('SELECT rowid FROM code_chunks WHERE chunk_id = :chunk_id');
-        $insert = $this->pdo->prepare('INSERT OR REPLACE INTO code_chunks_vec (rowid, embedding) VALUES (:rowid, :embedding)');
+        $deleteVec = $this->pdo->prepare('DELETE FROM code_chunks_vec WHERE rowid = :rowid');
+        $insert = $this->pdo->prepare('INSERT INTO code_chunks_vec (rowid, embedding) VALUES (:rowid, :embedding)');
 
         $this->pdo->beginTransaction();
 
@@ -154,6 +155,7 @@ final class SearchIndexStore
 
                 // Bound as a LOB: without it PDO sends the float32 blob as text and vec0 tries to
                 // parse it as a JSON array.
+                $deleteVec->execute(['rowid' => (int)$id]);
                 $insert->bindValue('rowid', (int)$id, PDO::PARAM_INT);
                 $insert->bindValue('embedding', EmbeddingVector::encode($vector, $model->dimensions), PDO::PARAM_LOB);
                 $insert->execute();
@@ -436,7 +438,8 @@ final class SearchIndexStore
     public function storeVectorBlobs(array $blobsByChunkId): void
     {
         $rowid = $this->pdo->prepare('SELECT rowid FROM code_chunks WHERE chunk_id = :chunk_id');
-        $insert = $this->pdo->prepare('INSERT OR REPLACE INTO code_chunks_vec (rowid, embedding) VALUES (:rowid, :embedding)');
+        $deleteVec = $this->pdo->prepare('DELETE FROM code_chunks_vec WHERE rowid = :rowid');
+        $insert = $this->pdo->prepare('INSERT INTO code_chunks_vec (rowid, embedding) VALUES (:rowid, :embedding)');
 
         $this->pdo->beginTransaction();
 
@@ -448,6 +451,7 @@ final class SearchIndexStore
                     continue;
                 }
 
+                $deleteVec->execute(['rowid' => (int)$id]);
                 $insert->bindValue('rowid', (int)$id, PDO::PARAM_INT);
                 $insert->bindValue('embedding', $blob, PDO::PARAM_LOB);
                 $insert->execute();
@@ -670,7 +674,7 @@ final class SearchIndexStore
         $quoted = [];
         foreach ($tokens as $token) {
             $token = trim($token);
-            if ($token === '' || mb_strlen($token) < 3 || in_array(mb_strtolower($token), QueryPlanner::STOP_WORDS, true)) {
+            if ($token === '' || mb_strlen($token) < 2 || in_array(mb_strtolower($token), QueryPlanner::STOP_WORDS, true)) {
                 continue;
             }
             $quoted[] = '"' . str_replace('"', '""', $token) . '"';
