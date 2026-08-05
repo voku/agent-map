@@ -13,8 +13,8 @@ namespace voku\AgentMap\Search;
  */
 final readonly class ChunkPolicy
 {
-    public const int VERSION = 1;
+    public const VERSION = 1;
 
     /** Methods longer than this are indexed by their head; the full body stays reachable via the map. */
-    public const int MAX_BODY_LINES = 400;
+    public const MAX_BODY_LINES = 400;
 }

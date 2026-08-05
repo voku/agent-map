@@ -16,11 +16,11 @@ namespace voku\AgentMap\Search;
  */
 final readonly class CodeChunk
 {
-    public const string KIND_SYMBOL_OVERVIEW = 'symbol_overview';
+    public const KIND_SYMBOL_OVERVIEW = 'symbol_overview';
 
-    public const string KIND_METHOD_BODY = 'method_body';
+    public const KIND_METHOD_BODY = 'method_body';
 
-    public const string KIND_FUNCTION_BODY = 'function_body';
+    public const KIND_FUNCTION_BODY = 'function_body';
 
     public function __construct(
         public string $chunkId,

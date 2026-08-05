@@ -23,7 +23,7 @@ use voku\AgentMap\Search\Embedding\EmbeddingVector;
  */
 final class SearchIndexStore
 {
-    public const string SCHEMA_VERSION = '1.0';
+    public const SCHEMA_VERSION = '1.0';
 
     private PDO $pdo;
 

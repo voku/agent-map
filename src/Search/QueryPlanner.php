@@ -15,7 +15,7 @@ namespace voku\AgentMap\Search;
 final readonly class QueryPlanner
 {
     /** Words that look like identifiers but are how people phrase questions. */
-    public const array STOP_WORDS = [
+    public const STOP_WORDS = [
         'how', 'what', 'where', 'which', 'when', 'why', 'who', 'does', 'do', 'is', 'are', 'the',
         'and', 'or', 'for', 'with', 'from', 'into', 'this', 'that', 'handled', 'handle', 'work',
         'works', 'used', 'use', 'code', 'class', 'method', 'function', 'file',

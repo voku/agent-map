@@ -19,7 +19,7 @@ namespace voku\AgentMap\Search\Embedding;
  */
 final class CorpusEmbeddingProvider implements EmbeddingProvider
 {
-    private const int DIMENSIONS = 256;
+    private const DIMENSIONS = 256;
 
     /** @var array<string, float> */
     private array $inverseDocumentFrequency = [];

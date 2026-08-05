@@ -22,9 +22,9 @@ use voku\AgentMap\Index\AgentMapIndex;
  */
 final readonly class SearchBenchmark
 {
-    private const int RECALL_AT = 5;
+    private const RECALL_AT = 5;
 
-    private const int MRR_AT = 10;
+    private const MRR_AT = 10;
 
     public function __construct(
         private HybridSearch $hybrid = new HybridSearch(),

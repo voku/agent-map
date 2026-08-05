@@ -24,7 +24,7 @@ use JsonException;
 final readonly class SqliteVecBinary
 {
     /** An explicit path always wins, for a platform we do not ship or a locally built binary. */
-    public const string ENVIRONMENT_OVERRIDE = 'AGENT_MAP_SQLITE_VEC';
+    public const ENVIRONMENT_OVERRIDE = 'AGENT_MAP_SQLITE_VEC';
 
     public static function resolve(): ?string
     {

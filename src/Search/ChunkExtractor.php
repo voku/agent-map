@@ -31,12 +31,12 @@ final class ChunkExtractor
      * Minimum candidate-file count before parallel extraction is attempted.
      * Below this threshold fork + IPC overhead exceeds any concurrency benefit.
      */
-    private const int PARALLEL_THRESHOLD = 50;
+    private const PARALLEL_THRESHOLD = 50;
 
     /**
      * Maximum worker processes spawned regardless of detected CPU count.
      */
-    private const int MAX_WORKERS = 8;
+    private const MAX_WORKERS = 8;
 
     /** @var list<string> */
     private array $skippedPaths = [];

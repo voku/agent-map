@@ -19,10 +19,10 @@ use voku\AgentMap\Search\Embedding\EmbeddingProvider;
  */
 final readonly class HybridSearch
 {
-    private const int RRF_K = 60;
+    private const RRF_K = 60;
 
     /** Above this many matching files a structural term is treated as vocabulary, not as an identifier. */
-    private const int STRUCTURAL_TERM_MAX_FILES = 3;
+    private const STRUCTURAL_TERM_MAX_FILES = 3;
 
     /**
      * Nearest-neighbour search always returns k rows, however unrelated they are: asked about
@@ -30,7 +30,7 @@ final readonly class HybridSearch
      * "no answer" case disappears, which the benchmark caught as the irrelevant category dropping
      * from 1.000 to 0.000. With l2-normalized vectors, unrelated text sits near sqrt(2).
      */
-    public const float SEMANTIC_MAX_DISTANCE = 1.0;
+    public const SEMANTIC_MAX_DISTANCE = 1.0;
 
     /**
      * Semantic is deliberately the lightest channel.
@@ -43,7 +43,7 @@ final readonly class HybridSearch
      *
      * @var array<string, float>
      */
-    private const array WEIGHTS = [
+    private const WEIGHTS = [
         'structural' => 1.0,
         'lexical'    => 1.0,
         'semantic'   => 0.5,
