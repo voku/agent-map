@@ -77,7 +77,7 @@ final class SearchIndexStore
                 continue;
             }
 
-            if (!$this->pdo instanceof \Pdo\Sqlite) {
+            if (!method_exists($this->pdo, 'loadExtension')) {
                 continue;
             }
 
