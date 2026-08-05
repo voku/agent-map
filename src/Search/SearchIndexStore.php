@@ -7,6 +7,7 @@ namespace voku\AgentMap\Search;
 use PDO;
 use RuntimeException;
 use voku\AgentMap\Search\Embedding\EmbeddingModel;
+use voku\AgentMap\Search\Embedding\SqliteVecBinary;
 use voku\AgentMap\Search\Embedding\EmbeddingVector;
 
 /**
@@ -63,12 +64,12 @@ final class SearchIndexStore
             return $this->vectorReady;
         }
 
+        // The binary shipped with this package first, then whatever the host installed itself.
         $candidates = $extensionPath !== null
             ? [$extensionPath]
             : array_filter([
-                getenv('AGENT_MAP_SQLITE_VEC') ?: null,
+                SqliteVecBinary::resolve(),
                 (ini_get('sqlite3.extension_dir') ?: '') . '/vec0.so',
-                '/usr/local/lib/php/sqlite-extensions/vec0.so',
             ]);
 
         foreach ($candidates as $candidate) {
@@ -230,7 +231,13 @@ final class SearchIndexStore
             return 0;
         }
 
-        return $this->countOf('SELECT COUNT(*) FROM code_chunks_vec');
+        try {
+            // The table only exists once something has been embedded; a loadable extension does not
+            // imply a populated index.
+            return $this->countOf('SELECT COUNT(*) FROM code_chunks_vec');
+        } catch (\PDOException) {
+            return 0;
+        }
     }
 
     public static function supportsFts5(): bool

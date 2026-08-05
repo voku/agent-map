@@ -287,9 +287,14 @@ final readonly class AgentMapApplication
         echo "[OK] SQLite available\n";
         echo "[OK] FTS5 available\n";
         echo '[' . (SearchIndexStore::supportsFts5() ? 'OK' : 'FAIL') . "] lexical channel\n";
-        echo $store->enableVectorSupport()
-            ? '[OK] vector channel: sqlite-vec ' . ($store->vectorVersion() ?? 'unknown') . ', ' . $store->vectorCount() . " vector(s)\n"
-            : "[SKIP] vector channel: sqlite-vec not loadable; search stays lexical and reports degraded\n";
+        if ($store->enableVectorSupport()) {
+            echo '[OK] vector channel: sqlite-vec ' . ($store->vectorVersion() ?? 'unknown') . ', ' . $store->vectorCount() . " vector(s)\n";
+        } else {
+            $platform = \voku\AgentMap\Search\Embedding\SqliteVecBinary::platform();
+            echo '[SKIP] vector channel: no sqlite-vec for ' . ($platform ?? PHP_OS_FAMILY . '/' . php_uname('m'))
+                . '; search stays lexical and reports degraded (set '
+                . \voku\AgentMap\Search\Embedding\SqliteVecBinary::ENVIRONMENT_OVERRIDE . " to point at your own build)\n";
+        }
         echo '[' . ($mapSnapshot === $indexSnapshot ? 'OK' : 'FAIL') . '] map snapshot ' . ($mapSnapshot === $indexSnapshot ? 'matches' : 'differs from') . " search index\n";
         echo '[OK] indexed chunks: ' . $store->chunkCount() . "\n";
         foreach ($failures as $failure) {

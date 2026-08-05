@@ -14,6 +14,7 @@ use voku\AgentMap\Search\ChunkExtractor;
 use voku\AgentMap\Search\CodeChunk;
 use voku\AgentMap\Search\HybridSearch;
 use voku\AgentMap\Search\QueryPlanner;
+use voku\AgentMap\Search\Embedding\SqliteVecBinary;
 use voku\AgentMap\Search\SearchIndexStore;
 
 final class SearchIndexTest extends TestCase
@@ -168,6 +169,72 @@ final class SearchIndexTest extends TestCase
             ['Demo\\RetryHandler::execute'],
             $planner->plan('Demo\\RetryHandler::execute')['structural_terms'],
         );
+    }
+
+    public function testTheShippedSqliteVecBinaryIsResolvedAndChecksumVerified(): void
+    {
+        $platform = SqliteVecBinary::platform();
+        if ($platform === null) {
+            self::assertNull(SqliteVecBinary::resolve(), 'an unsupported platform must report no binary, not a wrong one');
+
+            return;
+        }
+
+        $path = SqliteVecBinary::resolve();
+        self::assertIsString($path, 'the package ships a binary for ' . $platform);
+        self::assertFileExists($path);
+        self::assertStringContainsString($platform, $path);
+        self::assertNotNull(SqliteVecBinary::version());
+    }
+
+    public function testACorruptedBinaryIsRefusedRatherThanLoaded(): void
+    {
+        $platform = SqliteVecBinary::platform();
+        if ($platform === null) {
+            self::markTestSkipped('No binary is shipped for this platform.');
+        }
+
+        $tampered = $this->root . '/tampered-vec0.so';
+        file_put_contents($tampered, 'not a shared object');
+        putenv(SqliteVecBinary::ENVIRONMENT_OVERRIDE . '=' . $tampered);
+
+        try {
+            // An explicit override is the operator's own decision and is taken at face value; the
+            // checksum guards what the package itself ships.
+            self::assertSame($tampered, SqliteVecBinary::resolve());
+
+            $store = new SearchIndexStore($this->root . '/.agent-map/tampered.sqlite');
+            self::assertFalse($store->enableVectorSupport(), 'a file that is not a loadable extension must not enable the channel');
+        } finally {
+            putenv(SqliteVecBinary::ENVIRONMENT_OVERRIDE);
+        }
+    }
+
+    public function testVectorSearchReturnsNeighboursWhenTheChannelIsAvailable(): void
+    {
+        $store = $this->store();
+        if (!$store->enableVectorSupport()) {
+            self::markTestSkipped('sqlite-vec is not loadable here; the channel is optional by design.');
+        }
+
+        $provider = new \voku\AgentMap\Search\Embedding\CorpusEmbeddingProvider();
+        $documents = $store->allChunkContents();
+        $provider->fit(array_map(static fn (array $row): string => $row['content'], $documents));
+        $store->prepareVectorTable($provider->model());
+
+        $vectors = [];
+        foreach ($documents as $row) {
+            $vectors[$row['chunk_id']] = $provider->embedQuery($row['content']);
+        }
+        $store->storeVectors($vectors, $provider->model());
+
+        self::assertSame(count($documents), $store->vectorCount());
+
+        $hits = $store->searchSemantic($provider->embedQuery('retry attempts'), $provider->model(), 3);
+        self::assertNotSame([], $hits);
+        foreach ($hits as $hit) {
+            self::assertGreaterThanOrEqual(0.0, $hit['distance']);
+        }
     }
 
     private function index(): AgentMapIndex

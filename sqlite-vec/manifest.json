@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "extension": "sqlite-vec",
+  "version": "v0.1.7-alpha.2",
+  "source": "https://github.com/asg017/sqlite-vec/releases/tag/v0.1.7-alpha.2",
+  "note": "Loadable SQLite extension, not a PHP extension: one binary serves every supported PHP version. Only the platforms agent-map is actually developed and run on are shipped; anywhere else the vector channel reports itself unavailable and search stays lexical.",
+  "binaries": {
+    "linux-gnu-x86_64": {
+      "file": "linux-gnu-x86_64/vec0.so",
+      "sha256": "754b46a02b3caba9b1c75aeaeb8f8177a61f527b531151f7de5324ba4c10d444",
+      "asset": "sqlite-vec-0.1.7-alpha.2-loadable-linux-x86_64.tar.gz"
+    },
+    "linux-gnu-arm64": {
+      "file": "linux-gnu-arm64/vec0.so",
+      "sha256": "3634a8ee85db96f8a5d1779dbfb24eeab56e12cd5c7bb5932c3a58ebc2466a28",
+      "asset": "sqlite-vec-0.1.7-alpha.2-loadable-linux-aarch64.tar.gz"
+    }
+  }
+}
