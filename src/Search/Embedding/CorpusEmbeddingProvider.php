@@ -27,6 +27,29 @@ final class CorpusEmbeddingProvider implements EmbeddingProvider
     private string $corpusRevision = 'empty';
 
     /**
+     * @return array{revision: string, weights: array<string, float>}
+     */
+    public function state(): array
+    {
+        return ['revision' => $this->corpusRevision, 'weights' => $this->inverseDocumentFrequency];
+    }
+
+    /**
+     * Restores a previously fitted weighting.
+     *
+     * A refresh must not refit: new vocabulary would shift every weight, change the model
+     * fingerprint and force all 20 000 chunks to be embedded again for the sake of one edited file.
+     * The weighting is therefore part of the index, and refitting is a full-build decision.
+     *
+     * @param array{revision: string, weights: array<string, float>} $state
+     */
+    public function restore(array $state): void
+    {
+        $this->corpusRevision = $state['revision'];
+        $this->inverseDocumentFrequency = $state['weights'];
+    }
+
+    /**
      * Learns the vocabulary weighting from the corpus it will embed. Doing this per repository is
      * the point: rare terms here are what carry meaning here.
      *

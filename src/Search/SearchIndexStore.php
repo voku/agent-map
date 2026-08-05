@@ -349,6 +349,148 @@ final class SearchIndexStore
     }
 
     /**
+     * The source hash each indexed file was chunked from.
+     *
+     * This is what makes a refresh incremental: comparing it against the map tells exactly which
+     * files moved, instead of re-extracting everything because the map digest changed somewhere.
+     *
+     * @return array<string, string>
+     */
+    public function sourceHashesByPath(): array
+    {
+        $statement = $this->pdo->query('SELECT file_path, MIN(source_sha256) AS source_sha256 FROM code_chunks GROUP BY file_path');
+        if ($statement === false) {
+            return [];
+        }
+
+        $hashes = [];
+        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $hashes[(string)$row['file_path']] = (string)$row['source_sha256'];
+        }
+
+        return $hashes;
+    }
+
+    /**
+     * Cached vectors for content that has been embedded before, under the active model.
+     *
+     * Keyed by content hash rather than by chunk id: a method that moved to another file, or a
+     * duplicated helper, is the same text and does not need embedding twice.
+     *
+     * @param list<string> $contentHashes
+     *
+     * @return array<string, string> content hash => raw vector blob
+     */
+    public function cachedEmbeddings(array $contentHashes, EmbeddingModel $model): array
+    {
+        if ($contentHashes === []) {
+            return [];
+        }
+
+        $cached = [];
+        foreach (array_chunk($contentHashes, 500) as $batch) {
+            $placeholders = implode(',', array_fill(0, count($batch), '?'));
+            $statement = $this->pdo->prepare(
+                'SELECT content_sha256, embedding FROM embedding_cache
+                 WHERE model_fingerprint = ? AND content_sha256 IN (' . $placeholders . ')',
+            );
+            $statement->execute([$model->fingerprint(), ...$batch]);
+            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $cached[(string)$row['content_sha256']] = (string)$row['embedding'];
+            }
+        }
+
+        return $cached;
+    }
+
+    /**
+     * @param array<string, string> $blobsByContentHash
+     */
+    public function cacheEmbeddings(array $blobsByContentHash, EmbeddingModel $model): void
+    {
+        $statement = $this->pdo->prepare(
+            'INSERT OR REPLACE INTO embedding_cache (model_fingerprint, content_sha256, dimensions, embedding)
+             VALUES (:fingerprint, :content_sha256, :dimensions, :embedding)',
+        );
+
+        $this->pdo->beginTransaction();
+
+        try {
+            foreach ($blobsByContentHash as $contentHash => $blob) {
+                $statement->bindValue('fingerprint', $model->fingerprint());
+                $statement->bindValue('content_sha256', $contentHash);
+                $statement->bindValue('dimensions', $model->dimensions, PDO::PARAM_INT);
+                $statement->bindValue('embedding', $blob, PDO::PARAM_LOB);
+                $statement->execute();
+            }
+
+            $this->pdo->commit();
+        } catch (\Throwable $exception) {
+            $this->pdo->rollBack();
+
+            throw $exception;
+        }
+    }
+
+    /** @param array<string, string> $blobsByChunkId */
+    public function storeVectorBlobs(array $blobsByChunkId): void
+    {
+        $rowid = $this->pdo->prepare('SELECT rowid FROM code_chunks WHERE chunk_id = :chunk_id');
+        $insert = $this->pdo->prepare('INSERT OR REPLACE INTO code_chunks_vec (rowid, embedding) VALUES (:rowid, :embedding)');
+
+        $this->pdo->beginTransaction();
+
+        try {
+            foreach ($blobsByChunkId as $chunkId => $blob) {
+                $rowid->execute(['chunk_id' => $chunkId]);
+                $id = $rowid->fetchColumn();
+                if ($id === false) {
+                    continue;
+                }
+
+                $insert->bindValue('rowid', (int)$id, PDO::PARAM_INT);
+                $insert->bindValue('embedding', $blob, PDO::PARAM_LOB);
+                $insert->execute();
+            }
+
+            $this->pdo->commit();
+        } catch (\Throwable $exception) {
+            $this->pdo->rollBack();
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * @param list<string>|null $paths
+     *
+     * @return list<array{chunk_id: string, content: string, content_sha256: string}>
+     */
+    public function chunkContentsForPaths(?array $paths = null): array
+    {
+        $sql = 'SELECT chunk_id, content_sha256, symbol_name, signature, content FROM code_chunks';
+        $parameters = [];
+        if ($paths !== null && $paths !== []) {
+            $sql .= ' WHERE file_path IN (' . implode(',', array_fill(0, count($paths), '?')) . ')';
+            $parameters = $paths;
+        }
+
+        $statement = $this->pdo->prepare($sql . ' ORDER BY chunk_id');
+        $statement->execute($parameters);
+
+        $rows = [];
+        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $rows[] = [
+                'chunk_id'       => (string)$row['chunk_id'],
+                'content_sha256' => (string)$row['content_sha256'],
+                'content'        => (string)$row['symbol_name'] . "\n" . (string)$row['signature'] . "\n" . (string)$row['content'],
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
      * Removes chunks whose file is no longer part of the map, and reports how many.
      *
      * An incremental refresh can only name the files it re-extracted; a deleted file is by

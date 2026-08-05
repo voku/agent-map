@@ -17,6 +17,7 @@ use voku\AgentMap\IO\PhpFileFinder;
 use voku\AgentMap\Search\ChunkExtractor;
 use voku\AgentMap\Search\HybridSearch;
 use voku\AgentMap\Search\Embedding\CorpusEmbeddingProvider;
+use voku\AgentMap\Search\Embedding\EmbeddingVector;
 use voku\AgentMap\Search\SearchBenchmark;
 use voku\AgentMap\Search\SearchIndexStore;
 use voku\AgentMap\Inspect\ScopeInspector;
@@ -224,7 +225,7 @@ final readonly class AgentMapApplication
         $store->setMeta('map_snapshot', $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest);
         $store->setMeta('chunk_policy_version', (string)\voku\AgentMap\Search\ChunkPolicy::VERSION);
 
-        $vectorNote = $this->embedChunks($store);
+        $vectorNote = $this->embedChunks($store, $changedPaths);
 
         echo 'Indexed ' . (count($chunks) - $skipped) . ' chunk(s) from ' . count($index->files) . ' file(s) into ' . $options->database . "\n";
         echo '- ' . $vectorNote . "\n";
@@ -247,29 +248,62 @@ final readonly class AgentMapApplication
      * Not attempted when the extension is missing: the index stays lexical and says so, which is the
      * whole point of probing by calling vec_version() rather than trusting a loader that only warns.
      */
-    private function embedChunks(SearchIndexStore $store): string
+    /** @param list<string>|null $changedPaths */
+    private function embedChunks(SearchIndexStore $store, ?array $changedPaths): string
     {
         if (!$store->enableVectorSupport()) {
             return 'vector channel unavailable (sqlite-vec not loadable); lexical only';
         }
 
-        $documents = $store->allChunkContents();
+        $provider = $changedPaths === null ? null : $this->corpusProvider($store);
+        if ($provider === null) {
+            // A full build, or a weighting that no longer matches: refit and start the vector table
+            // over. Refitting is what changes the model fingerprint, so it stays a build decision.
+            $all = $store->allChunkContents();
+            if ($all === []) {
+                return 'vector channel ready, nothing to embed';
+            }
+
+            $provider = new CorpusEmbeddingProvider();
+            $provider->fit(array_map(static fn (array $row): string => $row['content'], $all));
+            $changedPaths = null;
+        }
+
+        $model = $provider->model();
+        $store->prepareVectorTable($model);
+        $store->setMeta('embedding_state', (string)json_encode($provider->state()));
+
+        $documents = $store->chunkContentsForPaths($changedPaths);
         if ($documents === []) {
             return 'vector channel ready, nothing to embed';
         }
 
-        $provider = new CorpusEmbeddingProvider();
-        $provider->fit(array_map(static fn (array $row): string => $row['content'], $documents));
-        $store->prepareVectorTable($provider->model());
+        $cached = $store->cachedEmbeddings(array_map(static fn (array $row): string => $row['content_sha256'], $documents), $model);
 
-        $vectors = [];
+        $blobs = [];
+        $fresh = [];
         foreach ($documents as $row) {
-            $vectors[$row['chunk_id']] = $provider->embedQuery($row['content']);
-        }
-        $store->storeVectors($vectors, $provider->model());
+            $blob = $cached[$row['content_sha256']] ?? null;
+            if ($blob === null) {
+                $blob = EmbeddingVector::encode($provider->embedQuery($row['content']), $model->dimensions);
+                $fresh[$row['content_sha256']] = $blob;
+            }
 
-        return 'embedded ' . count($vectors) . ' chunk(s) with ' . $provider->model()->provider . '/' . $provider->model()->model
-            . ' (' . $provider->model()->dimensions . 'd, sqlite-vec ' . ($store->vectorVersion() ?? 'unknown') . ')';
+            $blobs[$row['chunk_id']] = $blob;
+        }
+
+        $store->cacheEmbeddings($fresh, $model);
+        $store->storeVectorBlobs($blobs);
+
+        return sprintf(
+            'embedded %d chunk(s), %d reused from cache, with %s/%s (%dd, sqlite-vec %s)',
+            count($fresh),
+            count($blobs) - count($fresh),
+            $model->provider,
+            $model->model,
+            $model->dimensions,
+            $store->vectorVersion() ?? 'unknown',
+        );
     }
 
     /**
@@ -282,13 +316,16 @@ final readonly class AgentMapApplication
             return null;
         }
 
-        $documents = $store->allChunkContents();
-        if ($documents === []) {
+        // Restored rather than refitted: the stored weighting is what the existing vectors were
+        // written with, and refitting here would silently produce a different vector space.
+        $state = json_decode((string)$store->meta('embedding_state'), true);
+        if (!is_array($state) || !is_string($state['revision'] ?? null) || !is_array($state['weights'] ?? null)) {
             return null;
         }
 
         $provider = new CorpusEmbeddingProvider();
-        $provider->fit(array_map(static fn (array $row): string => $row['content'], $documents));
+        /** @var array{revision: string, weights: array<string, float>} $state */
+        $provider->restore($state);
 
         return $provider->model()->fingerprint() === $store->meta('embedding_fingerprint') ? $provider : null;
     }
@@ -424,9 +461,14 @@ final readonly class AgentMapApplication
             return [];
         }
 
+        // Per file, not per map digest: one edited file changes the map digest, and re-extracting
+        // every file because of it turns a refresh into a rebuild.
+        $indexed = $store->sourceHashesByPath();
         $paths = [];
         foreach ($index->files as $file) {
-            $paths[] = $file->path;
+            if (($indexed[$file->path] ?? null) !== $file->sha256) {
+                $paths[] = $file->path;
+            }
         }
 
         return $paths;

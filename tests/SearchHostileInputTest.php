@@ -306,6 +306,65 @@ final class SearchHostileInputTest extends TestCase
         $store->searchSemantic([1.0, 2.0], $model, 3);
     }
 
+    /**
+     * A refresh must re-extract the files that moved, not every file the map holds. Comparing the
+     * map digest alone cannot tell them apart: one edited file changes it, and the whole repository
+     * would be rebuilt for that.
+     */
+    public function testOnlyChangedFilesAreConsideredStaleByTheIndex(): void
+    {
+        $store = $this->store();
+        $before = $store->sourceHashesByPath();
+        self::assertArrayHasKey('src/Alpha.php', $before);
+        self::assertArrayHasKey('src/Beta.php', $before);
+
+        file_put_contents($this->root . '/src/Beta.php', $this->source('Beta', 'edited'));
+        $index = $this->index();
+
+        $changed = [];
+        foreach ($index->files as $file) {
+            if (($before[$file->path] ?? null) !== $file->sha256) {
+                $changed[] = $file->path;
+            }
+        }
+
+        self::assertSame(['src/Beta.php'], $changed, 'one edited file must not mark the whole repository stale');
+    }
+
+    /**
+     * The cache is keyed by content, not by chunk id: re-indexing text that was embedded before must
+     * not call the provider again, which is what keeps a refresh cheap on a large repository.
+     */
+    public function testUnchangedContentIsNotEmbeddedTwice(): void
+    {
+        $store = $this->store();
+        if (!$store->enableVectorSupport()) {
+            self::markTestSkipped('sqlite-vec is not loadable here.');
+        }
+
+        $model = new EmbeddingModel('test', 'a', '1', 4);
+        $store->prepareVectorTable($model);
+
+        $documents = $store->chunkContentsForPaths(null);
+        self::assertNotSame([], $documents);
+
+        $hashes = array_map(static fn (array $row): string => $row['content_sha256'], $documents);
+        self::assertSame([], $store->cachedEmbeddings($hashes, $model), 'nothing is cached before the first embedding');
+
+        $blobs = [];
+        foreach ($documents as $row) {
+            $blobs[$row['content_sha256']] = EmbeddingVector::encode([1.0, 0.0, 0.0, 0.0], 4);
+        }
+        $store->cacheEmbeddings($blobs, $model);
+
+        self::assertCount(count($blobs), $store->cachedEmbeddings($hashes, $model));
+        self::assertSame(
+            [],
+            $store->cachedEmbeddings($hashes, new EmbeddingModel('test', 'b', '1', 4)),
+            'another model must not read the first model\'s vectors',
+        );
+    }
+
     private function index(): AgentMapIndex
     {
         return (new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))
