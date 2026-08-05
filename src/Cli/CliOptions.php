@@ -21,6 +21,7 @@ final readonly class CliOptions
         public array $scanPaths,
         public string $out,
         public string $index,
+        public string $database,
         public string $format,
         public int $limit,
         public int $symbolLimit,
@@ -50,7 +51,7 @@ final readonly class CliOptions
         if (in_array($command, ['-h', '--help'], true)) {
             $command = 'help';
         }
-        $commands = ['help', 'build', 'refresh', 'query', 'file', 'stale', 'summary', 'changed', 'related', 'stats', 'scope', 'callers', 'callees', 'context'];
+        $commands = ['help', 'build', 'refresh', 'query', 'file', 'stale', 'summary', 'changed', 'related', 'stats', 'scope', 'callers', 'callees', 'context', 'search-index', 'search'];
         if (!in_array($command, $commands, true)) {
             throw new InvalidArgumentException('Unknown command: ' . $command);
         }
@@ -61,6 +62,7 @@ final readonly class CliOptions
             'scan' => '',
             'out' => '.agent-map/php-symbols.json',
             'index' => '.agent-map/php-symbols.json',
+            'database' => '.agent-map/search.sqlite',
             'format' => in_array($command, ['build', 'refresh'], true) ? 'json' : 'text',
             'limit' => $command === 'scope' ? '10' : '20',
             'symbol-limit' => '10',
@@ -115,7 +117,7 @@ final readonly class CliOptions
             $outProvided = $outProvided || $name === 'out';
         }
 
-        if (in_array($command, ['query', 'file', 'related', 'scope', 'callers', 'callees', 'context'], true) && !$help && ($argument === null || $argument === '')) {
+        if (in_array($command, ['query', 'file', 'related', 'scope', 'callers', 'callees', 'context', 'search'], true) && !$help && ($argument === null || $argument === '')) {
             throw new InvalidArgumentException('Missing argument for command: ' . $command);
         }
         if ($command === 'build' || $command === 'refresh') {
@@ -140,6 +142,7 @@ final readonly class CliOptions
             scanPaths: self::splitList($values['scan']),
             out: $values['out'],
             index: $values['index'],
+            database: $values['database'],
             format: $values['format'],
             limit: self::positiveInt('limit', $values['limit'], 1),
             symbolLimit: self::positiveInt('symbol-limit', $values['symbol-limit'], 1),

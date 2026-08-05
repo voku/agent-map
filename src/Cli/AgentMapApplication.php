@@ -14,6 +14,9 @@ use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\IO\PhpFileFinder;
+use voku\AgentMap\Search\ChunkExtractor;
+use voku\AgentMap\Search\HybridSearch;
+use voku\AgentMap\Search\SearchIndexStore;
 use voku\AgentMap\Inspect\ScopeInspector;
 use voku\AgentMap\Inspect\ScopeSelector;
 
@@ -41,6 +44,8 @@ final readonly class AgentMapApplication
             return match ($options->command) {
                 'build' => $this->build($options),
                 'refresh' => $this->refresh($options),
+                'search-index' => $this->searchIndex($options),
+                'search' => $this->search($options),
                 'query' => $this->query($options),
                 'file' => $this->file($options),
                 'stale' => $this->stale($options),
@@ -155,6 +160,149 @@ final readonly class AgentMapApplication
         }
 
         return array_keys($directories);
+    }
+
+    /**
+     * `search-index build|refresh|doctor` - the derived index is a cache, so every subcommand can be
+     * re-run at any time; none of them is required for the structural commands to work.
+     */
+    private function searchIndex(CliOptions $options): int
+    {
+        $subcommand = $options->argument ?? 'build';
+        if (!in_array($subcommand, ['build', 'refresh', 'doctor'], true)) {
+            fwrite(STDERR, 'Unknown search-index subcommand: ' . $subcommand . "\n");
+
+            return 1;
+        }
+
+        if (!SearchIndexStore::supportsFts5()) {
+            fwrite(STDERR, "[FAIL] SQLite FTS5 is not available in this PHP build; the search index cannot be created.\n");
+
+            return 1;
+        }
+
+        $index = (new IndexReader())->read($options->index);
+        $store = new SearchIndexStore($this->absolute($options->root, $options->database));
+
+        if ($subcommand === 'doctor') {
+            return $this->searchIndexDoctor($index, $store);
+        }
+
+        $stale = [];
+        foreach ($index->staleEntries() as $entry) {
+            $stale[] = $entry['path'];
+        }
+        if ($stale !== []) {
+            fwrite(STDERR, '[FAIL] The map is stale for ' . count($stale) . " file(s); refresh it before indexing.\n");
+
+            return 1;
+        }
+
+        $changedPaths = null;
+        if ($subcommand === 'refresh') {
+            $changedPaths = $this->changedSincePaths($index, $store);
+            if ($changedPaths === []) {
+                echo 'Search index is up to date: ' . $options->database . "\n";
+
+                return 0;
+            }
+        }
+
+        $chunks = (new ChunkExtractor())->extract($index, $changedPaths);
+        $store->replaceChunks($chunks, $changedPaths);
+        $store->setMeta('map_snapshot', $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest);
+        $store->setMeta('chunk_policy_version', (string)\voku\AgentMap\Search\ChunkPolicy::VERSION);
+
+        echo 'Indexed ' . count($chunks) . ' chunk(s) from ' . count($index->files) . ' file(s) into ' . $options->database . "\n";
+
+        return 0;
+    }
+
+    private function searchIndexDoctor(AgentMapIndex $index, SearchIndexStore $store): int
+    {
+        $mapSnapshot = $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest;
+        $indexSnapshot = $store->meta('map_snapshot') ?? 'sha256:none';
+        $failures = $store->integrityFailures();
+
+        echo "[OK] SQLite available\n";
+        echo "[OK] FTS5 available\n";
+        echo '[' . (SearchIndexStore::supportsFts5() ? 'OK' : 'FAIL') . "] lexical channel\n";
+        echo "[SKIP] vector channel: not implemented yet\n";
+        echo '[' . ($mapSnapshot === $indexSnapshot ? 'OK' : 'FAIL') . '] map snapshot ' . ($mapSnapshot === $indexSnapshot ? 'matches' : 'differs from') . " search index\n";
+        echo '[OK] indexed chunks: ' . $store->chunkCount() . "\n";
+        foreach ($failures as $failure) {
+            echo '[FAIL] ' . $failure . "\n";
+        }
+
+        return $failures === [] && $mapSnapshot === $indexSnapshot ? 0 : 1;
+    }
+
+    private function search(CliOptions $options): int
+    {
+        if (!SearchIndexStore::supportsFts5()) {
+            fwrite(STDERR, "[FAIL] SQLite FTS5 is not available in this PHP build.\n");
+
+            return 1;
+        }
+
+        $index = (new IndexReader())->read($options->index);
+        $store = new SearchIndexStore($this->absolute($options->root, $options->database));
+        $result = (new HybridSearch())->search($index, $store, (string)$options->argument, $options->limit);
+
+        if ($options->format === 'json') {
+            echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";
+
+            return 0;
+        }
+
+        echo 'Search: ' . $result['query'] . "\n";
+        echo '- mode: ' . $result['effective_mode'] . ($result['degraded'] ? ' (degraded: ' . $result['degraded_reason'] . ')' : '') . "\n";
+        if ($result['structural_terms'] !== []) {
+            echo '- structural terms: ' . implode(', ', $result['structural_terms']) . "\n";
+        }
+        if ($result['results'] === []) {
+            echo "- no matching chunk; the structural commands remain the exact path\n";
+        }
+        foreach ($result['results'] as $hit) {
+            echo sprintf(
+                "  %-8.6f %s:%d-%d  %s [%s]\n",
+                $hit['rrf_score'],
+                $hit['file_path'],
+                $hit['start_line'],
+                $hit['end_line'],
+                $hit['symbol_id'],
+                implode(' ', $hit['reasons']),
+            );
+        }
+
+        return 0;
+    }
+
+    /**
+     * Files whose indexed source hash no longer matches the map. The map itself is verified fresh
+     * before this runs, so a difference here means the chunks are behind, not the map.
+     *
+     * @return list<string>
+     */
+    private function changedSincePaths(AgentMapIndex $index, SearchIndexStore $store): array
+    {
+        $indexSnapshot = $store->meta('map_snapshot');
+        $mapSnapshot = $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest;
+        if ($indexSnapshot === $mapSnapshot && $store->chunkCount() > 0) {
+            return [];
+        }
+
+        $paths = [];
+        foreach ($index->files as $file) {
+            $paths[] = $file->path;
+        }
+
+        return $paths;
+    }
+
+    private function absolute(string $root, string $path): string
+    {
+        return str_starts_with($path, '/') ? $path : rtrim($root, '/') . '/' . $path;
     }
 
     private function query(CliOptions $options): int
