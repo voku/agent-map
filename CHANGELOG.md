@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- Multi-process parallel chunk extraction in `ChunkExtractor` using `pcntl_fork` and UNIX domain sockets when processing indices with over 50 files, with automatic CPU core count detection.
+- `SearchParallelChunkExtractorTest` test suite covering parallel extraction equality, fingerprint consistency, skipped path preservation, and edge cases.
+- Hybrid search derived index (`.agent-map/search.sqlite`) with `agent-map search-index build|refresh|doctor` and `agent-map search` CLI commands.
+- `sqlite-vec` vector retrieval channel integration with `CorpusEmbeddingProvider` (TF-IDF + feature hashing).
+- Retrieval benchmarking via `agent-map search benchmark` evaluating Recall@5 and MRR@10 across search failure categories.
+
+### Changed
+
+- Cached token placement (`[bucket, sign]`) in `CorpusEmbeddingProvider` to avoid repeated SHA-256 digests during vector generation, and unified tokenization into a single regex pass.
+- Made search index updates incremental, syncing `.agent-map/search.sqlite` with map changes.
+- Restricted structural channel matches to exact symbol identifiers to prevent structural noise from outranking lexical hits.
+
+### Fixed
+
+- Handled duplicate canonical symbol IDs across files gracefully during search index creation without throwing UNIQUE constraint errors.
+
 ## 0.3.0 - 2026-08-04
 
 ### Added
