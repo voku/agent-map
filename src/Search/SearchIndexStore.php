@@ -73,10 +73,15 @@ final class SearchIndexStore
      * Replaces every chunk of the given files. Passing null replaces the whole index, which is what
      * a full build does; passing the changed files is what a refresh does.
      *
+     * Returns how many chunks were skipped because another chunk already claimed their id. That
+     * happens in real repositories: two files declaring the same class name produce the same
+     * canonical symbol id, which the map itself treats as a conflict. Search keeps the first and
+     * reports the count rather than aborting the whole index over legacy duplication.
+     *
      * @param list<CodeChunk> $chunks
      * @param list<string>|null $replacedPaths
      */
-    public function replaceChunks(array $chunks, ?array $replacedPaths = null): void
+    public function replaceChunks(array $chunks, ?array $replacedPaths = null): int
     {
         $this->pdo->beginTransaction();
 
@@ -102,7 +107,15 @@ final class SearchIndexStore
                  VALUES (:rowid, :symbol_name, :signature, :content)',
             );
 
+            $seen = [];
+            $skipped = 0;
             foreach ($chunks as $chunk) {
+                if (isset($seen[$chunk->chunkId])) {
+                    ++$skipped;
+                    continue;
+                }
+                $seen[$chunk->chunkId] = true;
+
                 $insert->execute([
                     'chunk_id'      => $chunk->chunkId,
                     'symbol_id'     => $chunk->symbolId,
@@ -125,6 +138,8 @@ final class SearchIndexStore
             }
 
             $this->pdo->commit();
+
+            return $skipped;
         } catch (\Throwable $exception) {
             $this->pdo->rollBack();
 

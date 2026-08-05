@@ -210,11 +210,14 @@ final readonly class AgentMapApplication
         }
 
         $chunks = (new ChunkExtractor())->extract($index, $changedPaths);
-        $store->replaceChunks($chunks, $changedPaths);
+        $skipped = $store->replaceChunks($chunks, $changedPaths);
         $store->setMeta('map_snapshot', $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest);
         $store->setMeta('chunk_policy_version', (string)\voku\AgentMap\Search\ChunkPolicy::VERSION);
 
-        echo 'Indexed ' . count($chunks) . ' chunk(s) from ' . count($index->files) . ' file(s) into ' . $options->database . "\n";
+        echo 'Indexed ' . (count($chunks) - $skipped) . ' chunk(s) from ' . count($index->files) . ' file(s) into ' . $options->database . "\n";
+        if ($skipped > 0) {
+            echo '- ' . $skipped . " chunk(s) skipped: their canonical symbol id is declared more than once in this repository\n";
+        }
 
         return 0;
     }
