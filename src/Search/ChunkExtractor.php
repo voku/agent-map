@@ -18,11 +18,27 @@ use voku\AgentMap\Index\SymbolEntry;
  * hash. A second parsing pipeline would be a second answer to "what is in this file", and the two
  * would disagree the first time one of them was upgraded.
  */
-final readonly class ChunkExtractor
+final class ChunkExtractor
 {
+    /** @var list<string> */
+    private array $skippedPaths = [];
+
     public function __construct(
-        private SourceMaterializer $materializer = new SourceMaterializer(),
+        private readonly SourceMaterializer $materializer = new SourceMaterializer(),
     ) {
+    }
+
+    /**
+     * Files whose source no longer matches the map, from the last extract() call.
+     *
+     * Silently producing fewer chunks would look identical to a file that simply has no symbols, so
+     * the caller can tell the difference and say so.
+     *
+     * @return list<string>
+     */
+    public function skippedPaths(): array
+    {
+        return $this->skippedPaths;
     }
 
     /**
@@ -34,12 +50,14 @@ final readonly class ChunkExtractor
     {
         $wanted = $onlyPaths === null ? null : array_fill_keys($onlyPaths, true);
 
+        $this->skippedPaths = [];
         $chunks = [];
         foreach ($index->files as $file) {
             if ($wanted !== null && !isset($wanted[$file->path])) {
                 continue;
             }
 
+            $before = count($chunks);
             foreach ($file->symbols as $symbol) {
                 if ($symbol->kind === 'function') {
                     $chunk = $this->functionChunk($index->root, $file, $symbol);
@@ -60,6 +78,10 @@ final readonly class ChunkExtractor
                         $chunks[] = $chunk;
                     }
                 }
+            }
+
+            if ($file->symbols !== [] && count($chunks) === $before) {
+                $this->skippedPaths[] = $file->path;
             }
         }
 

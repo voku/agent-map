@@ -349,6 +349,48 @@ final class SearchIndexStore
     }
 
     /**
+     * Removes chunks whose file is no longer part of the map, and reports how many.
+     *
+     * An incremental refresh can only name the files it re-extracted; a deleted file is by
+     * definition not among them, so replacing those paths leaves its chunks behind. The index then
+     * keeps offering a path that does not exist - which is worse than a stale line number, because
+     * the agent is sent somewhere it cannot even read.
+     *
+     * @param list<string> $keepPaths every path the current map holds
+     */
+    public function pruneMissingPaths(array $keepPaths): int
+    {
+        $keep = array_fill_keys($keepPaths, true);
+
+        $statement = $this->pdo->query('SELECT DISTINCT file_path FROM code_chunks');
+        if ($statement === false) {
+            return 0;
+        }
+
+        $removed = 0;
+        $this->pdo->beginTransaction();
+
+        try {
+            foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $path) {
+                if (!is_string($path) || isset($keep[$path])) {
+                    continue;
+                }
+
+                $this->deleteWhere('file_path = :path', ['path' => $path]);
+                ++$removed;
+            }
+
+            $this->pdo->commit();
+        } catch (\Throwable $exception) {
+            $this->pdo->rollBack();
+
+            throw $exception;
+        }
+
+        return $removed;
+    }
+
+    /**
      * @return list<array{chunk_id: string, symbol_id: string, file_path: string, symbol_name: string,
      *                    chunk_kind: string, start_line: int, end_line: int, content_sha256: string,
      *                    signature: string, rank: float}>

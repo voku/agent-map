@@ -210,8 +210,17 @@ final readonly class AgentMapApplication
             }
         }
 
-        $chunks = (new ChunkExtractor())->extract($index, $changedPaths);
+        $extractor = new ChunkExtractor();
+        $chunks = $extractor->extract($index, $changedPaths);
         $skipped = $store->replaceChunks($chunks, $changedPaths);
+
+        // A refresh names the files it rebuilt; a deleted file is not among them and would otherwise
+        // keep its chunks. The map is the authority on what still exists.
+        $mapPaths = [];
+        foreach ($index->files as $file) {
+            $mapPaths[] = $file->path;
+        }
+        $pruned = $store->pruneMissingPaths($mapPaths);
         $store->setMeta('map_snapshot', $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest);
         $store->setMeta('chunk_policy_version', (string)\voku\AgentMap\Search\ChunkPolicy::VERSION);
 
@@ -219,6 +228,12 @@ final readonly class AgentMapApplication
 
         echo 'Indexed ' . (count($chunks) - $skipped) . ' chunk(s) from ' . count($index->files) . ' file(s) into ' . $options->database . "\n";
         echo '- ' . $vectorNote . "\n";
+        if ($extractor->skippedPaths() !== []) {
+            echo '- ' . count($extractor->skippedPaths()) . " file(s) not indexed: their source changed after the map was built\n";
+        }
+        if ($pruned > 0) {
+            echo '- ' . $pruned . " file(s) pruned: no longer part of the map\n";
+        }
         if ($skipped > 0) {
             echo '- ' . $skipped . " chunk(s) skipped: their canonical symbol id is declared more than once in this repository\n";
         }
