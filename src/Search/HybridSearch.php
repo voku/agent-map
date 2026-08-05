@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Search;
 
 use voku\AgentMap\Index\AgentMapIndex;
+use voku\AgentMap\Search\Embedding\EmbeddingProvider;
 
 /**
  * Fuses the structural and lexical channels with weighted Reciprocal Rank Fusion.
@@ -23,15 +24,34 @@ final readonly class HybridSearch
     /** Above this many matching files a structural term is treated as vocabulary, not as an identifier. */
     private const int STRUCTURAL_TERM_MAX_FILES = 3;
 
-    /** @var array<string, float> */
+    /**
+     * Nearest-neighbour search always returns k rows, however unrelated they are: asked about
+     * espresso machines it will still hand back the ten least-unrelated chunks. Without a cutoff the
+     * "no answer" case disappears, which the benchmark caught as the irrelevant category dropping
+     * from 1.000 to 0.000. With l2-normalized vectors, unrelated text sits near sqrt(2).
+     */
+    public const float SEMANTIC_MAX_DISTANCE = 1.0;
+
+    /**
+     * Semantic is deliberately the lightest channel.
+     *
+     * Measured on this package's corpus: at equal weight the semantic channel improved conceptual
+     * queries but dragged overall recall@5 from 0.769 down to 0.654, because a vector hit at rank 1
+     * outranked the exact lexical answer. Halving it keeps the conceptual gain while leaving the
+     * channels that *identify* something in front. The number came from the benchmark, not from
+     * taste.
+     *
+     * @var array<string, float>
+     */
     private const array WEIGHTS = [
         'structural' => 1.0,
         'lexical'    => 1.0,
-        'semantic'   => 1.0,
+        'semantic'   => 0.5,
     ];
 
     public function __construct(
         private QueryPlanner $planner = new QueryPlanner(),
+        private ?EmbeddingProvider $embeddings = null,
     ) {
     }
 
@@ -42,12 +62,29 @@ final readonly class HybridSearch
     {
         $plan = $this->planner->plan($query);
 
+        $semanticRows = [];
+        $semanticRanks = [];
+        $degradedReason = 'semantic_channel_unavailable';
+        if ($this->embeddings !== null && $store->vectorCount() > 0) {
+            $rank = 1;
+            foreach ($store->searchSemantic($this->embeddings->embedQuery($query), $this->embeddings->model(), $limit * 3) as $row) {
+                if ($row['distance'] > self::SEMANTIC_MAX_DISTANCE) {
+                    continue;
+                }
+
+                $semanticRows[$row['chunk_id']] = $row;
+                $semanticRanks[$row['chunk_id']] = $rank++;
+            }
+            $degradedReason = null;
+        }
+
         $channels = [
             'structural' => $this->structuralRanks($index, $plan['structural_terms'], $limit),
             'lexical'    => $this->lexicalRanks($store, $query, $limit * 3),
+            'semantic'   => $semanticRanks,
         ];
 
-        $rows = [];
+        $rows = $semanticRows;
         foreach ($store->searchLexical($query, $limit * 3) as $row) {
             $rows[$row['chunk_id']] = $row;
         }
@@ -100,9 +137,9 @@ final readonly class HybridSearch
             'schema_version'        => '1.0',
             'query'                 => $query,
             'mode'                  => 'hybrid',
-            'effective_mode'        => 'structural+lexical',
-            'degraded'              => true,
-            'degraded_reason'       => 'semantic_channel_not_implemented',
+            'effective_mode'        => $degradedReason === null ? 'structural+lexical+semantic' : 'structural+lexical',
+            'degraded'              => $degradedReason !== null,
+            'degraded_reason'       => $degradedReason,
             'map_snapshot'          => $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest,
             'search_index_snapshot' => $store->meta('map_snapshot') ?? 'sha256:none',
             'structural_terms'      => $plan['structural_terms'],

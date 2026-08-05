@@ -121,8 +121,8 @@ final class SearchIndexTest extends TestCase
         $result = (new HybridSearch())->search($index, $this->store($index), 'RetryHandler', 5);
 
         self::assertSame('1.0', $result['schema_version']);
-        self::assertTrue($result['degraded'], 'the semantic channel is absent and must be declared, not hidden');
-        self::assertSame('semantic_channel_not_implemented', $result['degraded_reason']);
+        self::assertTrue($result['degraded'], 'without an embedding provider the missing channel must be declared, not hidden');
+        self::assertSame('semantic_channel_unavailable', $result['degraded_reason']);
         self::assertSame($result['map_snapshot'], $result['search_index_snapshot']);
         self::assertNotSame([], $result['results']);
 

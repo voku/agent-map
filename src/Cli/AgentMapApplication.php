@@ -16,6 +16,7 @@ use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\IO\PhpFileFinder;
 use voku\AgentMap\Search\ChunkExtractor;
 use voku\AgentMap\Search\HybridSearch;
+use voku\AgentMap\Search\Embedding\CorpusEmbeddingProvider;
 use voku\AgentMap\Search\SearchBenchmark;
 use voku\AgentMap\Search\SearchIndexStore;
 use voku\AgentMap\Inspect\ScopeInspector;
@@ -214,12 +215,67 @@ final readonly class AgentMapApplication
         $store->setMeta('map_snapshot', $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest);
         $store->setMeta('chunk_policy_version', (string)\voku\AgentMap\Search\ChunkPolicy::VERSION);
 
+        $vectorNote = $this->embedChunks($store);
+
         echo 'Indexed ' . (count($chunks) - $skipped) . ' chunk(s) from ' . count($index->files) . ' file(s) into ' . $options->database . "\n";
+        echo '- ' . $vectorNote . "\n";
         if ($skipped > 0) {
             echo '- ' . $skipped . " chunk(s) skipped: their canonical symbol id is declared more than once in this repository\n";
         }
 
         return 0;
+    }
+
+    /**
+     * Embeds every chunk with the local corpus provider when sqlite-vec is loadable.
+     *
+     * Not attempted when the extension is missing: the index stays lexical and says so, which is the
+     * whole point of probing by calling vec_version() rather than trusting a loader that only warns.
+     */
+    private function embedChunks(SearchIndexStore $store): string
+    {
+        if (!$store->enableVectorSupport()) {
+            return 'vector channel unavailable (sqlite-vec not loadable); lexical only';
+        }
+
+        $documents = $store->allChunkContents();
+        if ($documents === []) {
+            return 'vector channel ready, nothing to embed';
+        }
+
+        $provider = new CorpusEmbeddingProvider();
+        $provider->fit(array_map(static fn (array $row): string => $row['content'], $documents));
+        $store->prepareVectorTable($provider->model());
+
+        $vectors = [];
+        foreach ($documents as $row) {
+            $vectors[$row['chunk_id']] = $provider->embedQuery($row['content']);
+        }
+        $store->storeVectors($vectors, $provider->model());
+
+        return 'embedded ' . count($vectors) . ' chunk(s) with ' . $provider->model()->provider . '/' . $provider->model()->model
+            . ' (' . $provider->model()->dimensions . 'd, sqlite-vec ' . ($store->vectorVersion() ?? 'unknown') . ')';
+    }
+
+    /**
+     * Rebuilds the same provider the index was written with. The corpus weighting is derived from
+     * the stored chunks, so a query embeds into the same space without any model file on disk.
+     */
+    private function corpusProvider(SearchIndexStore $store): ?CorpusEmbeddingProvider
+    {
+        if (!$store->enableVectorSupport() || $store->vectorCount() === 0) {
+            return null;
+        }
+
+        $documents = $store->allChunkContents();
+        if ($documents === []) {
+            return null;
+        }
+
+        $provider = new CorpusEmbeddingProvider();
+        $provider->fit(array_map(static fn (array $row): string => $row['content'], $documents));
+
+        return $provider->model()->fingerprint() === $store->meta('embedding_fingerprint') ? $provider : null;
     }
 
     private function searchIndexDoctor(AgentMapIndex $index, SearchIndexStore $store): int
@@ -231,7 +287,9 @@ final readonly class AgentMapApplication
         echo "[OK] SQLite available\n";
         echo "[OK] FTS5 available\n";
         echo '[' . (SearchIndexStore::supportsFts5() ? 'OK' : 'FAIL') . "] lexical channel\n";
-        echo "[SKIP] vector channel: not implemented yet\n";
+        echo $store->enableVectorSupport()
+            ? '[OK] vector channel: sqlite-vec ' . ($store->vectorVersion() ?? 'unknown') . ', ' . $store->vectorCount() . " vector(s)\n"
+            : "[SKIP] vector channel: sqlite-vec not loadable; search stays lexical and reports degraded\n";
         echo '[' . ($mapSnapshot === $indexSnapshot ? 'OK' : 'FAIL') . '] map snapshot ' . ($mapSnapshot === $indexSnapshot ? 'matches' : 'differs from') . " search index\n";
         echo '[OK] indexed chunks: ' . $store->chunkCount() . "\n";
         foreach ($failures as $failure) {
@@ -255,7 +313,8 @@ final readonly class AgentMapApplication
 
         $index = (new IndexReader())->read($options->index);
         $store = new SearchIndexStore($this->absolute($options->root, $options->database));
-        $result = (new HybridSearch())->search($index, $store, (string)$options->argument, $options->limit);
+        $result = (new HybridSearch(embeddings: $options->semantic ? $this->corpusProvider($store) : null))
+            ->search($index, $store, (string)$options->argument, $options->limit);
 
         if ($options->format === 'json') {
             echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";
@@ -301,7 +360,9 @@ final readonly class AgentMapApplication
 
         $index = (new IndexReader())->read($options->index);
         $store = new SearchIndexStore($this->absolute($options->root, $options->database));
-        $report = (new SearchBenchmark())->run($index, $store, $this->absolute($options->root, $options->cases));
+        $provider = $options->semantic ? $this->corpusProvider($store) : null;
+        $report = (new SearchBenchmark(new HybridSearch(embeddings: $provider), $provider))
+            ->run($index, $store, $this->absolute($options->root, $options->cases));
 
         if ($options->format === 'json') {
             echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";

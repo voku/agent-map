@@ -28,6 +28,7 @@ final readonly class SearchBenchmark
 
     public function __construct(
         private HybridSearch $hybrid = new HybridSearch(),
+        private ?\voku\AgentMap\Search\Embedding\EmbeddingProvider $embeddings = null,
     ) {
     }
 
@@ -44,6 +45,7 @@ final readonly class SearchBenchmark
             $ranks = [
                 'structural' => $this->rankOf($this->structuralHits($index, $case['query']), $case['expected']),
                 'lexical'    => $this->rankOf($this->lexicalHits($store, $case['query']), $case['expected']),
+                'semantic'   => $this->rankOf($this->semanticHits($store, $case['query']), $case['expected']),
                 'hybrid'     => $this->rankOf($this->hybridHits($index, $store, $case['query']), $case['expected']),
             ];
 
@@ -76,8 +78,8 @@ final readonly class SearchBenchmark
             'cases_file'     => $casesFile,
             'case_count'     => count($cases),
             'map_snapshot'   => $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest,
-            'degraded'       => true,
-            'degraded_reason' => 'semantic_channel_not_implemented',
+            'degraded'       => $this->embeddings === null,
+            'degraded_reason' => $this->embeddings === null ? 'no_embedding_provider' : null,
             'categories'     => $categories,
             'cases'          => $details,
         ];
@@ -155,6 +157,25 @@ final readonly class SearchBenchmark
     {
         $hits = [];
         foreach ($store->searchLexical($query, self::MRR_AT) as $row) {
+            $hits[] = $row['symbol_id'];
+        }
+
+        return $hits;
+    }
+
+    /** @return list<string> */
+    private function semanticHits(SearchIndexStore $store, string $query): array
+    {
+        if ($this->embeddings === null || $store->vectorCount() === 0) {
+            return [];
+        }
+
+        $hits = [];
+        foreach ($store->searchSemantic($this->embeddings->embedQuery($query), $this->embeddings->model(), self::MRR_AT) as $row) {
+            if ($row['distance'] > HybridSearch::SEMANTIC_MAX_DISTANCE) {
+                continue;
+            }
+
             $hits[] = $row['symbol_id'];
         }
 

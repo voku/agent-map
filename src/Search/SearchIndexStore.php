@@ -6,6 +6,8 @@ namespace voku\AgentMap\Search;
 
 use PDO;
 use RuntimeException;
+use voku\AgentMap\Search\Embedding\EmbeddingModel;
+use voku\AgentMap\Search\Embedding\EmbeddingVector;
 
 /**
  * The derived hybrid-search index: SQLite plus an FTS5 lexical index over the code chunks.
@@ -24,6 +26,10 @@ final class SearchIndexStore
 
     private PDO $pdo;
 
+    private ?bool $vectorReady = null;
+
+    private ?string $vectorVersion = null;
+
     public function __construct(private readonly string $databaseFile)
     {
         $directory = dirname($this->databaseFile);
@@ -31,12 +37,200 @@ final class SearchIndexStore
             throw new RuntimeException('Unable to create search index directory: ' . $directory);
         }
 
-        $this->pdo = new PDO('sqlite:' . $this->databaseFile, null, null, [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        ]);
+        $dsn = 'sqlite:' . $this->databaseFile;
+        $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION];
+        // `new PDO('sqlite:...')` returns a plain PDO even on 8.4, and a plain PDO has no
+        // loadExtension(). The driver-specific subclass is what can load sqlite-vec at all, so it is
+        // used when the runtime has it; older runtimes simply keep the lexical channel.
+        $this->pdo = class_exists('Pdo\Sqlite')
+            ? new \Pdo\Sqlite($dsn, null, null, $options)
+            : new PDO($dsn, null, null, $options);
         $this->pdo->exec('PRAGMA journal_mode = WAL');
         $this->pdo->exec('PRAGMA synchronous = NORMAL');
         $this->migrate();
+    }
+
+    /**
+     * Loads sqlite-vec and proves it by calling it.
+     *
+     * `loadExtension()` warns and continues when extensions are disabled instead of failing, so a
+     * probe that trusts its return value reports a vector channel that is not there. The only
+     * acceptable evidence is vec_version() answering.
+     */
+    public function enableVectorSupport(?string $extensionPath = null): bool
+    {
+        if ($this->vectorReady !== null) {
+            return $this->vectorReady;
+        }
+
+        $candidates = $extensionPath !== null
+            ? [$extensionPath]
+            : array_filter([
+                getenv('AGENT_MAP_SQLITE_VEC') ?: null,
+                (ini_get('sqlite3.extension_dir') ?: '') . '/vec0.so',
+                '/usr/local/lib/php/sqlite-extensions/vec0.so',
+            ]);
+
+        foreach ($candidates as $candidate) {
+            if (!is_file($candidate)) {
+                continue;
+            }
+
+            if (!$this->pdo instanceof \Pdo\Sqlite) {
+                continue;
+            }
+
+            try {
+                $this->pdo->loadExtension($candidate);
+            } catch (\Throwable) {
+                continue;
+            }
+
+            try {
+                $statement = $this->pdo->query('SELECT vec_version()');
+                $version = $statement === false ? null : $statement->fetchColumn();
+            } catch (\PDOException) {
+                continue;
+            }
+            if (is_string($version) && $version !== '') {
+                $this->vectorVersion = $version;
+                $this->vectorReady = true;
+
+                return true;
+            }
+        }
+
+        $this->vectorReady = false;
+
+        return false;
+    }
+
+    public function vectorVersion(): ?string
+    {
+        return $this->vectorVersion;
+    }
+
+    /**
+     * Vector rows for the active model. A different fingerprint means a different vector space, so
+     * the table is dropped rather than mixed - nearest neighbours across two spaces are noise.
+     */
+    public function prepareVectorTable(EmbeddingModel $model): void
+    {
+        if ($this->vectorReady !== true) {
+            throw new RuntimeException('The vector channel is not available in this SQLite build.');
+        }
+
+        if ($this->meta('embedding_fingerprint') !== $model->fingerprint()) {
+            $this->pdo->exec('DROP TABLE IF EXISTS code_chunks_vec');
+            $this->pdo->exec('DELETE FROM embedding_cache');
+        }
+
+        $this->pdo->exec(sprintf(
+            'CREATE VIRTUAL TABLE IF NOT EXISTS code_chunks_vec USING vec0(rowid INTEGER PRIMARY KEY, embedding float[%d])',
+            $model->dimensions,
+        ));
+        $this->setMeta('embedding_fingerprint', $model->fingerprint());
+        $this->setMeta('embedding_model', (string)json_encode($model->toArray()));
+    }
+
+    /**
+     * @param array<string, list<float>> $vectorsByChunkId
+     */
+    public function storeVectors(array $vectorsByChunkId, EmbeddingModel $model): void
+    {
+        $rowid = $this->pdo->prepare('SELECT rowid FROM code_chunks WHERE chunk_id = :chunk_id');
+        $insert = $this->pdo->prepare('INSERT OR REPLACE INTO code_chunks_vec (rowid, embedding) VALUES (:rowid, :embedding)');
+
+        $this->pdo->beginTransaction();
+
+        try {
+            foreach ($vectorsByChunkId as $chunkId => $vector) {
+                $rowid->execute(['chunk_id' => $chunkId]);
+                $id = $rowid->fetchColumn();
+                if ($id === false) {
+                    continue;
+                }
+
+                // Bound as a LOB: without it PDO sends the float32 blob as text and vec0 tries to
+                // parse it as a JSON array.
+                $insert->bindValue('rowid', (int)$id, PDO::PARAM_INT);
+                $insert->bindValue('embedding', EmbeddingVector::encode($vector, $model->dimensions), PDO::PARAM_LOB);
+                $insert->execute();
+            }
+
+            $this->pdo->commit();
+        } catch (\Throwable $exception) {
+            $this->pdo->rollBack();
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * @param list<float> $queryVector
+     *
+     * @return list<array{chunk_id: string, symbol_id: string, file_path: string, start_line: int,
+     *                    end_line: int, content_sha256: string, distance: float}>
+     */
+    public function searchSemantic(array $queryVector, EmbeddingModel $model, int $limit): array
+    {
+        if ($this->vectorReady !== true) {
+            return [];
+        }
+
+        $statement = $this->pdo->prepare(
+            'SELECT c.chunk_id, c.symbol_id, c.file_path, c.start_line, c.end_line, c.content_sha256, v.distance
+             FROM code_chunks_vec v
+             JOIN code_chunks c ON c.rowid = v.rowid
+             WHERE v.embedding MATCH :embedding AND k = :k
+             ORDER BY v.distance',
+        );
+        $statement->bindValue('embedding', EmbeddingVector::encode($queryVector, $model->dimensions), PDO::PARAM_LOB);
+        $statement->bindValue('k', $limit, PDO::PARAM_INT);
+        $statement->execute();
+
+        $rows = [];
+        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $rows[] = [
+                'chunk_id'       => (string)$row['chunk_id'],
+                'symbol_id'      => (string)$row['symbol_id'],
+                'file_path'      => (string)$row['file_path'],
+                'start_line'     => (int)$row['start_line'],
+                'end_line'       => (int)$row['end_line'],
+                'content_sha256' => (string)$row['content_sha256'],
+                'distance'       => (float)$row['distance'],
+            ];
+        }
+
+        return $rows;
+    }
+
+    /** @return list<array{chunk_id: string, content: string}> */
+    public function allChunkContents(): array
+    {
+        $statement = $this->pdo->query('SELECT chunk_id, symbol_name, signature, content FROM code_chunks ORDER BY chunk_id');
+        if ($statement === false) {
+            return [];
+        }
+
+        $rows = [];
+        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $rows[] = [
+                'chunk_id' => (string)$row['chunk_id'],
+                'content'  => (string)$row['symbol_name'] . "\n" . (string)$row['signature'] . "\n" . (string)$row['content'],
+            ];
+        }
+
+        return $rows;
+    }
+
+    public function vectorCount(): int
+    {
+        if ($this->vectorReady !== true) {
+            return 0;
+        }
+
+        return $this->countOf('SELECT COUNT(*) FROM code_chunks_vec');
     }
 
     public static function supportsFts5(): bool
@@ -331,6 +525,15 @@ final class SearchIndexStore
                 content='code_chunks',
                 content_rowid='rowid'
             )",
+        );
+        $this->pdo->exec(
+            'CREATE TABLE IF NOT EXISTS embedding_cache (
+                model_fingerprint TEXT NOT NULL,
+                content_sha256 TEXT NOT NULL,
+                dimensions INTEGER NOT NULL,
+                embedding BLOB NOT NULL,
+                PRIMARY KEY(model_fingerprint, content_sha256)
+            )',
         );
         $this->setMeta('schema_version', self::SCHEMA_VERSION);
     }

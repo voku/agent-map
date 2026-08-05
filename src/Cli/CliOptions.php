@@ -31,6 +31,7 @@ final readonly class CliOptions
         public array $excludes,
         public bool $help,
         public bool $merge,
+        public bool $semantic,
         public ?string $phpStanConfig,
         public ?string $phpStanMemoryLimit,
         public int $contextBudget,
@@ -83,6 +84,7 @@ final readonly class CliOptions
         $argument = null;
         $help = false;
         $merge = false;
+        $semantic = false;
         $formatProvided = false;
         $outProvided = false;
 
@@ -94,6 +96,10 @@ final readonly class CliOptions
             }
             if ($token === '--merge') {
                 $merge = true;
+                continue;
+            }
+            if ($token === '--semantic') {
+                $semantic = true;
                 continue;
             }
             if (!str_starts_with($token, '--')) {
@@ -154,6 +160,7 @@ final readonly class CliOptions
             excludes: $excludes,
             help: $help,
             merge: $merge,
+            semantic: $semantic,
             phpStanConfig: $values['phpstan-config'] !== '' ? $values['phpstan-config'] : null,
             phpStanMemoryLimit: self::memoryLimit($values['phpstan-memory-limit']),
             contextBudget: self::positiveInt('context-budget', $values['context-budget'], 1),
