@@ -1,0 +1,182 @@
+{
+  "schema_version": "1.0",
+  "description": "Retrieval benchmark for agent-map, run against agent-map's own source. Categories follow the six failure shapes the hybrid-search plan names; expectations are canonical symbol ids, so a case stays valid when chunking changes.",
+  "cases": [
+    {
+      "id": "exact-class-01",
+      "category": "exact_symbol",
+      "query": "ChunkExtractor",
+      "expected": ["class:voku\\AgentMap\\Search\\ChunkExtractor"]
+    },
+    {
+      "id": "exact-class-02",
+      "category": "exact_symbol",
+      "query": "SearchIndexStore",
+      "expected": ["class:voku\\AgentMap\\Search\\SearchIndexStore"]
+    },
+    {
+      "id": "exact-class-03",
+      "category": "exact_symbol",
+      "query": "IndexWriter",
+      "expected": ["class:voku\\AgentMap\\Index\\IndexWriter"]
+    },
+    {
+      "id": "exact-method-01",
+      "category": "exact_symbol",
+      "query": "AgentMapIndex::staleEntries",
+      "expected": ["method:voku\\AgentMap\\Index\\AgentMapIndex::staleEntries"]
+    },
+    {
+      "id": "exact-method-02",
+      "category": "exact_symbol",
+      "query": "IndexReader::readSections",
+      "expected": ["method:voku\\AgentMap\\Index\\IndexReader::readSections"]
+    },
+    {
+      "id": "exact-method-03",
+      "category": "exact_symbol",
+      "query": "PhpStanSemanticAnalyzer analyse",
+      "expected": ["method:voku\\AgentMap\\Build\\PhpStanSemanticAnalyzer::analyse"]
+    },
+
+    {
+      "id": "error-message-01",
+      "category": "error_message",
+      "query": "Unable to publish index",
+      "expected": ["method:voku\\AgentMap\\Index\\IndexWriter::write"]
+    },
+    {
+      "id": "error-message-02",
+      "category": "error_message",
+      "query": "PHPStan semantic export was not created",
+      "expected": ["method:voku\\AgentMap\\Build\\PhpStanSemanticAnalyzer::analyse"]
+    },
+    {
+      "id": "error-message-03",
+      "category": "error_message",
+      "query": "Source path escapes repository root",
+      "expected": ["method:voku\\AgentMap\\Context\\SourceMaterializer::materialize"]
+    },
+    {
+      "id": "error-message-04",
+      "category": "error_message",
+      "query": "Method target must use Class::method syntax",
+      "expected": ["method:voku\\AgentMap\\Index\\AgentMapIndex::resolveMethod"]
+    },
+
+    {
+      "id": "behavior-01",
+      "category": "behavioral",
+      "query": "how are stale index entries detected",
+      "expected": [
+        "method:voku\\AgentMap\\Index\\AgentMapIndex::staleEntries",
+        "method:voku\\AgentMap\\Cli\\AgentMapApplication::stale"
+      ]
+    },
+    {
+      "id": "behavior-02",
+      "category": "behavioral",
+      "query": "which files does a refresh re-analyse",
+      "expected": [
+        "method:voku\\AgentMap\\Cli\\AgentMapApplication::refresh",
+        "method:voku\\AgentMap\\Index\\AgentMapBuilder::merge"
+      ]
+    },
+    {
+      "id": "behavior-03",
+      "category": "behavioral",
+      "query": "where is the source code of a method read from disk",
+      "expected": ["method:voku\\AgentMap\\Context\\SourceMaterializer::materialize"]
+    },
+    {
+      "id": "behavior-04",
+      "category": "behavioral",
+      "query": "how is the index written without loading everything into memory",
+      "expected": ["method:voku\\AgentMap\\Index\\IndexWriter::writeJson"]
+    },
+    {
+      "id": "behavior-05",
+      "category": "behavioral",
+      "query": "how does a query decide between exact and normalized matching",
+      "expected": ["method:voku\\AgentMap\\Index\\AgentMapIndex::query"]
+    },
+    {
+      "id": "behavior-06",
+      "category": "behavioral",
+      "query": "what stops a parse from executing application code",
+      "expected": ["method:voku\\AgentMap\\Extract\\SimplePhpParserSymbolExtractor::withoutApplicationAutoloaders"]
+    },
+
+    {
+      "id": "cross-cutting-01",
+      "category": "cross_cutting",
+      "query": "sha256 hashing of source files",
+      "expected": [
+        "method:voku\\AgentMap\\Index\\AgentMapBuilder::build",
+        "method:voku\\AgentMap\\Index\\AgentMapIndex::staleEntries"
+      ]
+    },
+    {
+      "id": "cross-cutting-02",
+      "category": "cross_cutting",
+      "query": "canonical json encoding",
+      "expected": [
+        "class:voku\\AgentMap\\Store\\CanonicalArrayNormalizer",
+        "method:voku\\AgentMap\\Index\\IndexWriter::encode"
+      ]
+    },
+    {
+      "id": "cross-cutting-03",
+      "category": "cross_cutting",
+      "query": "token budget for context selection",
+      "expected": ["class:voku\\AgentMap\\Context\\EditContextPolicy"]
+    },
+
+    {
+      "id": "indirect-01",
+      "category": "renamed_or_indirect",
+      "query": "answer sheet questions for an agent",
+      "expected": ["class:voku\\AgentMap\\Search\\QueryPlanner"]
+    },
+    {
+      "id": "indirect-02",
+      "category": "renamed_or_indirect",
+      "query": "cut code into searchable pieces",
+      "expected": [
+        "class:voku\\AgentMap\\Search\\ChunkExtractor",
+        "class:voku\\AgentMap\\Search\\ChunkPolicy"
+      ]
+    },
+    {
+      "id": "indirect-03",
+      "category": "renamed_or_indirect",
+      "query": "combine several rankings into one order",
+      "expected": ["class:voku\\AgentMap\\Search\\HybridSearch"]
+    },
+    {
+      "id": "indirect-04",
+      "category": "renamed_or_indirect",
+      "query": "keep the two indexes from drifting apart",
+      "expected": ["method:voku\\AgentMap\\Search\\SearchIndexStore::integrityFailures"]
+    },
+
+    {
+      "id": "irrelevant-01",
+      "category": "irrelevant",
+      "query": "kubernetes ingress controller certificate rotation",
+      "expected": []
+    },
+    {
+      "id": "irrelevant-02",
+      "category": "irrelevant",
+      "query": "payroll tax bracket calculation for 2027",
+      "expected": []
+    },
+    {
+      "id": "irrelevant-03",
+      "category": "irrelevant",
+      "query": "espresso machine descaling interval",
+      "expected": []
+    }
+  ]
+}

@@ -20,6 +20,9 @@ final readonly class HybridSearch
 {
     private const int RRF_K = 60;
 
+    /** Above this many matching files a structural term is treated as vocabulary, not as an identifier. */
+    private const int STRUCTURAL_TERM_MAX_FILES = 3;
+
     /** @var array<string, float> */
     private const array WEIGHTS = [
         'structural' => 1.0,
@@ -132,18 +135,37 @@ final readonly class HybridSearch
         $ranks = [];
         $rank = 1;
         foreach ($terms as $term) {
-            foreach ($index->query($term)->files as $file) {
+            $files = $index->query($term)->files;
+            // A term that matches half the repository is a word, not a symbol. Feeding it into the
+            // structural channel adds no identification and pushes the channel that did identify
+            // something - usually lexical, on an error message - down the fused ranking.
+            if (count($files) > self::STRUCTURAL_TERM_MAX_FILES) {
+                continue;
+            }
+
+            foreach ($files as $file) {
                 foreach ($file->symbols as $symbol) {
-                    $chunkId = CodeChunk::identity($symbol->id(), CodeChunk::KIND_SYMBOL_OVERVIEW);
-                    if (!isset($ranks[$chunkId])) {
-                        $ranks[$chunkId] = $rank++;
+                    // Identification, not resemblance: the map's own query is intentionally fuzzy, but a
+                    // structural rank claims "this is the symbol you named". An error message that
+                    // happens to quote `Class::method` must not manufacture one.
+                    if ($this->identifies($term, $symbol->fqn, $symbol->name)) {
+                        $chunkId = CodeChunk::identity($symbol->id(), CodeChunk::KIND_SYMBOL_OVERVIEW);
+                        if (!isset($ranks[$chunkId])) {
+                            $ranks[$chunkId] = $rank++;
+                        }
                     }
+
                     foreach ($symbol->methods as $method) {
+                        if (!$this->identifies($term, $symbol->fqn . '::' . $method->name, $method->name)) {
+                            continue;
+                        }
+
                         $methodChunk = CodeChunk::identity($symbol->methodId($method), CodeChunk::KIND_METHOD_BODY);
                         if (!isset($ranks[$methodChunk])) {
                             $ranks[$methodChunk] = $rank++;
                         }
                     }
+
                     if ($rank > $limit) {
                         return $ranks;
                     }
@@ -152,6 +174,21 @@ final readonly class HybridSearch
         }
 
         return $ranks;
+    }
+
+    /**
+     * Whether the query term names this symbol: the full name, its short name, or the trailing part
+     * of a qualified name. Anything looser is the lexical channel's job.
+     */
+    private function identifies(string $term, string $qualifiedName, string $shortName): bool
+    {
+        $term = ltrim($term, '\\');
+        $qualifiedName = ltrim($qualifiedName, '\\');
+
+        return strcasecmp($term, $qualifiedName) === 0
+            || strcasecmp($term, $shortName) === 0
+            || str_ends_with(strtolower($qualifiedName), strtolower('\\' . $term))
+            || str_ends_with(strtolower($qualifiedName), strtolower('::' . $term));
     }
 
     /** @return array<string, int> */

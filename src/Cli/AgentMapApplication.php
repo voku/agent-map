@@ -16,6 +16,7 @@ use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\IO\PhpFileFinder;
 use voku\AgentMap\Search\ChunkExtractor;
 use voku\AgentMap\Search\HybridSearch;
+use voku\AgentMap\Search\SearchBenchmark;
 use voku\AgentMap\Search\SearchIndexStore;
 use voku\AgentMap\Inspect\ScopeInspector;
 use voku\AgentMap\Inspect\ScopeSelector;
@@ -239,6 +240,10 @@ final readonly class AgentMapApplication
 
     private function search(CliOptions $options): int
     {
+        if ($options->argument === 'benchmark') {
+            return $this->searchBenchmark($options);
+        }
+
         if (!SearchIndexStore::supportsFts5()) {
             fwrite(STDERR, "[FAIL] SQLite FTS5 is not available in this PHP build.\n");
 
@@ -273,6 +278,49 @@ final readonly class AgentMapApplication
                 $hit['symbol_id'],
                 implode(' ', $hit['reasons']),
             );
+        }
+
+        return 0;
+    }
+
+    /**
+     * `search benchmark` - the gate for every later ranking change. It reports each channel
+     * separately, because an aggregate number would hide a hybrid ranking that wins on conceptual
+     * queries by losing on exact ones.
+     */
+    private function searchBenchmark(CliOptions $options): int
+    {
+        if (!SearchIndexStore::supportsFts5()) {
+            fwrite(STDERR, "[FAIL] SQLite FTS5 is not available in this PHP build.\n");
+
+            return 1;
+        }
+
+        $index = (new IndexReader())->read($options->index);
+        $store = new SearchIndexStore($this->absolute($options->root, $options->database));
+        $report = (new SearchBenchmark())->run($index, $store, $this->absolute($options->root, $options->cases));
+
+        if ($options->format === 'json') {
+            echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";
+
+            return 0;
+        }
+
+        echo 'Benchmark: ' . $report['case_count'] . " case(s)\n";
+        /** @var array<string, array<string, array{cases: int, recall_at_5: float, mrr_at_10: float}>> $categories */
+        $categories = $report['categories'];
+        printf("%-22s %-12s %6s %10s %10s\n", 'category', 'channel', 'cases', 'recall@5', 'mrr@10');
+        foreach ($categories as $category => $channels) {
+            foreach ($channels as $channel => $metrics) {
+                printf(
+                    "%-22s %-12s %6d %10.3f %10.3f\n",
+                    $category,
+                    $channel,
+                    $metrics['cases'],
+                    $metrics['recall_at_5'],
+                    $metrics['mrr_at_10'],
+                );
+            }
         }
 
         return 0;
