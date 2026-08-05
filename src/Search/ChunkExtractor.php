@@ -17,9 +17,27 @@ use voku\AgentMap\Index\SymbolEntry;
  * line range the map already resolved, read through the materializer that already verifies the file
  * hash. A second parsing pipeline would be a second answer to "what is in this file", and the two
  * would disagree the first time one of them was upgraded.
+ *
+ * When pcntl_fork and stream_socket_pair are available in a CLI context and the file list is large
+ * enough to justify the fork overhead, extraction is parallelised across worker processes (one per
+ * logical CPU, capped at 8). Each worker receives a partition of the candidate file list, extracts
+ * chunks with an isolated SourceMaterializer, and returns serialized results to the parent via a
+ * UNIX stream socket pair. On any fork failure the parent falls back to sequential extraction
+ * transparently. Environments without pcntl (Windows, shared hosting) always run sequentially.
  */
 final class ChunkExtractor
 {
+    /**
+     * Minimum candidate-file count before parallel extraction is attempted.
+     * Below this threshold fork + IPC overhead exceeds any concurrency benefit.
+     */
+    private const int PARALLEL_THRESHOLD = 50;
+
+    /**
+     * Maximum worker processes spawned regardless of detected CPU count.
+     */
+    private const int MAX_WORKERS = 8;
+
     /** @var list<string> */
     private array $skippedPaths = [];
 
@@ -50,30 +68,63 @@ final class ChunkExtractor
     {
         $wanted = $onlyPaths === null ? null : array_fill_keys($onlyPaths, true);
 
-        $this->skippedPaths = [];
-        $chunks = [];
+        /** @var list<FileEntry> $candidates */
+        $candidates = [];
         foreach ($index->files as $file) {
             if ($wanted !== null && !isset($wanted[$file->path])) {
                 continue;
             }
+            $candidates[] = $file;
+        }
 
+        $this->skippedPaths = [];
+
+        if ($this->isParallelAvailable() && count($candidates) > self::PARALLEL_THRESHOLD) {
+            $result = $this->runParallel($index->root, $candidates);
+            if ($result !== null) {
+                $this->skippedPaths = $result['skipped'];
+                return $result['chunks'];
+            }
+            // Any fork failure falls through to the sequential path below.
+        }
+
+        return $this->runSequential($index->root, $candidates);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // Sequential path
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Extracts chunks for all $candidates using a single process.
+     *
+     * This is the canonical extraction path and is always used as the fallback when process
+     * concurrency is unavailable or a fork fails.
+     *
+     * @param list<FileEntry> $candidates
+     * @return list<CodeChunk>
+     */
+    private function runSequential(string $root, array $candidates): array
+    {
+        $chunks = [];
+        foreach ($candidates as $file) {
             $before = count($chunks);
             foreach ($file->symbols as $symbol) {
                 if ($symbol->kind === 'function') {
-                    $chunk = $this->functionChunk($index->root, $file, $symbol);
+                    $chunk = $this->functionChunk($root, $file, $symbol);
                     if ($chunk !== null) {
                         $chunks[] = $chunk;
                     }
                     continue;
                 }
 
-                $overview = $this->overviewChunk($index->root, $file, $symbol);
+                $overview = $this->overviewChunk($root, $file, $symbol);
                 if ($overview !== null) {
                     $chunks[] = $overview;
                 }
 
                 foreach ($symbol->methods as $method) {
-                    $chunk = $this->methodChunk($index->root, $file, $symbol, $method);
+                    $chunk = $this->methodChunk($root, $file, $symbol, $method);
                     if ($chunk !== null) {
                         $chunks[] = $chunk;
                     }
@@ -87,6 +138,235 @@ final class ChunkExtractor
 
         return $chunks;
     }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // Parallel path
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Spawns worker processes to extract chunks in parallel.
+     *
+     * Returns null if any fork fails (caller falls back to sequential). On success returns an
+     * aggregated array of all chunks and skipped paths in partition order.
+     *
+     * Protocol:
+     *   1. For each partition create a UNIX stream socket pair.
+     *   2. Fork. Child writes serialized {chunks, skipped} to its socket end and exits(0).
+     *   3. Parent reads from its socket end after all children are spawned.
+     *   4. Parent reaps all children via pcntl_waitpid.
+     *
+     * @param list<FileEntry> $candidates
+     * @return array{chunks: list<CodeChunk>, skipped: list<string>}|null
+     */
+    private function runParallel(string $root, array $candidates): ?array
+    {
+        $workerCount = max(1, min(self::MAX_WORKERS, $this->detectCpuCount(), count($candidates)));
+        $partitions  = $this->partitionFiles($candidates, $workerCount);
+
+        /**
+         * Track spawned workers as {pid, socket} pairs. The socket is the parent's end of each
+         * UNIX stream pair; it is closed inside the child before that child writes to its own end.
+         *
+         * @var list<array{pid: int, socket: resource}> $spawned
+         */
+        $spawned = [];
+
+        foreach ($partitions as $partition) {
+            $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+            if ($pair === false) {
+                // Close all already-collected parent sockets before reaping.
+                foreach ($spawned as $w) {
+                    fclose($w['socket']);
+                }
+                $this->reapAll($spawned);
+                return null;
+            }
+            [$childSocket, $parentSocket] = $pair;
+
+            $pid = pcntl_fork();
+            if ($pid === -1) {
+                // Close the pair we just created, and all previously-collected parent sockets.
+                fclose($childSocket);
+                fclose($parentSocket);
+                foreach ($spawned as $w) {
+                    fclose($w['socket']);
+                }
+                $this->reapAll($spawned);
+                return null;
+            }
+
+            if ($pid === 0) {
+                // ── CHILD ────────────────────────────────────────────────────────────────────────
+                // Close the parent's socket end so only the child holds a reference.
+                fclose($parentSocket);
+
+                // Use a fresh ChunkExtractor so the SourceMaterializer cache is isolated from both
+                // the parent and every sibling worker.
+                $worker  = new self(new SourceMaterializer());
+                $chunks  = $worker->runSequential($root, $partition);
+                $skipped = $worker->skippedPaths();
+
+                $payload = serialize(['chunks' => $chunks, 'skipped' => $skipped]);
+                fwrite($childSocket, $payload);
+                fclose($childSocket);
+                exit(0);
+                // ── END CHILD ────────────────────────────────────────────────────────────────────
+            }
+
+            // Parent: close the child's socket end; keep the parent end for reading.
+            fclose($childSocket);
+            $spawned[] = ['pid' => $pid, 'socket' => $parentSocket];
+        }
+
+        // Collect results in spawn order (preserves file-list ordering).
+        $allChunks  = [];
+        $allSkipped = [];
+
+        foreach ($spawned as $worker) {
+            $raw = '';
+            while (!feof($worker['socket'])) {
+                $block = fread($worker['socket'], 65_536);
+                if ($block === false || $block === '') {
+                    break;
+                }
+                $raw .= $block;
+            }
+            fclose($worker['socket']);
+
+            if ($raw === '') {
+                continue;
+            }
+
+            $decoded = @unserialize($raw);
+            if (!is_array($decoded)) {
+                continue;
+            }
+
+            foreach (is_array($decoded['chunks'] ?? null) ? $decoded['chunks'] : [] as $chunk) {
+                if ($chunk instanceof CodeChunk) {
+                    $allChunks[] = $chunk;
+                }
+            }
+            foreach (is_array($decoded['skipped'] ?? null) ? $decoded['skipped'] : [] as $path) {
+                if (is_string($path)) {
+                    $allSkipped[] = $path;
+                }
+            }
+        }
+
+        $this->reapAll($spawned);
+
+        return ['chunks' => $allChunks, 'skipped' => $allSkipped];
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // Concurrency helpers
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Returns true only when both pcntl_fork/pcntl_waitpid and stream_socket_pair with UNIX
+     * domain sockets are callable. This is reliably true in CLI PHP on Linux/macOS (including
+     * WSL2) and reliably false on Windows or in environments where pcntl is disabled.
+     */
+    private function isParallelAvailable(): bool
+    {
+        return function_exists('pcntl_fork')
+            && function_exists('pcntl_waitpid')
+            && function_exists('stream_socket_pair')
+            && defined('STREAM_PF_UNIX');
+    }
+
+    /**
+     * Detects the number of logical CPU cores.
+     *
+     * Tries (in order): /proc/cpuinfo processor-count (Linux/WSL), `nproc` shell command, `sysctl`
+     * on macOS/BSD, then falls back to 1 so the caller always gets a usable value.
+     */
+    private function detectCpuCount(): int
+    {
+        // /proc/cpuinfo is the fastest probe on Linux/WSL; no subprocess needed.
+        if (is_readable('/proc/cpuinfo')) {
+            $info = @file_get_contents('/proc/cpuinfo');
+            if (is_string($info)) {
+                $count = substr_count($info, "\nprocessor\t:");
+                if ($count > 0) {
+                    return $count;
+                }
+            }
+        }
+
+        // `nproc` — portable on Linux even outside /proc environments.
+        $nproc = @shell_exec('nproc 2>/dev/null');
+        if (is_string($nproc)) {
+            $count = (int) trim($nproc);
+            if ($count > 0) {
+                return $count;
+            }
+        }
+
+        // `sysctl` — macOS / BSD.
+        $sysctl = @shell_exec('sysctl -n hw.logicalcpu 2>/dev/null');
+        if (is_string($sysctl)) {
+            $count = (int) trim($sysctl);
+            if ($count > 0) {
+                return $count;
+            }
+        }
+
+        return 1;
+    }
+
+    /**
+     * Splits $files into at most $workers non-empty, roughly equal partitions.
+     *
+     * @param list<FileEntry> $files
+     * @return list<list<FileEntry>>
+     */
+    private function partitionFiles(array $files, int $workers): array
+    {
+        $total = count($files);
+        if ($total === 0) {
+            return [];
+        }
+
+        // Guard: never exceed the number of available files and ensure at least 1 worker.
+        $workers    = max(1, min($workers, $total));
+        $baseSize   = intdiv($total, $workers);
+        $remainder  = $total % $workers;
+        $partitions = [];
+        $offset     = 0;
+
+        for ($i = 0; $i < $workers; ++$i) {
+            $size = $baseSize + ($i < $remainder ? 1 : 0);
+            if ($size > 0) {
+                $partitions[] = array_slice($files, $offset, $size);
+            }
+            $offset += $size;
+        }
+
+        return $partitions;
+    }
+
+    /**
+     * Reaps all spawned child processes via pcntl_waitpid.
+     *
+     * This must be called AFTER all parent-side sockets have already been closed (either in the
+     * normal collect loop, or explicitly in the error-bail paths). Calling fclose() here would
+     * attempt to close already-closed resources.
+     *
+     * @param list<array{pid: int, socket: resource}> $spawned
+     */
+    private function reapAll(array $spawned): void
+    {
+        foreach ($spawned as $worker) {
+            $status = 0;
+            pcntl_waitpid($worker['pid'], $status);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
+    // Chunk builders (shared by sequential and parallel paths)
+    // ──────────────────────────────────────────────────────────────────────────────────────────────
 
     /**
      * The declaration plus its method signatures, without any body: this is what answers "what is

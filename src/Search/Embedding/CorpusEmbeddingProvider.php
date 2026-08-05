@@ -24,6 +24,15 @@ final class CorpusEmbeddingProvider implements EmbeddingProvider
     /** @var array<string, float> */
     private array $inverseDocumentFrequency = [];
 
+    /**
+     * token => [bucket, sign]. Hashing is the whole cost of this provider: a repository re-uses the
+     * same few thousand identifiers across tens of thousands of chunks, so hashing each occurrence
+     * again is the difference between seconds and minutes.
+     *
+     * @var array<string, array{0: int, 1: float}>
+     */
+    private array $placement = [];
+
     private string $corpusRevision = 'empty';
 
     /**
@@ -107,9 +116,17 @@ final class CorpusEmbeddingProvider implements EmbeddingProvider
             // An unseen token still contributes: a query word that appears nowhere in the corpus is
             // rare by definition, and dropping it would make such queries embed as noise.
             $weight = $this->inverseDocumentFrequency[$token] ?? 1.0;
-            $bucket = (int)(hexdec(substr(hash('sha256', $token), 0, 8)) % self::DIMENSIONS);
-            $sign = hexdec(substr(hash('sha256', $token), 8, 2)) % 2 === 0 ? 1.0 : -1.0;
-            $vector[$bucket] += $sign * $weight;
+            $placement = $this->placement[$token] ?? null;
+            if ($placement === null) {
+                $digest = hash('sha256', $token);
+                $placement = [
+                    (int)(hexdec(substr($digest, 0, 8)) % self::DIMENSIONS),
+                    hexdec(substr($digest, 8, 2)) % 2 === 0 ? 1.0 : -1.0,
+                ];
+                $this->placement[$token] = $placement;
+            }
+
+            $vector[$placement[0]] += $placement[1] * $weight;
         }
 
         return EmbeddingVector::normalize(array_values($vector));
@@ -123,6 +140,7 @@ final class CorpusEmbeddingProvider implements EmbeddingProvider
      */
     private function tokenize(string $text): array
     {
+        // One split instead of two: the whole-token and part-token passes shared the same regex work.
         $tokens = [];
         // Split the original casing first: lowercasing up front would erase the CamelCase boundary
         // this relies on to reach `assertComputerNames...` from the word "computer".
