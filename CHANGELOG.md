@@ -32,6 +32,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The binary resolved its autoloader by preferring the package's own `vendor/`
+  directory. When one is present next to an installed copy - a path repository, a
+  mirrored checkout, a stale local install - that autoloader wins and silently
+  loads *its* dependencies instead of the project's. Found by a release-set smoke
+  test that reported `Undefined property Session::$ephemeral` against an
+  installed version that plainly had it. The outer autoloader is now tried first.
+
 - The query planner tokenized with ASCII letter classes, which does not reject a
   non-ASCII word but *truncates* it: "Berechtigungsanträge" reached the
   structural channel as `Berechtigungsantr`, "Zugriffsprüfung" as `Zugriffspr`,
