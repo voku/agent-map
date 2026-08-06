@@ -22,7 +22,12 @@ final readonly class QueryPlanner
         $terms = [];
 
         // Class::method, qualified names, namespaced identifiers - unambiguous structural shapes.
-        if (preg_match_all('/[A-Za-z_\\\\][A-Za-z0-9_\\\\]*(?:::[A-Za-z_][A-Za-z0-9_]*)?/u', $query, $matches) === false) {
+        //
+        // Letter classes are Unicode, not [A-Za-z]: PHP identifiers may legally contain bytes above
+        // 0x7F, and an ASCII class does not reject a German word, it *truncates* it - "Größe" became
+        // "Gr" and was then handed to the structural channel as a symbol the user supposedly named,
+        // which is exactly the guess-as-fact this class exists to prevent.
+        if (preg_match_all('/[\p{L}_\\\\][\p{L}\p{N}_\\\\]*(?:::[\p{L}_][\p{L}\p{N}_]*)?/u', $query, $matches) === false) {
             return ['structural_terms' => [], 'free_text' => $query];
         }
 
@@ -62,9 +67,9 @@ final readonly class QueryPlanner
 
         // CamelCase or snake_case with a capital: how identifiers look, not how sentences do.
         // Short identifiers with uppercase letters or digits (e.g., D3, AD, OU, IP, UI, DB, M365, S3, V1) are structural.
-        return preg_match('/[a-z][A-Z]/', $candidate) === 1
-            || (preg_match('/^[A-Z0-9_]{2,4}$/', $candidate) === 1 && preg_match('/[A-Z0-9]/', $candidate) === 1)
-            || (preg_match('/^[A-Z]/', $candidate) === 1 && preg_match('/[a-z0-9]/i', $candidate) === 1)
+        return preg_match('/\p{Ll}\p{Lu}/u', $candidate) === 1
+            || (preg_match('/^[\p{Lu}\p{N}_]{2,4}$/u', $candidate) === 1 && preg_match('/[\p{Lu}\p{N}]/u', $candidate) === 1)
+            || (preg_match('/^\p{Lu}/u', $candidate) === 1 && preg_match('/[\p{L}\p{N}]/u', $candidate) === 1)
             || str_contains($candidate, '_');
     }
 }

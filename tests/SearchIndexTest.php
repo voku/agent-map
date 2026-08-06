@@ -259,6 +259,18 @@ final class SearchIndexTest extends TestCase
             $planner->plan('Welche Methode schreibt die Gruppenmitgliedschaft')['structural_terms'],
         );
         self::assertSame(['Retry'], $planner->plan('Welche Klasse behandelt das Retry')['structural_terms']);
+
+        // An ASCII letter class does not reject a German word, it truncates it: "Größe" became "Gr",
+        // which is short, capitalized and therefore identifier-shaped - a guess promoted to a fact.
+        self::assertSame(
+            ['Berechtigungsanträge'],
+            $planner->plan('Wie werden Berechtigungsanträge storniert?')['structural_terms'],
+        );
+        self::assertSame(['Größe', 'Übersicht'], $planner->plan('Größe der Übersicht')['structural_terms']);
+        self::assertSame(
+            ['MitarbeiterKündigung'],
+            $planner->plan('MitarbeiterKündigung verarbeiten')['structural_terms'],
+        );
         self::assertSame(
             ['D3', 'User'],
             $planner->plan('Welche Funktion liest den D3 User')['structural_terms'],

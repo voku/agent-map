@@ -32,6 +32,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The query planner tokenized with ASCII letter classes, which does not reject a
+  non-ASCII word but *truncates* it: "Berechtigungsanträge" reached the
+  structural channel as `Berechtigungsantr`, "Zugriffsprüfung" as `Zugriffspr`,
+  and "Größe" as `Gr` - short, capitalized, and therefore identifier-shaped, so
+  a mangled fragment was promoted to "the symbol you named". Letter and digit
+  classes are now Unicode throughout the planner, which also matches PHP, whose
+  identifiers may legally contain bytes above 0x7F.
 - `SearchIndexTest::testShortIdentifiersAndStopWordsInQueryPlannerAndSearchStore`
   asserted that `searchLexical('Accounting für D3?')` returns hits against a
   fixture containing only `RetryHandler` and `Mailer`, and failed since it was
