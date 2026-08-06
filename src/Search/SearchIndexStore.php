@@ -674,7 +674,7 @@ final class SearchIndexStore
         $quoted = [];
         foreach ($tokens as $token) {
             $token = trim($token);
-            if ($token === '' || mb_strlen($token) < 2 || in_array(mb_strtolower($token), QueryPlanner::STOP_WORDS, true)) {
+            if ($token === '' || mb_strlen($token) < 2 || StopWordIndex::contains($token)) {
                 continue;
             }
             $quoted[] = '"' . str_replace('"', '""', $token) . '"';

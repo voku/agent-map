@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.4.1 - 2026-08-06
+
+### Changed
+
+- Stop words now come from `voku/stop-words` at runtime instead of a 1 335-entry
+  copy in `QueryPlanner`. Of that inlined list, 1 324 entries were the package's
+  own English and German data; only 11 were genuinely additional code-domain
+  words (`class`, `method`, `function`, `file`, `code`, `use`, `used`, `handle`,
+  `handled`, `work`, `works`), and those are all that remain in source.
+- Measured before deciding: loading English and German costs ~2 ms once per
+  process and ~0.002 ms per later call, because the package already caches its
+  per-language data behind a `require` of a PHP array. There is nothing for a
+  disk cache to save, so none was added.
+- The lookup, not the loading, was the cost. `in_array()` over ~1 300 words is a
+  linear scan run on every token of every indexed chunk: 1.4M lookups took
+  4 227 ms that way against 459 ms through the new `StopWordIndex` hash map
+  (17.8 ms for the raw `isset()`, the remainder being the `mb_strtolower()` both
+  paths do).
+
+### Fixed
+
+- `SearchIndexTest::testShortIdentifiersAndStopWordsInQueryPlannerAndSearchStore`
+  asserted that `searchLexical('Accounting für D3?')` returns hits against a
+  fixture containing only `RetryHandler` and `Mailer`, and failed since it was
+  added. It now asserts what the design actually promises: a query the corpus
+  cannot answer returns nothing, and a German stop word inside a query does not
+  change which chunks rank.
+
 ## 0.4.0 - 2026-08-05
 
 ### Added

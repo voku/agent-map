@@ -248,10 +248,23 @@ final class SearchIndexTest extends TestCase
         $stopWords = QueryPlanner::getStopWords();
         self::assertContains('für', $stopWords);
         self::assertContains('about', $stopWords);
+        // Domain words that no natural-language list carries, but that identify nothing in code.
+        self::assertContains('class', $stopWords);
+        self::assertContains('method', $stopWords);
 
         $store = $this->store();
-        $lexicalHits = $store->searchLexical('Accounting für D3?', 5);
-        self::assertNotEmpty($lexicalHits);
+
+        // The German stop word must not decide the result: the same query with and without it has to
+        // rank the same chunks, which is what dropping it before the FTS MATCH is for.
+        self::assertSame(
+            array_column($store->searchLexical('retry handler attempts', 5), 'chunk_id'),
+            array_column($store->searchLexical('retry für handler attempts', 5), 'chunk_id'),
+        );
+        self::assertNotEmpty($store->searchLexical('retry handler attempts', 5));
+
+        // "No answer" has to stay reachable: this corpus knows nothing about accounting, and a
+        // lexical channel that still returned something would be inventing a lead.
+        self::assertSame([], $store->searchLexical('Accounting für D3?', 5));
     }
 
     private function index(): AgentMapIndex
