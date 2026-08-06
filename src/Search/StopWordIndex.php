@@ -25,6 +25,15 @@ final class StopWordIndex
      * Words that are stop words for code search but are not in any natural-language list: an agent
      * asking "which class handles this" means none of them as an identifier.
      *
+     * The German half matters more than it looks: German capitalizes every noun, and the structural
+     * channel treats a capitalized word with lowercase letters as identifier-shaped. Without these,
+     * "Welche Methode schreibt X" claims `Methode` is a symbol the user named.
+     *
+     * The trade is deliberate and one-directional: a project that really does own a class named
+     * `File` or `Datei` loses it from the *structural* channel only - the lexical and semantic
+     * channels still match it, and a query naming it as `Namespace\File` or `File::method` is
+     * identifier-shaped regardless.
+     *
      * @var list<string>
      */
     private const EXTRA_STOP_WORDS = [
@@ -39,6 +48,10 @@ final class StopWordIndex
         'used',
         'work',
         'works',
+        'datei',
+        'funktion',
+        'klasse',
+        'methode',
     ];
 
     /** @var array<string, array<string, true>> */

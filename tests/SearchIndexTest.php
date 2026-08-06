@@ -252,6 +252,18 @@ final class SearchIndexTest extends TestCase
         self::assertContains('class', $stopWords);
         self::assertContains('method', $stopWords);
 
+        // German capitalizes every noun, so a code-domain noun in a German question is
+        // identifier-shaped by every structural rule there is. It still must not become one.
+        self::assertSame(
+            ['Gruppenmitgliedschaft'],
+            $planner->plan('Welche Methode schreibt die Gruppenmitgliedschaft')['structural_terms'],
+        );
+        self::assertSame(['Retry'], $planner->plan('Welche Klasse behandelt das Retry')['structural_terms']);
+        self::assertSame(
+            ['D3', 'User'],
+            $planner->plan('Welche Funktion liest den D3 User')['structural_terms'],
+        );
+
         $store = $this->store();
 
         // The German stop word must not decide the result: the same query with and without it has to

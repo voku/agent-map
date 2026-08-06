@@ -23,6 +23,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (17.8 ms for the raw `isset()`, the remainder being the `mb_strtolower()` both
   paths do).
 
+- The 11 code-domain words that are *not* in `voku/stop-words` (`class`, `method`,
+  `function`, `file`, `code`, `use`, `used`, `handle`, `handled`, `work`, `works`)
+  gained their four German counterparts (`klasse`, `methode`, `funktion`,
+  `datei`). German capitalizes every noun, so a code-domain noun in a German
+  question is identifier-shaped by every structural rule there is: before this,
+  "Welche Methode schreibt X" claimed `Methode` was a symbol the user had named.
+
 ### Fixed
 
 - `SearchIndexTest::testShortIdentifiersAndStopWordsInQueryPlannerAndSearchStore`
