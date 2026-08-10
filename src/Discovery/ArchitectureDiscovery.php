@@ -141,7 +141,7 @@ final readonly class ArchitectureDiscovery
      * projects where every PHP file lives in the same directory.
      *
      * @param list<RelationEntry> $relations
-     * @param self::COUPLING_* $dimension
+     * @param 'namespace'|'directory'|'file' $dimension
      * @return list<array{from: string, to: string, links: int, uncertain_links: int}>
      */
     private function coupling(GraphNodeCatalog $catalog, array $relations, int $limit, string $dimension): array
@@ -206,16 +206,13 @@ final readonly class ArchitectureDiscovery
         return array_slice($rows, 0, $limit);
     }
 
-    /**
-     * @param self::COUPLING_* $dimension
-     */
+    /** @param 'namespace'|'directory'|'file' $dimension */
     private function couplingRegion(GraphNode $node, string $dimension): ?string
     {
         return match ($dimension) {
             self::COUPLING_NAMESPACE => $this->namespaceOf($node),
             self::COUPLING_DIRECTORY => $this->directoryOf($node),
             self::COUPLING_FILE => $node->file,
-            default => throw new InvalidArgumentException('Unknown coupling dimension: ' . $dimension),
         };
     }
 
