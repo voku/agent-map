@@ -7,6 +7,7 @@ namespace voku\AgentMap\Tests;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use voku\AgentMap\Discovery\ImpactAnalyzer;
+use voku\AgentMap\Discovery\ImpactNode;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\MethodEntry;
@@ -23,9 +24,10 @@ final class ImpactAnalyzerTest extends TestCase
         self::assertSame([
             ['method:Demo\\Implementation::run', 1, false],
             ['method:Demo\\Caller::call', 2, false],
+            ['method:Demo\\MaybeCaller::call', 2, true],
             ['method:Demo\\Top::execute', 3, false],
         ], array_map(
-            static fn ($impact): array => [$impact->node->id, $impact->depth, $impact->uncertain],
+            static fn (ImpactNode $impact): array => [$impact->node->id, $impact->depth, $impact->uncertain],
             $report->impacts,
         ));
         self::assertFalse($report->truncated);
@@ -38,7 +40,7 @@ final class ImpactAnalyzerTest extends TestCase
 
         $uncertain = array_values(array_filter(
             $report->impacts,
-            static fn ($impact): bool => $impact->node->id === 'method:Demo\\MaybeCaller::call',
+            static fn (ImpactNode $impact): bool => $impact->node->id === 'method:Demo\\MaybeCaller::call',
         ));
 
         self::assertCount(1, $uncertain);
