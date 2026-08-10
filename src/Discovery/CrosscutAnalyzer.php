@@ -81,7 +81,10 @@ final readonly class CrosscutAnalyzer
         return new WeightedFileGraph($graph->files, $adjacency, []);
     }
 
-    /** @param array<string, CrosscutEvidence> $evidence @return list<array{file: string, score: float, signals: list<string>}> */
+    /**
+     * @param array<string, CrosscutEvidence> $evidence
+     * @return list<array{file: string, score: float, signals: list<string>}>
+     */
     public function reported(array $evidence): array
     {
         $rows = [];
