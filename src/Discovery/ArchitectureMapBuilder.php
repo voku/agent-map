@@ -136,17 +136,41 @@ final readonly class ArchitectureMapBuilder
         foreach ($drafts as $id => $draft) {
             $groups[$draft->level . "\0" . strtolower($draft->label)][] = $id;
         }
+
+        $used = [];
+        foreach ($groups as $key => $ids) {
+            if (count($ids) === 1) {
+                $used[$key] = true;
+            }
+        }
+
         foreach ($groups as $ids) {
             if (count($ids) < 2) {
                 continue;
             }
+            sort($ids, SORT_STRING);
             foreach ($ids as $id) {
                 $draft = $drafts[$id];
                 $directory = basename(dirname(str_replace('\\', '/', $draft->files[0])));
+                $hash = hash('sha256', implode("\0", $draft->files));
                 $suffix = !$this->labeler->isNoise($directory) && strcasecmp($directory, $draft->label) !== 0
                     ? $this->labeler->humanize($directory)
-                    : substr(hash('sha256', implode("\0", $draft->files)), 0, 6);
-                $drafts[$id] = $draft->withLabel($draft->label . ' / ' . $suffix);
+                    : substr($hash, 0, 6);
+                $candidate = $draft->label . ' / ' . $suffix;
+                $candidateKey = $draft->level . "\0" . strtolower($candidate);
+                if (isset($used[$candidateKey])) {
+                    $candidate .= ' ' . substr($hash, 0, 6);
+                    $candidateKey = $draft->level . "\0" . strtolower($candidate);
+                }
+                $counter = 2;
+                while (isset($used[$candidateKey])) {
+                    $candidate = $draft->label . ' / ' . $suffix . ' ' . substr($hash, 0, 6) . '-' . $counter;
+                    $candidateKey = $draft->level . "\0" . strtolower($candidate);
+                    ++$counter;
+                }
+
+                $used[$candidateKey] = true;
+                $drafts[$id] = $draft->withLabel($candidate);
             }
         }
 
