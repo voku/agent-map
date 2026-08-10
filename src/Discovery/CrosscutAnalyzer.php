@@ -8,6 +8,7 @@ final readonly class CrosscutAnalyzer
 {
     private const PENALTY = 0.4;
     private const REPORT_THRESHOLD = 0.4;
+    private const DEGREE_OUTLIER_FACTOR = 1.5;
 
     /** @var list<string> */
     private const TOKENS = [
@@ -26,6 +27,10 @@ final readonly class CrosscutAnalyzer
         sort($sortedDegrees, SORT_NUMERIC);
         $thresholdIndex = max(0, (int) floor((count($sortedDegrees) - 1) * 0.9));
         $degreeThreshold = $sortedDegrees[$thresholdIndex] ?? 0.0;
+        $medianDegree = $sortedDegrees === []
+            ? 0.0
+            : $sortedDegrees[intdiv(count($sortedDegrees) - 1, 2)];
+        $distinctiveThreshold = max($degreeThreshold, $medianDegree * self::DEGREE_OUTLIER_FACTOR);
         $maximumDegree = $sortedDegrees === [] ? 0.0 : max($sortedDegrees);
 
         $result = [];
@@ -33,7 +38,10 @@ final readonly class CrosscutAnalyzer
             $signals = [];
             $degree = $degrees[$file];
             $degreeSignal = 0.0;
-            if ($maximumDegree > 0.0 && $degree >= $degreeThreshold && $degree > 0.0) {
+            if ($maximumDegree > 0.0
+                && $degree >= $distinctiveThreshold
+                && $degree > $medianDegree
+            ) {
                 $degreeSignal = $degree / $maximumDegree;
                 $signals[] = 'high_degree';
             }
