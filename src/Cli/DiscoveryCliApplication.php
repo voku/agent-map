@@ -100,7 +100,7 @@ TEXT;
             $payload = [
                 'type' => 'discover_region',
                 'map_digest' => $report->mapDigest,
-                'path' => $this->architecturePathPayload($report->architecture, $region->files[0]),
+                'path' => $this->architecturePathPayload($report->architecture, $region),
                 'region' => $region->toArray(),
             ];
             echo $this->render(
@@ -197,16 +197,16 @@ TEXT;
     }
 
     /** @return list<array{id: string, label: string, kind: string, level: int}> */
-    private function architecturePathPayload(ArchitectureMapReport $architecture, string $file): array
+    private function architecturePathPayload(ArchitectureMapReport $architecture, ArchitectureRegion $region): array
     {
         return array_map(
-            static fn (ArchitectureRegion $region): array => [
-                'id' => $region->id,
-                'label' => $region->label,
-                'kind' => $region->kind,
-                'level' => $region->level,
+            static fn (ArchitectureRegion $item): array => [
+                'id' => $item->id,
+                'label' => $item->label,
+                'kind' => $item->kind,
+                'level' => $item->level,
             ],
-            array_reverse($architecture->pathForFile($file)),
+            array_reverse($architecture->pathForRegion($region)),
         );
     }
 
