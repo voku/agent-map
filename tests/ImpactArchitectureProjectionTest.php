@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Tests;
 
 use PHPUnit\Framework\TestCase;
-use voku\AgentMap\Discovery\ImpactAnalyzer;
+use voku\AgentMap\Discovery\ArchitectureImpactAnalyzer;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\MethodEntry;
@@ -65,7 +65,7 @@ final class ImpactArchitectureProjectionTest extends TestCase
             $relations,
         );
 
-        $report = (new ImpactAnalyzer())->forMethod($map, 'Domain\\Service::run', 2, 20);
+        $report = (new ArchitectureImpactAnalyzer())->forMethod($map, 'Domain\\Service::run', 2, 20);
 
         self::assertContains('Domain', $report->targetArchitecturePath);
         self::assertNotEmpty($report->regionBuckets);
