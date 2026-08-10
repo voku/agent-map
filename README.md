@@ -10,6 +10,7 @@ Deterministic PHP repository maps for coding-agent context selection.
 The results are reconciled into one map that can answer focused questions such as:
 
 ```bash
+vendor/bin/agent-map discover
 vendor/bin/agent-map callers 'App\Service\UserService::save'
 vendor/bin/agent-map callees 'App\Service\UserService::save'
 vendor/bin/agent-map context 'App\Service\UserService::save' --format=toon
@@ -195,6 +196,22 @@ App\Foo::bar
 ```
 
 A short class name that matches multiple methods fails and lists the fully qualified candidates. Editing the wrong `Foo` faster was not a requested feature.
+
+### Discover architecture
+
+```bash
+vendor/bin/agent-map discover
+vendor/bin/agent-map rank --by=dependents --top=20
+vendor/bin/agent-map impact 'App\Service\UserService::save' --depth=3
+```
+
+`discover` derives evidence-backed repository orientation without requiring a search query. It reports entrypoint candidates, call hubs, orchestrators, type hubs, relation quality, and coupling across namespaces, directories, and files.
+
+Namespaces are deliberately not the only architecture signal. PHP allows projects without namespaces, so path and file coupling remain available for flat and legacy codebases.
+
+`rank` counts unique one-hop graph neighbours. `impact` performs a bounded, cycle-safe reverse traversal and preserves relation evidence, path nodes, truncation, and `dynamic` / `multiple_targets` uncertainty instead of collapsing them into an opaque score.
+
+See [Architecture discovery](docs/architecture-discovery.md) for the complete command, semantics, legacy-PHP, freshness, and library-API documentation.
 
 ### Generate edit context
 

@@ -4,6 +4,60 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.5.0 - 2026-08-10
+
+### Added
+
+- Added evidence-backed architecture discovery with `agent-map discover`. It derives
+  entrypoint candidates, call hubs, orchestrators, type dependency hubs, namespace
+  coupling, directory coupling, file coupling, and relation-quality counts directly
+  from the persisted map without requiring an LLM or a search query.
+- Added `agent-map rank` with deterministic one-hop graph metrics for `dependents`,
+  `callers`, `dependencies`, `callees`, and `members`. Scores count unique neighbours
+  rather than raw relation rows, so repeated call sites do not inflate importance.
+- Added bounded reverse dependency analysis with `agent-map impact Class::method`.
+  Results retain relation evidence, `via_node_ids`, depth, truncation state, and
+  uncertainty instead of returning an opaque blast-radius score.
+- Added path-based architecture signals independently from namespaces. Namespace-less
+  and legacy PHP projects can now derive meaningful directory and file coupling from
+  repository-relative source paths instead of collapsing into one global namespace.
+- Added indexed graph adjacency for discovery/ranking/traversal so graph-oriented reads
+  operate in O(V+E) preparation rather than repeatedly scanning all relations per node.
+- Added dedicated architecture-discovery documentation in
+  `docs/architecture-discovery.md`.
+
+### Changed
+
+- `dynamic` and `multiple_targets` relations remain explicit uncertainty throughout
+  impact traversal. Uncertainty propagates transitively through a path; when the same
+  node is independently reachable through a fully resolved path, that certain path is
+  sufficient evidence for the impact while the ambiguous path remains represented by
+  its evidence.
+- Architecture discovery treats namespaces as one signal rather than the architecture
+  model. Namespace, directory, and file coupling are reported independently.
+- Discovery commands reject stale maps instead of combining current source with old
+  graph evidence.
+- Repository paths are normalized before directory grouping so path-based discovery is
+  not dependent on the host operating system's separator convention.
+
+### Fixed
+
+- Corrected an early graph-ranking implementation that would have repeatedly scanned
+  the complete relation set for every candidate on large repositories.
+- Corrected impact semantics so descendants of uncertain edges cannot silently become
+  certain again merely because they are more than one hop away.
+- Corrected impact aggregation so an additional uncertain path does not downgrade a
+  node that is also independently proven by a certain path.
+
+### Validation
+
+- Extended the existing package self-dogfood test so `agent-map` builds a real map of
+  its own builder/test slice and then runs `ArchitectureDiscovery` against it.
+- Added focused tests for graph ranking, bounded impact traversal, transitive
+  uncertainty, certain-vs-uncertain alternate paths, architecture discovery, and
+  namespace-less PHP structure.
+- `composer ci` is green on PHP 8.2, 8.3, 8.4, and 8.5.
+
 ## 0.4.1 - 2026-08-06
 
 ### Changed
