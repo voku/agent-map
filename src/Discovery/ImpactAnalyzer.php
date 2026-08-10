@@ -17,7 +17,8 @@ final readonly class ImpactAnalyzer
      *
      * Traversal follows dependency edges in reverse. It is deliberately bounded,
      * cycle-safe and evidence preserving. Dynamic or multiple-target relations are
-     * not discarded; affected nodes reached through them are marked uncertain.
+     * not discarded; uncertainty propagates through the whole path until a certain
+     * path to the same node proves the impact independently.
      */
     public function forMethod(
         AgentMapIndex $map,
@@ -57,11 +58,21 @@ final readonly class ImpactAnalyzer
             throw new RuntimeException('Impact target is not an indexed repository node: ' . $targetId);
         }
 
-        /** @var SplQueue<array{id: string, depth: int}> $queue */
+        /** @var SplQueue<array{id: string, depth: int, uncertain: bool}> $queue */
         $queue = new SplQueue();
-        $queue->enqueue(['id' => $targetId, 'depth' => 0]);
-        $expanded = [$targetId => true];
-        /** @var array<string, array{node: GraphNode, depth: int, relation_kinds: array<string, true>, evidence_ids: array<string, true>, uncertain: bool}> $found */
+        $queue->enqueue(['id' => $targetId, 'depth' => 0, 'uncertain' => false]);
+        $queuedStates = [$this->stateKey($targetId, false) => true];
+        /**
+         * @var array<string, array{
+         *   node: GraphNode,
+         *   depth: int,
+         *   relation_kinds: array<string, true>,
+         *   evidence_ids: array<string, true>,
+         *   via_node_ids: array<string, true>,
+         *   has_certain_path: bool,
+         *   has_uncertain_path: bool
+         * }> $found
+         */
         $found = [];
         $truncated = false;
 
@@ -82,6 +93,7 @@ final readonly class ImpactAnalyzer
                 }
 
                 $depth = $current['depth'] + 1;
+                $pathUncertain = $current['uncertain'] || $this->isUncertain($relation);
                 if (!isset($found[$node->id])) {
                     if (count($found) >= $maximumNodes) {
                         $truncated = true;
@@ -92,18 +104,30 @@ final readonly class ImpactAnalyzer
                         'depth' => $depth,
                         'relation_kinds' => [],
                         'evidence_ids' => [],
-                        'uncertain' => false,
+                        'via_node_ids' => [],
+                        'has_certain_path' => false,
+                        'has_uncertain_path' => false,
                     ];
                 }
 
                 $found[$node->id]['depth'] = min($found[$node->id]['depth'], $depth);
                 $found[$node->id]['relation_kinds'][$relation->kind] = true;
                 $found[$node->id]['evidence_ids'][$relation->id] = true;
-                $found[$node->id]['uncertain'] = $found[$node->id]['uncertain'] || $this->isUncertain($relation);
+                $found[$node->id]['via_node_ids'][$current['id']] = true;
+                if ($pathUncertain) {
+                    $found[$node->id]['has_uncertain_path'] = true;
+                } else {
+                    $found[$node->id]['has_certain_path'] = true;
+                }
 
-                if (!isset($expanded[$node->id]) && $depth < $maximumDepth) {
-                    $expanded[$node->id] = true;
-                    $queue->enqueue(['id' => $node->id, 'depth' => $depth]);
+                $stateKey = $this->stateKey($node->id, $pathUncertain);
+                if (!isset($queuedStates[$stateKey]) && $depth < $maximumDepth) {
+                    $queuedStates[$stateKey] = true;
+                    $queue->enqueue([
+                        'id' => $node->id,
+                        'depth' => $depth,
+                        'uncertain' => $pathUncertain,
+                    ]);
                 }
             }
         }
@@ -112,16 +136,20 @@ final readonly class ImpactAnalyzer
         foreach ($found as $entry) {
             $relationKinds = array_keys($entry['relation_kinds']);
             $evidenceIds = array_keys($entry['evidence_ids']);
+            $viaNodeIds = array_keys($entry['via_node_ids']);
             sort($relationKinds, SORT_STRING);
             sort($evidenceIds, SORT_STRING);
+            sort($viaNodeIds, SORT_STRING);
             /** @var non-empty-list<string> $relationKinds */
             /** @var non-empty-list<string> $evidenceIds */
+            /** @var non-empty-list<string> $viaNodeIds */
             $impacts[] = new ImpactNode(
                 node: $entry['node'],
                 depth: $entry['depth'],
                 relationKinds: $relationKinds,
                 evidenceIds: $evidenceIds,
-                uncertain: $entry['uncertain'],
+                viaNodeIds: $viaNodeIds,
+                uncertain: !$entry['has_certain_path'],
             );
         }
 
@@ -139,6 +167,11 @@ final readonly class ImpactAnalyzer
             truncated: $truncated,
             mapDigest: $map->mapDigest(),
         );
+    }
+
+    private function stateKey(string $nodeId, bool $uncertain): string
+    {
+        return $nodeId . "\0" . ($uncertain ? 'uncertain' : 'certain');
     }
 
     private function canPropagateImpact(RelationEntry $relation): bool
