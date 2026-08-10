@@ -127,6 +127,9 @@ final readonly class ArchitectureMapBuilder
     }
 
     /**
+     * Region labels are a public drill-down coordinate, so they must be unique across the whole
+     * derived hierarchy rather than merely inside one level.
+     *
      * @param array<string, RegionDraft> $drafts
      * @return array<string, RegionDraft>
      */
@@ -134,7 +137,7 @@ final readonly class ArchitectureMapBuilder
     {
         $groups = [];
         foreach ($drafts as $id => $draft) {
-            $groups[$draft->level . "\0" . strtolower($draft->label)][] = $id;
+            $groups[strtolower($draft->label)][] = $id;
         }
 
         $used = [];
@@ -157,15 +160,15 @@ final readonly class ArchitectureMapBuilder
                     ? $this->labeler->humanize($directory)
                     : substr($hash, 0, 6);
                 $candidate = $draft->label . ' / ' . $suffix;
-                $candidateKey = $draft->level . "\0" . strtolower($candidate);
+                $candidateKey = strtolower($candidate);
                 if (isset($used[$candidateKey])) {
                     $candidate .= ' ' . substr($hash, 0, 6);
-                    $candidateKey = $draft->level . "\0" . strtolower($candidate);
+                    $candidateKey = strtolower($candidate);
                 }
                 $counter = 2;
                 while (isset($used[$candidateKey])) {
                     $candidate = $draft->label . ' / ' . $suffix . ' ' . substr($hash, 0, 6) . '-' . $counter;
-                    $candidateKey = $draft->level . "\0" . strtolower($candidate);
+                    $candidateKey = strtolower($candidate);
                     ++$counter;
                 }
 
