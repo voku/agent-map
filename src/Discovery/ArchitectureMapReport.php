@@ -57,4 +57,26 @@ final readonly class ArchitectureMapReport
 
         return $matches[0] ?? null;
     }
+
+    /** @return list<ArchitectureRegion> Finest region first, repository root last. */
+    public function pathForFile(string $file): array
+    {
+        $region = $this->regionForFile($file);
+        if ($region === null) {
+            return [];
+        }
+
+        $byId = [];
+        foreach ($this->regions as $candidate) {
+            $byId[$candidate->id] = $candidate;
+        }
+
+        $path = [$region];
+        while ($region->parentId !== null && isset($byId[$region->parentId])) {
+            $region = $byId[$region->parentId];
+            $path[] = $region;
+        }
+
+        return $path;
+    }
 }
