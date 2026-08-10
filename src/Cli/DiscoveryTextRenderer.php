@@ -24,7 +24,9 @@ final readonly class DiscoveryTextRenderer
             $report->quality['uncertain_relations'],
             $report->quality['diagnostics'],
         );
-        $out .= $this->architecture($report->architecture);
+        if ($report->architecture !== null) {
+            $out .= $this->architecture($report->architecture);
+        }
         $out .= $this->rankedSection('Entrypoint candidates', $report->entrypointCandidates);
         $out .= $this->rankedSection('Call hubs', $report->callHubs);
         $out .= $this->rankedSection('Orchestrators', $report->orchestrators);
@@ -39,7 +41,7 @@ final readonly class DiscoveryTextRenderer
     public function region(ArchitectureRegion $region, ArchitectureMapReport $architecture, int $limit): string
     {
         $out = sprintf("Region: %s (%s, level %d)\n", $region->label, $region->kind, $region->level);
-        $path = $architecture->pathForFile($region->files[0]);
+        $path = $architecture->pathForRegion($region);
         $out .= 'Path: ' . implode(' > ', array_map(
             static fn (ArchitectureRegion $item): string => $item->label,
             array_reverse($path),
@@ -96,13 +98,15 @@ final readonly class DiscoveryTextRenderer
         $out .= "Nodes:\n";
         foreach ($impact->impacts as $node) {
             $out .= sprintf(
-                "  d=%d %s%s [%s] %s:%d\n",
+                "  d=%d %s%s [%s] %s:%d evidence=%s via=%s\n",
                 $node->depth,
                 $node->uncertain ? '? ' : '  ',
                 $node->node->name,
                 implode(',', $node->relationKinds),
                 $node->node->file,
                 $node->node->lineStart,
+                implode(',', $node->evidenceIds),
+                implode(',', $node->viaNodeIds),
             );
         }
         if ($impact->truncated) {
