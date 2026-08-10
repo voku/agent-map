@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Discovery;
 
 use voku\AgentMap\Index\AgentMapIndex;
+use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\RelationEntry;
 
 final readonly class FileCouplingGraphBuilder
@@ -28,7 +29,7 @@ final readonly class FileCouplingGraphBuilder
     public function build(AgentMapIndex $map): WeightedFileGraph
     {
         $catalog = new GraphNodeCatalog($map);
-        $files = array_map(static fn ($file): string => $file->path, $map->files);
+        $files = array_map(static fn (FileEntry $file): string => $file->path, $map->files);
         sort($files, SORT_STRING);
         $fileSet = array_fill_keys($files, true);
 
@@ -41,7 +42,7 @@ final readonly class FileCouplingGraphBuilder
             }
 
             $source = $catalog->find($relation->sourceId);
-            $sourceFile = $source?->file ?? $relation->file;
+            $sourceFile = $source === null ? $relation->file : $source->file;
             if (!isset($fileSet[$sourceFile])) {
                 continue;
             }
@@ -98,8 +99,8 @@ final readonly class FileCouplingGraphBuilder
 
     /**
      * Directory proximity is deliberately weaker than semantic evidence. Small directories form
-     * a clique, matching the useful part of Ix's structural prior. Large legacy directories are
-     * connected only to nearby sorted siblings so one flat folder cannot create O(n²) edges.
+     * a clique; large legacy directories are connected only to nearby sorted siblings so one flat
+     * folder cannot create O(n²) structural edges.
      *
      * @param list<string> $files
      * @param array<string, array<string, float>> $adjacency
@@ -107,6 +108,7 @@ final readonly class FileCouplingGraphBuilder
      */
     private function addBoundedPathPrior(array $files, array &$adjacency, array &$signalsByPair): void
     {
+        /** @var array<string, list<string>> $byDirectory */
         $byDirectory = [];
         foreach ($files as $file) {
             $directory = dirname(str_replace('\\', '/', $file));
