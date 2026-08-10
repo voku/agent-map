@@ -9,6 +9,8 @@ use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 use voku\AgentMap\Discovery\ArchitectureDiscovery;
+use voku\AgentMap\Discovery\ArchitectureMapReport;
+use voku\AgentMap\Discovery\ArchitectureRegion;
 use voku\AgentMap\Discovery\GraphMetric;
 use voku\AgentMap\Discovery\GraphRanker;
 use voku\AgentMap\Discovery\ImpactAnalyzer;
@@ -44,7 +46,7 @@ final readonly class DiscoveryCliApplication
         return <<<'TEXT'
 
 Architecture discovery:
-  discover   Derive evidence-backed PHP architecture starting points from the map
+  discover   Infer PHP architecture regions and evidence-backed starting points
   rank       Rank nodes by one-hop graph importance
   impact     Trace bounded reverse impact for a method
 
@@ -261,6 +263,7 @@ TEXT;
             $report->quality['uncertain_relations'],
             $report->quality['diagnostics'],
         );
+        $out .= $this->architectureSection($report->architecture);
         $out .= $this->rankedSection('Entrypoint candidates', $report->entrypointCandidates);
         $out .= $this->rankedSection('Call hubs', $report->callHubs);
         $out .= $this->rankedSection('Orchestrators', $report->orchestrators);
@@ -268,6 +271,73 @@ TEXT;
         $out .= $this->couplingSection('Namespace coupling', $report->namespaceCoupling);
         $out .= $this->couplingSection('Directory coupling', $report->directoryCoupling);
         $out .= $this->couplingSection('File coupling', $report->fileCoupling);
+
+        return $out;
+    }
+
+    private function architectureSection(ArchitectureMapReport $architecture): string
+    {
+        $out = sprintf(
+            "Architecture regions: %d region(s), %d level(s)\n",
+            count($architecture->regions),
+            $architecture->levels(),
+        );
+        if ($architecture->regions === []) {
+            $out .= '  none inferred';
+            if ($architecture->unassignedFiles !== []) {
+                $out .= sprintf(' (%d unassigned file(s))', count($architecture->unassignedFiles));
+            }
+            return $out . "\n\n";
+        }
+
+        $byId = [];
+        foreach ($architecture->regions as $region) {
+            $byId[$region->id] = $region;
+        }
+        foreach ($architecture->rootRegionIds as $rootId) {
+            $region = $byId[$rootId] ?? null;
+            if ($region instanceof ArchitectureRegion) {
+                $out .= $this->architectureRegionText($region, $byId, 1);
+            }
+        }
+        if ($architecture->crosscutFiles !== []) {
+            $out .= '  cross-cutting: ' . implode(', ', array_map(
+                static fn (array $row): string => $row['file'] . '=' . number_format($row['score'], 2, '.', ''),
+                array_slice($architecture->crosscutFiles, 0, 5),
+            )) . "\n";
+        }
+        if ($architecture->unassignedFiles !== []) {
+            $out .= sprintf('  unassigned: %d file(s)\n', count($architecture->unassignedFiles));
+        }
+
+        return $out . "\n";
+    }
+
+    /** @param array<string, ArchitectureRegion> $byId */
+    private function architectureRegionText(ArchitectureRegion $region, array $byId, int $depth): string
+    {
+        $evidence = sprintf(
+            'boundary=%.2f ns=%.2f dir=%.2f',
+            $region->boundaryStrength,
+            $region->namespaceAgreement,
+            $region->directoryAgreement,
+        );
+        $signals = $region->dominantSignals === [] ? '' : ' signals=' . implode(',', $region->dominantSignals);
+        $out = sprintf(
+            "%s%s %s [%df] %s%s\n",
+            str_repeat('  ', $depth),
+            strtoupper($region->kind),
+            $region->label,
+            count($region->files),
+            $evidence,
+            $signals,
+        );
+        foreach ($region->childIds as $childId) {
+            $child = $byId[$childId] ?? null;
+            if ($child instanceof ArchitectureRegion) {
+                $out .= $this->architectureRegionText($child, $byId, $depth + 1);
+            }
+        }
 
         return $out;
     }
@@ -290,9 +360,7 @@ TEXT;
         return $out . "\n";
     }
 
-    /**
-     * @param list<array{from: string, to: string, links: int, uncertain_links: int}> $rows
-     */
+    /** @param list<array{from: string, to: string, links: int, uncertain_links: int}> $rows */
     private function couplingSection(string $title, array $rows): string
     {
         $out = $title . ":\n";
@@ -343,8 +411,9 @@ TEXT;
             'discover' => <<<'TEXT'
 Usage: agent-map discover [--index PATH] [--limit N] [--format text|json|markdown|toon]
 
-Derive architecture orientation without a search query: entrypoint candidates,
+Infer deterministic PHP architecture regions first, then report entrypoint candidates,
 call hubs, orchestrators, type hubs, namespace/directory/file coupling and relation quality.
+Region evidence exposes boundaries and structural agreement instead of an opaque confidence score.
 
 TEXT,
             'rank' => <<<'TEXT'
