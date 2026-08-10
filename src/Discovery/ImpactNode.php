@@ -9,12 +9,14 @@ final readonly class ImpactNode
     /**
      * @param non-empty-list<string> $relationKinds
      * @param non-empty-list<string> $evidenceIds
+     * @param non-empty-list<string> $viaNodeIds
      */
     public function __construct(
         public GraphNode $node,
         public int $depth,
         public array $relationKinds,
         public array $evidenceIds,
+        public array $viaNodeIds,
         public bool $uncertain,
     ) {
     }
@@ -25,6 +27,7 @@ final readonly class ImpactNode
      *   depth: int,
      *   relation_kinds: non-empty-list<string>,
      *   evidence_ids: non-empty-list<string>,
+     *   via_node_ids: non-empty-list<string>,
      *   uncertain: bool
      * }
      */
@@ -35,6 +38,7 @@ final readonly class ImpactNode
             'depth' => $this->depth,
             'relation_kinds' => $this->relationKinds,
             'evidence_ids' => $this->evidenceIds,
+            'via_node_ids' => $this->viaNodeIds,
             'uncertain' => $this->uncertain,
         ];
     }
