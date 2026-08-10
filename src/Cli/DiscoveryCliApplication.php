@@ -10,6 +10,8 @@ use RuntimeException;
 use Throwable;
 use voku\AgentMap\Discovery\ArchitectureDiscovery;
 use voku\AgentMap\Discovery\ArchitectureImpactAnalyzer;
+use voku\AgentMap\Discovery\ArchitectureMapReport;
+use voku\AgentMap\Discovery\ArchitectureRegion;
 use voku\AgentMap\Discovery\GraphMetric;
 use voku\AgentMap\Discovery\GraphRanker;
 use voku\AgentMap\Discovery\RankedNode;
@@ -98,6 +100,7 @@ TEXT;
             $payload = [
                 'type' => 'discover_region',
                 'map_digest' => $report->mapDigest,
+                'path' => $this->architecturePathPayload($report->architecture, $region->files[0]),
                 'region' => $region->toArray(),
             ];
             echo $this->render(
@@ -191,6 +194,20 @@ TEXT;
         }
 
         return $map;
+    }
+
+    /** @return list<array{id: string, label: string, kind: string, level: int}> */
+    private function architecturePathPayload(ArchitectureMapReport $architecture, string $file): array
+    {
+        return array_map(
+            static fn (ArchitectureRegion $region): array => [
+                'id' => $region->id,
+                'label' => $region->label,
+                'kind' => $region->kind,
+                'level' => $region->level,
+            ],
+            array_reverse($architecture->pathForFile($file)),
+        );
     }
 
     /**
