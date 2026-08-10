@@ -9,9 +9,7 @@ final readonly class DeterministicCommunityDetector
     private const MAX_PASSES = 30;
     private const MIN_GAIN = 0.000001;
 
-    /**
-     * @return list<CommunityPartition> Finest partition first.
-     */
+    /** @return list<CommunityPartition> Finest partition first. */
     public function cluster(WeightedFileGraph $graph, int $maximumLevels = 4): array
     {
         if ($maximumLevels < 1 || count($graph->files) < 2 || $graph->totalWeight() <= 0.0) {
@@ -19,6 +17,7 @@ final readonly class DeterministicCommunityDetector
         }
 
         $resolution = $this->resolutionForFileCount(count($graph->files));
+        /** @var array<string, non-empty-list<string>> $expansion */
         $expansion = [];
         foreach ($graph->files as $file) {
             $expansion[$file] = [$file];
@@ -27,8 +26,7 @@ final readonly class DeterministicCommunityDetector
         $current = $graph;
         $levels = [];
         for ($level = 0; $level < $maximumLevels && count($current->files) > 1; ++$level) {
-            $assignment = $this->louvainPass($current, $resolution);
-            $assignment = $this->absorbSingletons($current, $assignment);
+            $assignment = $this->absorbSingletons($current, $this->louvainPass($current, $resolution));
             $projected = $this->project($assignment, $expansion);
 
             if (count($projected->communities) <= 1) {
@@ -123,14 +121,12 @@ final readonly class DeterministicCommunityDetector
     }
 
     /**
-     * A one-file community with real neighbours is usually graph noise, not architecture. Attach it
-     * to the community with the strongest evidence, with stable tie-breaking.
-     *
      * @param array<string, int> $assignment
      * @return array<string, int>
      */
     private function absorbSingletons(WeightedFileGraph $graph, array $assignment): array
     {
+        /** @var array<int, non-empty-list<string>> $members */
         $members = [];
         foreach ($assignment as $node => $community) {
             $members[$community][] = $node;
@@ -173,10 +169,11 @@ final readonly class DeterministicCommunityDetector
 
     /**
      * @param array<string, int> $assignment
-     * @param array<string, list<string>> $expansion
+     * @param array<string, non-empty-list<string>> $expansion
      */
     private function project(array $assignment, array $expansion): CommunityPartition
     {
+        /** @var array<int, non-empty-list<string>> $grouped */
         $grouped = [];
         foreach ($assignment as $node => $community) {
             foreach ($expansion[$node] ?? [$node] as $originalFile) {
@@ -184,13 +181,14 @@ final readonly class DeterministicCommunityDetector
             }
         }
 
+        /** @var list<non-empty-list<string>> $communities */
         $communities = [];
         foreach ($grouped as $files) {
             $files = array_values(array_unique($files));
             sort($files, SORT_STRING);
             $communities[] = $files;
         }
-        usort($communities, static fn (array $left, array $right): int => ($left[0] ?? '') <=> ($right[0] ?? ''));
+        usort($communities, static fn (array $left, array $right): int => $left[0] <=> $right[0]);
 
         $projectedAssignment = [];
         foreach ($communities as $community => $files) {
@@ -205,11 +203,12 @@ final readonly class DeterministicCommunityDetector
 
     /**
      * @param array<string, int> $assignment
-     * @param array<string, list<string>> $expansion
-     * @return array{WeightedFileGraph, array<string, list<string>>}
+     * @param array<string, non-empty-list<string>> $expansion
+     * @return array{WeightedFileGraph, array<string, non-empty-list<string>>}
      */
     private function coarsen(WeightedFileGraph $graph, array $assignment, array $expansion): array
     {
+        /** @var array<int, non-empty-list<string>> $membersByCommunity */
         $membersByCommunity = [];
         foreach ($assignment as $node => $community) {
             $membersByCommunity[$community][] = $node;
@@ -217,6 +216,7 @@ final readonly class DeterministicCommunityDetector
         ksort($membersByCommunity, SORT_NUMERIC);
 
         $superNodeByCommunity = [];
+        /** @var array<string, non-empty-list<string>> $newExpansion */
         $newExpansion = [];
         foreach ($membersByCommunity as $community => $members) {
             $originalFiles = [];
@@ -225,6 +225,7 @@ final readonly class DeterministicCommunityDetector
             }
             $originalFiles = array_values(array_unique($originalFiles));
             sort($originalFiles, SORT_STRING);
+            /** @var non-empty-list<string> $originalFiles */
             $superNode = 'community:' . hash('sha256', implode("\0", $originalFiles));
             $superNodeByCommunity[$community] = $superNode;
             $newExpansion[$superNode] = $originalFiles;
@@ -260,9 +261,13 @@ final readonly class DeterministicCommunityDetector
         return [new WeightedFileGraph($newFiles, $newAdjacency, []), $newExpansion];
     }
 
-    /** @param array<string, int> $assignment @return array<string, int> */
+    /**
+     * @param array<string, int> $assignment
+     * @return array<string, int>
+     */
     private function denseAssignment(array $assignment): array
     {
+        /** @var array<int, non-empty-list<string>> $members */
         $members = [];
         foreach ($assignment as $node => $community) {
             $members[$community][] = $node;
@@ -271,7 +276,7 @@ final readonly class DeterministicCommunityDetector
             sort($nodes, SORT_STRING);
         }
         unset($nodes);
-        uasort($members, static fn (array $left, array $right): int => ($left[0] ?? '') <=> ($right[0] ?? ''));
+        uasort($members, static fn (array $left, array $right): int => $left[0] <=> $right[0]);
 
         $reindex = [];
         foreach (array_keys($members) as $dense => $oldCommunity) {
