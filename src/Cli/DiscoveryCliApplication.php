@@ -15,6 +15,8 @@ use voku\AgentMap\Discovery\GraphMetric;
 use voku\AgentMap\Discovery\GraphRanker;
 use voku\AgentMap\Discovery\ImpactAnalyzer;
 use voku\AgentMap\Discovery\ImpactNode;
+use voku\AgentMap\Discovery\ImpactRegionBucket;
+use voku\AgentMap\Discovery\ImpactReport;
 use voku\AgentMap\Discovery\RankedNode;
 use voku\AgentMap\Discovery\RepositoryDiscoveryReport;
 use voku\AgentMap\Index\AgentMapIndex;
@@ -80,7 +82,7 @@ TEXT;
     /** @param list<string> $tokens */
     private function discover(array $tokens): int
     {
-        $parsed = $this->parse($tokens, ['index', 'limit', 'format']);
+        $parsed = $this->parse($tokens, ['index', 'limit', 'format', 'region']);
         if ($parsed['help']) {
             echo $this->help('discover');
             return 0;
@@ -91,11 +93,22 @@ TEXT;
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
         $report = (new ArchitectureDiscovery())->discover($map, $limit);
+        $regionQuery = $parsed['options']['region'] ?? null;
+        if ($regionQuery !== null) {
+            $region = $report->architecture->resolveRegion($regionQuery);
+            $payload = [
+                'type' => 'discover_region',
+                'map_digest' => $report->mapDigest,
+                'region' => $region->toArray(),
+            ];
+            echo $this->render($payload, $format, $this->regionText($region, $report->architecture, $limit));
+            return 0;
+        }
+
         $payload = [
             'type' => 'discover',
             ...$report->toArray(),
         ];
-
         echo $this->render($payload, $format, $this->discoveryText($report));
         return 0;
     }
@@ -153,7 +166,7 @@ TEXT;
             ...$report->toArray(),
         ];
 
-        echo $this->render($payload, $format, $this->impactText($report->target->name, $report->impacts, $report->truncated));
+        echo $this->render($payload, $format, $this->impactText($report));
         return 0;
     }
 
@@ -342,6 +355,54 @@ TEXT;
         return $out;
     }
 
+    private function regionText(ArchitectureRegion $region, ArchitectureMapReport $architecture, int $limit): string
+    {
+        $out = sprintf("Region: %s (%s, level %d)\n", $region->label, $region->kind, $region->level);
+        $path = $architecture->pathForFile($region->files[0]);
+        $out .= 'Path: ' . implode(' > ', array_map(static fn (ArchitectureRegion $item): string => $item->label, array_reverse($path))) . "\n";
+        $out .= sprintf(
+            "Evidence: boundary=%.2f ratio=%.2f density=%.2f crosscut=%.2f namespace=%.2f directory=%.2f\n",
+            $region->boundaryStrength,
+            $region->boundaryRatio,
+            $region->internalDensity,
+            $region->crosscutScore,
+            $region->namespaceAgreement,
+            $region->directoryAgreement,
+        );
+        $out .= 'Signals: ' . ($region->dominantSignals === [] ? '(none)' : implode(', ', $region->dominantSignals)) . "\n";
+        $out .= $this->stringListSection('Files', $region->files, $limit);
+        $out .= $this->stringListSection('Interface files', $region->interfaceFiles, $limit);
+
+        $children = [];
+        foreach ($region->childIds as $childId) {
+            foreach ($architecture->regions as $candidate) {
+                if ($candidate->id === $childId) {
+                    $children[] = $candidate->label;
+                    break;
+                }
+            }
+        }
+        if ($children !== []) {
+            $out .= $this->stringListSection('Children', $children, $limit);
+        }
+
+        return $out;
+    }
+
+    /** @param list<string> $items */
+    private function stringListSection(string $title, array $items, int $limit): string
+    {
+        $out = $title . ':\n';
+        foreach (array_slice($items, 0, $limit) as $item) {
+            $out .= '  ' . $item . "\n";
+        }
+        if (count($items) > $limit) {
+            $out .= sprintf("  ... %d more\n", count($items) - $limit);
+        }
+
+        return $out;
+    }
+
     /** @param list<RankedNode> $rows */
     private function rankedSection(string $title, array $rows): string
     {
@@ -383,11 +444,20 @@ TEXT;
         return $this->rankedSection('Rank by ' . $metric->value, $ranked);
     }
 
-    /** @param list<ImpactNode> $impacts */
-    private function impactText(string $target, array $impacts, bool $truncated): string
+    private function impactText(ImpactReport $report): string
     {
-        $out = 'Impact: ' . $target . "\n";
-        foreach ($impacts as $impact) {
+        $out = 'Impact: ' . $report->target->name . "\n";
+        if ($report->targetArchitecturePath !== []) {
+            $out .= 'Target path: ' . implode(' > ', array_reverse($report->targetArchitecturePath)) . "\n";
+        }
+        if ($report->regionBuckets !== []) {
+            $out .= "Propagation by region:\n";
+            foreach ($report->regionBuckets as $bucket) {
+                $out .= $this->impactRegionText($bucket);
+            }
+        }
+        $out .= "Nodes:\n";
+        foreach ($report->impacts as $impact) {
             $out .= sprintf(
                 "  d=%d %s%s [%s] %s:%d\n",
                 $impact->depth,
@@ -398,21 +468,34 @@ TEXT;
                 $impact->node->lineStart,
             );
         }
-        if ($truncated) {
+        if ($report->truncated) {
             $out .= "TRUNCATED: increase --max-nodes for a complete bounded traversal.\n";
         }
 
         return $out;
     }
 
+    private function impactRegionText(ImpactRegionBucket $bucket): string
+    {
+        $path = $bucket->pathLabels === [] ? $bucket->label : implode(' > ', array_reverse($bucket->pathLabels));
+        return sprintf(
+            "  %s: %d node(s), %d uncertain, depth<=%d\n",
+            $path,
+            count($bucket->nodeIds),
+            $bucket->uncertainNodes,
+            $bucket->maximumDepth,
+        );
+    }
+
     private function help(string $command): string
     {
         return match ($command) {
             'discover' => <<<'TEXT'
-Usage: agent-map discover [--index PATH] [--limit N] [--format text|json|markdown|toon]
+Usage: agent-map discover [--index PATH] [--limit N] [--region LABEL|ID] [--format text|json|markdown|toon]
 
 Infer deterministic PHP architecture regions first, then report entrypoint candidates,
 call hubs, orchestrators, type hubs, namespace/directory/file coupling and relation quality.
+Use --region after the first discovery pass to inspect a region without guessing file names.
 Region evidence exposes boundaries and structural agreement instead of an opaque confidence score.
 
 TEXT,
@@ -427,6 +510,7 @@ TEXT,
 Usage: agent-map impact Class::method [--depth N] [--max-nodes N] [--index PATH] [--format FORMAT]
 
 Trace bounded reverse dependency impact while preserving relation evidence and uncertainty.
+Impacted nodes are also grouped by the inferred PHP architecture map.
 
 TEXT,
             default => $this->helpOverview(),
