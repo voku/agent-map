@@ -14,6 +14,7 @@ use voku\AgentMap\Discovery\GraphRanker;
 use voku\AgentMap\Discovery\ImpactAnalyzer;
 use voku\AgentMap\Discovery\ImpactNode;
 use voku\AgentMap\Discovery\RankedNode;
+use voku\AgentMap\Discovery\RepositoryDiscoveryReport;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
 
@@ -250,7 +251,7 @@ TEXT;
         };
     }
 
-    private function discoveryText(\voku\AgentMap\Discovery\RepositoryDiscoveryReport $report): string
+    private function discoveryText(RepositoryDiscoveryReport $report): string
     {
         $out = "PHP architecture discovery\n";
         $out .= 'Map: ' . $report->mapDigest . "\n";
@@ -264,16 +265,9 @@ TEXT;
         $out .= $this->rankedSection('Call hubs', $report->callHubs);
         $out .= $this->rankedSection('Orchestrators', $report->orchestrators);
         $out .= $this->rankedSection('Type hubs', $report->typeHubs);
-        $out .= "Namespace coupling:\n";
-        foreach ($report->namespaceCoupling as $row) {
-            $out .= sprintf(
-                "  %4d link(s), %3d uncertain  %s -> %s\n",
-                $row['links'],
-                $row['uncertain_links'],
-                $row['from'],
-                $row['to'],
-            );
-        }
+        $out .= $this->couplingSection('Namespace coupling', $report->namespaceCoupling);
+        $out .= $this->couplingSection('Directory coupling', $report->directoryCoupling);
+        $out .= $this->couplingSection('File coupling', $report->fileCoupling);
 
         return $out;
     }
@@ -290,6 +284,25 @@ TEXT;
                 $row->node->name,
                 $row->node->file,
                 $row->node->lineStart,
+            );
+        }
+
+        return $out . "\n";
+    }
+
+    /**
+     * @param list<array{from: string, to: string, links: int, uncertain_links: int}> $rows
+     */
+    private function couplingSection(string $title, array $rows): string
+    {
+        $out = $title . ":\n";
+        foreach ($rows as $row) {
+            $out .= sprintf(
+                "  %4d link(s), %3d uncertain  %s -> %s\n",
+                $row['links'],
+                $row['uncertain_links'],
+                $row['from'],
+                $row['to'],
             );
         }
 
@@ -331,7 +344,7 @@ TEXT;
 Usage: agent-map discover [--index PATH] [--limit N] [--format text|json|markdown|toon]
 
 Derive architecture orientation without a search query: entrypoint candidates,
-call hubs, orchestrators, type hubs, namespace coupling and relation quality.
+call hubs, orchestrators, type hubs, namespace/directory/file coupling and relation quality.
 
 TEXT,
             'rank' => <<<'TEXT'
