@@ -7,6 +7,7 @@ namespace voku\AgentMap\Tests;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use voku\AgentMap\Discovery\ArchitectureDiscovery;
+use voku\AgentMap\Discovery\RankedNode;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\MethodEntry;
@@ -15,7 +16,7 @@ use voku\AgentMap\Index\SymbolEntry;
 
 final class ArchitectureDiscoveryTest extends TestCase
 {
-    public function testDiscoversStartingPointsHubsOrchestratorsAndNamespaceCoupling(): void
+    public function testDiscoversStartingPointsHubsAndIndependentCouplingViews(): void
     {
         $report = (new ArchitectureDiscovery())->discover($this->map(), 10);
 
@@ -37,15 +38,76 @@ final class ArchitectureDiscoveryTest extends TestCase
             'links' => 6,
             'uncertain_links' => 2,
         ], $report->namespaceCoupling[0]);
+        self::assertSame([
+            'from' => 'src/App',
+            'to' => 'src/Domain',
+            'links' => 6,
+            'uncertain_links' => 2,
+        ], $report->directoryCoupling[0]);
+        self::assertContains([
+            'from' => 'src/App/Controller.php',
+            'to' => 'src/Domain/Service.php',
+            'links' => 2,
+            'uncertain_links' => 0,
+        ], $report->fileCoupling);
         self::assertSame(1, $report->quality['multiple_target_relations']);
         self::assertSame(1, $report->quality['uncertain_relations']);
         self::assertStringStartsWith('sha256:', $report->mapDigest);
     }
 
+    public function testUsesDirectoryAndFileCouplingWhenNamespacesAreAbsent(): void
+    {
+        $front = new SymbolEntry('class', 'Front', 'Front', 1, 20, [new MethodEntry('handle', 'public', 10, 15)]);
+        $service = new SymbolEntry('class', 'Service', 'Service', 1, 20, [new MethodEntry('run', 'public', 10, 15)]);
+        $bootstrap = new SymbolEntry('function', 'bootstrap', 'bootstrap', 1, 8);
+        $map = new AgentMapIndex(
+            '2.0',
+            '/tmp/agent-map-global-discovery',
+            'test',
+            [
+                new FileEntry('legacy/web/Front.php', 'sha256:front', '', [$front]),
+                new FileEntry('legacy/domain/Service.php', 'sha256:service', '', [$service]),
+                new FileEntry('bootstrap.php', 'sha256:bootstrap', '', [$bootstrap]),
+            ],
+            [
+                RelationEntry::create('method:Front::handle', 'calls', ['method:Service::run'], 'legacy/web/Front.php', 12, 12, 'phpstan_resolved'),
+                RelationEntry::create('function:bootstrap', 'calls', ['method:Service::run'], 'bootstrap.php', 4, 4, 'phpstan_resolved'),
+            ],
+        );
+
+        $report = (new ArchitectureDiscovery())->discover($map, 10);
+
+        self::assertSame([], $report->namespaceCoupling);
+        self::assertContains([
+            'from' => 'legacy/web',
+            'to' => 'legacy/domain',
+            'links' => 1,
+            'uncertain_links' => 0,
+        ], $report->directoryCoupling);
+        self::assertContains([
+            'from' => '(root)',
+            'to' => 'legacy/domain',
+            'links' => 1,
+            'uncertain_links' => 0,
+        ], $report->directoryCoupling);
+        self::assertContains([
+            'from' => 'legacy/web/Front.php',
+            'to' => 'legacy/domain/Service.php',
+            'links' => 1,
+            'uncertain_links' => 0,
+        ], $report->fileCoupling);
+        self::assertContains([
+            'from' => 'bootstrap.php',
+            'to' => 'legacy/domain/Service.php',
+            'links' => 1,
+            'uncertain_links' => 0,
+        ], $report->fileCoupling);
+    }
+
     public function testAbstractMethodsAreNotEntrypointCandidates(): void
     {
         $report = (new ArchitectureDiscovery())->discover($this->map(), 20);
-        $ids = array_map(static fn ($row): string => $row->node->id, $report->entrypointCandidates);
+        $ids = array_map(static fn (RankedNode $row): string => $row->node->id, $report->entrypointCandidates);
 
         self::assertNotContains('method:Domain\\Contract::run', $ids);
     }
