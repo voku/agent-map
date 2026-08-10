@@ -30,6 +30,9 @@ final readonly class DeterministicCommunityDetector
             $projected = $this->project($assignment, $expansion);
 
             if (count($projected->communities) <= 1) {
+                if ($levels === []) {
+                    $levels[] = $projected;
+                }
                 break;
             }
             if ($levels !== [] && $this->samePartition($levels[array_key_last($levels)], $projected)) {
