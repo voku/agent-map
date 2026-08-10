@@ -14,13 +14,16 @@ final readonly class RegionLabeler
         'php', 'src', 'test', 'tests', 'vendor',
     ];
 
-    /** @param non-empty-list<string> $files @param array<string, FileEntry> $fileEntries */
+    /**
+     * @param non-empty-list<string> $files
+     * @param array<string, FileEntry> $fileEntries
+     */
     public function label(array $files, array $fileEntries): string
     {
         $namespaces = [];
         foreach ($files as $file) {
             $entry = $fileEntries[$file] ?? null;
-            $namespace = trim($entry?->namespace ?? '', '\\');
+            $namespace = $entry === null ? '' : trim($entry->namespace, '\\');
             if ($namespace !== '') {
                 $namespaces[$namespace] = ($namespaces[$namespace] ?? 0) + 1;
             }
@@ -77,7 +80,10 @@ final readonly class RegionLabeler
         return 'Region';
     }
 
-    /** @param non-empty-list<non-empty-list<string>> $paths @return list<string> */
+    /**
+     * @param non-empty-list<non-empty-list<string>> $paths
+     * @return list<string>
+     */
     private function commonPrefix(array $paths): array
     {
         $prefix = $paths[0];
