@@ -42,6 +42,11 @@ final class CrosscutAnalyzerTest extends TestCase
 
         $evidence = (new CrosscutAnalyzer())->analyze(new WeightedFileGraph($files, $adjacency, []));
 
+        self::assertCount(5, $evidence);
+        self::assertCount(1, array_filter(
+            $evidence,
+            static fn ($item): bool => in_array('high_degree', $item->signals, true),
+        ));
         self::assertContains('high_degree', $evidence['src/Hub.php']->signals);
         self::assertGreaterThan(0.5, $evidence['src/Hub.php']->score);
         self::assertNotContains('high_degree', $evidence['src/A.php']->signals);
