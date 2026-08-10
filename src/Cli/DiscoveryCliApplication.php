@@ -9,22 +9,21 @@ use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 use voku\AgentMap\Discovery\ArchitectureDiscovery;
-use voku\AgentMap\Discovery\ArchitectureMapReport;
-use voku\AgentMap\Discovery\ArchitectureRegion;
+use voku\AgentMap\Discovery\ArchitectureImpactAnalyzer;
 use voku\AgentMap\Discovery\GraphMetric;
 use voku\AgentMap\Discovery\GraphRanker;
-use voku\AgentMap\Discovery\ImpactAnalyzer;
-use voku\AgentMap\Discovery\ImpactNode;
-use voku\AgentMap\Discovery\ImpactRegionBucket;
-use voku\AgentMap\Discovery\ImpactReport;
 use voku\AgentMap\Discovery\RankedNode;
-use voku\AgentMap\Discovery\RepositoryDiscoveryReport;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
 
 final readonly class DiscoveryCliApplication
 {
     private const DEFAULT_INDEX = '.agent-map/php-symbols.json';
+
+    public function __construct(
+        private DiscoveryTextRenderer $textRenderer = new DiscoveryTextRenderer(),
+    ) {
+    }
 
     /** @param list<string> $argv */
     public function supports(array $argv): bool
@@ -66,11 +65,10 @@ TEXT;
                 return 0;
             }
 
-            $tokens = array_slice($argv, 2);
             return match ($command) {
-                'discover' => $this->discover($tokens),
-                'rank' => $this->rank($tokens),
-                'impact' => $this->impact($tokens),
+                'discover' => $this->discover(array_slice($argv, 2)),
+                'rank' => $this->rank(array_slice($argv, 2)),
+                'impact' => $this->impact(array_slice($argv, 2)),
                 default => 1,
             };
         } catch (Throwable $throwable) {
@@ -94,6 +92,7 @@ TEXT;
         $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
         $report = (new ArchitectureDiscovery())->discover($map, $limit);
         $regionQuery = $parsed['options']['region'] ?? null;
+
         if ($regionQuery !== null) {
             $region = $report->architecture->resolveRegion($regionQuery);
             $payload = [
@@ -101,15 +100,19 @@ TEXT;
                 'map_digest' => $report->mapDigest,
                 'region' => $region->toArray(),
             ];
-            echo $this->render($payload, $format, $this->regionText($region, $report->architecture, $limit));
+            echo $this->render(
+                $payload,
+                $format,
+                $this->textRenderer->region($region, $report->architecture, $limit),
+            );
             return 0;
         }
 
-        $payload = [
-            'type' => 'discover',
-            ...$report->toArray(),
-        ];
-        echo $this->render($payload, $format, $this->discoveryText($report));
+        echo $this->render(
+            ['type' => 'discover', ...$report->toArray()],
+            $format,
+            $this->textRenderer->discovery($report),
+        );
         return 0;
     }
 
@@ -128,6 +131,7 @@ TEXT;
         if ($metric === null) {
             throw new InvalidArgumentException('Unknown graph metric: ' . $metricName);
         }
+
         $top = $this->positiveInt('top', $parsed['options']['top'] ?? '10');
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $kind = $parsed['options']['kind'] ?? null;
@@ -140,7 +144,7 @@ TEXT;
             'results' => array_map(static fn (RankedNode $row): array => $row->toArray(), $ranked),
         ];
 
-        echo $this->render($payload, $format, $this->rankText($metric, $ranked));
+        echo $this->render($payload, $format, $this->textRenderer->rank($metric, $ranked));
         return 0;
     }
 
@@ -160,13 +164,18 @@ TEXT;
         $maximumNodes = $this->positiveInt('max-nodes', $parsed['options']['max-nodes'] ?? '100');
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
-        $report = (new ImpactAnalyzer())->forMethod($map, $parsed['arguments'][0], $depth, $maximumNodes);
-        $payload = [
-            'type' => 'impact',
-            ...$report->toArray(),
-        ];
+        $report = (new ArchitectureImpactAnalyzer())->forMethod(
+            $map,
+            $parsed['arguments'][0],
+            $depth,
+            $maximumNodes,
+        );
 
-        echo $this->render($payload, $format, $this->impactText($report));
+        echo $this->render(
+            ['type' => 'impact', ...$report->toArray()],
+            $format,
+            $this->textRenderer->impact($report),
+        );
         return 0;
     }
 
@@ -194,8 +203,9 @@ TEXT;
         $arguments = [];
         $options = [];
         $help = false;
-        for ($i = 0, $count = count($tokens); $i < $count; ++$i) {
-            $token = $tokens[$i];
+
+        for ($index = 0, $count = count($tokens); $index < $count; ++$index) {
+            $token = $tokens[$index];
             if ($token === '-h' || $token === '--help') {
                 $help = true;
                 continue;
@@ -210,12 +220,13 @@ TEXT;
                 [$name, $value] = explode('=', $raw, 2);
             } else {
                 $name = $raw;
-                $value = $tokens[$i + 1] ?? null;
+                $value = $tokens[$index + 1] ?? null;
                 if (!is_string($value) || str_starts_with($value, '--')) {
                     throw new InvalidArgumentException('Missing value for option: --' . $name);
                 }
-                ++$i;
+                ++$index;
             }
+
             if (!in_array($name, $allowedOptions, true)) {
                 throw new InvalidArgumentException('Unknown option: --' . $name);
             }
@@ -264,227 +275,6 @@ TEXT;
             'markdown' => "## Agent Map architecture discovery\n\n```text\n" . rtrim($text) . "\n```\n",
             default => $text,
         };
-    }
-
-    private function discoveryText(RepositoryDiscoveryReport $report): string
-    {
-        $out = "PHP architecture discovery\n";
-        $out .= 'Map: ' . $report->mapDigest . "\n";
-        $out .= sprintf(
-            "Relations: %d certain, %d uncertain, %d diagnostic(s)\n\n",
-            $report->quality['certain_relations'],
-            $report->quality['uncertain_relations'],
-            $report->quality['diagnostics'],
-        );
-        $out .= $this->architectureSection($report->architecture);
-        $out .= $this->rankedSection('Entrypoint candidates', $report->entrypointCandidates);
-        $out .= $this->rankedSection('Call hubs', $report->callHubs);
-        $out .= $this->rankedSection('Orchestrators', $report->orchestrators);
-        $out .= $this->rankedSection('Type hubs', $report->typeHubs);
-        $out .= $this->couplingSection('Namespace coupling', $report->namespaceCoupling);
-        $out .= $this->couplingSection('Directory coupling', $report->directoryCoupling);
-        $out .= $this->couplingSection('File coupling', $report->fileCoupling);
-
-        return $out;
-    }
-
-    private function architectureSection(ArchitectureMapReport $architecture): string
-    {
-        $out = sprintf(
-            "Architecture regions: %d region(s), %d level(s)\n",
-            count($architecture->regions),
-            $architecture->levels(),
-        );
-        if ($architecture->regions === []) {
-            $out .= '  none inferred';
-            if ($architecture->unassignedFiles !== []) {
-                $out .= sprintf(' (%d unassigned file(s))', count($architecture->unassignedFiles));
-            }
-            return $out . "\n\n";
-        }
-
-        $byId = [];
-        foreach ($architecture->regions as $region) {
-            $byId[$region->id] = $region;
-        }
-        foreach ($architecture->rootRegionIds as $rootId) {
-            $region = $byId[$rootId] ?? null;
-            if ($region instanceof ArchitectureRegion) {
-                $out .= $this->architectureRegionText($region, $byId, 1);
-            }
-        }
-        if ($architecture->crosscutFiles !== []) {
-            $out .= '  cross-cutting: ' . implode(', ', array_map(
-                static fn (array $row): string => $row['file'] . '=' . number_format($row['score'], 2, '.', ''),
-                array_slice($architecture->crosscutFiles, 0, 5),
-            )) . "\n";
-        }
-        if ($architecture->unassignedFiles !== []) {
-            $out .= sprintf('  unassigned: %d file(s)\n', count($architecture->unassignedFiles));
-        }
-
-        return $out . "\n";
-    }
-
-    /** @param array<string, ArchitectureRegion> $byId */
-    private function architectureRegionText(ArchitectureRegion $region, array $byId, int $depth): string
-    {
-        $evidence = sprintf(
-            'boundary=%.2f ns=%.2f dir=%.2f',
-            $region->boundaryStrength,
-            $region->namespaceAgreement,
-            $region->directoryAgreement,
-        );
-        $signals = $region->dominantSignals === [] ? '' : ' signals=' . implode(',', $region->dominantSignals);
-        $out = sprintf(
-            "%s%s %s [%df] %s%s\n",
-            str_repeat('  ', $depth),
-            strtoupper($region->kind),
-            $region->label,
-            count($region->files),
-            $evidence,
-            $signals,
-        );
-        foreach ($region->childIds as $childId) {
-            $child = $byId[$childId] ?? null;
-            if ($child instanceof ArchitectureRegion) {
-                $out .= $this->architectureRegionText($child, $byId, $depth + 1);
-            }
-        }
-
-        return $out;
-    }
-
-    private function regionText(ArchitectureRegion $region, ArchitectureMapReport $architecture, int $limit): string
-    {
-        $out = sprintf("Region: %s (%s, level %d)\n", $region->label, $region->kind, $region->level);
-        $path = $architecture->pathForFile($region->files[0]);
-        $out .= 'Path: ' . implode(' > ', array_map(static fn (ArchitectureRegion $item): string => $item->label, array_reverse($path))) . "\n";
-        $out .= sprintf(
-            "Evidence: boundary=%.2f ratio=%.2f density=%.2f crosscut=%.2f namespace=%.2f directory=%.2f\n",
-            $region->boundaryStrength,
-            $region->boundaryRatio,
-            $region->internalDensity,
-            $region->crosscutScore,
-            $region->namespaceAgreement,
-            $region->directoryAgreement,
-        );
-        $out .= 'Signals: ' . ($region->dominantSignals === [] ? '(none)' : implode(', ', $region->dominantSignals)) . "\n";
-        $out .= $this->stringListSection('Files', $region->files, $limit);
-        $out .= $this->stringListSection('Interface files', $region->interfaceFiles, $limit);
-
-        $children = [];
-        foreach ($region->childIds as $childId) {
-            foreach ($architecture->regions as $candidate) {
-                if ($candidate->id === $childId) {
-                    $children[] = $candidate->label;
-                    break;
-                }
-            }
-        }
-        if ($children !== []) {
-            $out .= $this->stringListSection('Children', $children, $limit);
-        }
-
-        return $out;
-    }
-
-    /** @param list<string> $items */
-    private function stringListSection(string $title, array $items, int $limit): string
-    {
-        $out = $title . ':\n';
-        foreach (array_slice($items, 0, $limit) as $item) {
-            $out .= '  ' . $item . "\n";
-        }
-        if (count($items) > $limit) {
-            $out .= sprintf("  ... %d more\n", count($items) - $limit);
-        }
-
-        return $out;
-    }
-
-    /** @param list<RankedNode> $rows */
-    private function rankedSection(string $title, array $rows): string
-    {
-        $out = $title . ":\n";
-        foreach ($rows as $row) {
-            $out .= sprintf(
-                "  %4d  ?%-3d  %s  %s:%d\n",
-                $row->score,
-                $row->uncertainRelations,
-                $row->node->name,
-                $row->node->file,
-                $row->node->lineStart,
-            );
-        }
-
-        return $out . "\n";
-    }
-
-    /** @param list<array{from: string, to: string, links: int, uncertain_links: int}> $rows */
-    private function couplingSection(string $title, array $rows): string
-    {
-        $out = $title . ":\n";
-        foreach ($rows as $row) {
-            $out .= sprintf(
-                "  %4d link(s), %3d uncertain  %s -> %s\n",
-                $row['links'],
-                $row['uncertain_links'],
-                $row['from'],
-                $row['to'],
-            );
-        }
-
-        return $out . "\n";
-    }
-
-    /** @param list<RankedNode> $ranked */
-    private function rankText(GraphMetric $metric, array $ranked): string
-    {
-        return $this->rankedSection('Rank by ' . $metric->value, $ranked);
-    }
-
-    private function impactText(ImpactReport $report): string
-    {
-        $out = 'Impact: ' . $report->target->name . "\n";
-        if ($report->targetArchitecturePath !== []) {
-            $out .= 'Target path: ' . implode(' > ', array_reverse($report->targetArchitecturePath)) . "\n";
-        }
-        if ($report->regionBuckets !== []) {
-            $out .= "Propagation by region:\n";
-            foreach ($report->regionBuckets as $bucket) {
-                $out .= $this->impactRegionText($bucket);
-            }
-        }
-        $out .= "Nodes:\n";
-        foreach ($report->impacts as $impact) {
-            $out .= sprintf(
-                "  d=%d %s%s [%s] %s:%d\n",
-                $impact->depth,
-                $impact->uncertain ? '? ' : '  ',
-                $impact->node->name,
-                implode(',', $impact->relationKinds),
-                $impact->node->file,
-                $impact->node->lineStart,
-            );
-        }
-        if ($report->truncated) {
-            $out .= "TRUNCATED: increase --max-nodes for a complete bounded traversal.\n";
-        }
-
-        return $out;
-    }
-
-    private function impactRegionText(ImpactRegionBucket $bucket): string
-    {
-        $path = $bucket->pathLabels === [] ? $bucket->label : implode(' > ', array_reverse($bucket->pathLabels));
-        return sprintf(
-            "  %s: %d node(s), %d uncertain, depth<=%d\n",
-            $path,
-            count($bucket->nodeIds),
-            $bucket->uncertainNodes,
-            $bucket->maximumDepth,
-        );
     }
 
     private function help(string $command): string
