@@ -51,6 +51,7 @@ final readonly class ImpactAnalyzer
         }
 
         $catalog = new GraphNodeCatalog($map);
+        $adjacency = new GraphAdjacency($map);
         $target = $catalog->find($targetId);
         if ($target === null) {
             throw new RuntimeException('Impact target is not an indexed repository node: ' . $targetId);
@@ -70,7 +71,7 @@ final readonly class ImpactAnalyzer
                 continue;
             }
 
-            foreach ($map->incoming($current['id']) as $relation) {
+            foreach ($adjacency->incoming($current['id']) as $relation) {
                 if (!$this->canPropagateImpact($relation)) {
                     continue;
                 }
