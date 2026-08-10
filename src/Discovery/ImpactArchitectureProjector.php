@@ -6,7 +6,10 @@ namespace voku\AgentMap\Discovery;
 
 final readonly class ImpactArchitectureProjector
 {
-    /** @param list<ImpactNode> $impacts @return list<ImpactRegionBucket> */
+    /**
+     * @param list<ImpactNode> $impacts
+     * @return list<ImpactRegionBucket>
+     */
     public function project(ArchitectureMapReport $architecture, array $impacts): array
     {
         /**
@@ -24,10 +27,18 @@ final readonly class ImpactArchitectureProjector
         foreach ($impacts as $impact) {
             $path = $architecture->pathForFile($impact->node->file);
             $region = $path[0] ?? null;
-            $key = $region?->id ?? '(unassigned)';
+            if ($region === null) {
+                $key = '(unassigned)';
+                $regionId = null;
+                $label = '(unassigned)';
+            } else {
+                $key = $region->id;
+                $regionId = $region->id;
+                $label = $region->label;
+            }
             $grouped[$key] ??= [
-                'region_id' => $region?->id,
-                'label' => $region?->label ?? '(unassigned)',
+                'region_id' => $regionId,
+                'label' => $label,
                 'path' => array_map(static fn (ArchitectureRegion $item): string => $item->label, $path),
                 'node_ids' => [],
                 'uncertain_nodes' => [],
