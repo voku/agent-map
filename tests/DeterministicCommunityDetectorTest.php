@@ -21,6 +21,25 @@ final class DeterministicCommunityDetectorTest extends TestCase
         self::assertContains(['b/D.php', 'b/E.php', 'b/F.php'], $levels[0]->communities);
     }
 
+    public function testRetainsSingleCoherentSystemInsteadOfReportingNoArchitecture(): void
+    {
+        $files = ['src/A.php', 'src/B.php', 'src/C.php'];
+        $adjacency = array_fill_keys($files, []);
+        foreach ([
+            ['src/A.php', 'src/B.php'],
+            ['src/A.php', 'src/C.php'],
+            ['src/B.php', 'src/C.php'],
+        ] as [$left, $right]) {
+            $adjacency[$left][$right] = 4.0;
+            $adjacency[$right][$left] = 4.0;
+        }
+
+        $levels = (new DeterministicCommunityDetector())->cluster(new WeightedFileGraph($files, $adjacency, []));
+
+        self::assertCount(1, $levels);
+        self::assertSame([$files], $levels[0]->communities);
+    }
+
     public function testSameGraphAlwaysProducesByteIdenticalPartitions(): void
     {
         $detector = new DeterministicCommunityDetector();
