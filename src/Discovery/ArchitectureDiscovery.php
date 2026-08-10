@@ -253,7 +253,8 @@ final readonly class ArchitectureDiscovery
 
     private function directoryOf(GraphNode $node): string
     {
-        $directory = str_replace('\\', '/', dirname($node->file));
+        $path = str_replace('\\', '/', $node->file);
+        $directory = dirname($path);
 
         return $directory === '.' ? '(root)' : $directory;
     }
