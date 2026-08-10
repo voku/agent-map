@@ -59,6 +59,57 @@ final class ArchitectureMapBuilderTest extends TestCase
         self::assertSame(1.0, $this->regionByLabel($architecture->regions, 'Auth')->directoryAgreement);
     }
 
+    public function testSameDirectoryDuplicateBaseLabelsRemainUniqueAndResolvable(): void
+    {
+        $files = [
+            $this->file('src/Feature/AlphaFirst.php', 'Alpha\\Shared', 'First'),
+            $this->file('src/Feature/AlphaSecond.php', 'Alpha\\Shared', 'Second'),
+            $this->file('src/Feature/BetaThird.php', 'Beta\\Shared', 'Third'),
+            $this->file('src/Feature/BetaFourth.php', 'Beta\\Shared', 'Fourth'),
+        ];
+        $relations = [];
+        $line = 10;
+        for ($repeat = 0; $repeat < 20; ++$repeat) {
+            $relations[] = RelationEntry::create(
+                'method:Alpha\\Shared\\First::run',
+                'calls',
+                ['method:Alpha\\Shared\\Second::run'],
+                'src/Feature/AlphaFirst.php',
+                $line,
+                $line,
+                'phpstan_resolved',
+            );
+            ++$line;
+            $relations[] = RelationEntry::create(
+                'method:Beta\\Shared\\Third::run',
+                'calls',
+                ['method:Beta\\Shared\\Fourth::run'],
+                'src/Feature/BetaThird.php',
+                $line,
+                $line,
+                'phpstan_resolved',
+            );
+            ++$line;
+        }
+        $architecture = (new ArchitectureMapBuilder())->build(
+            new AgentMapIndex('2.0', '/tmp/agent-map-duplicate-labels', 'test', $files, $relations),
+        );
+
+        $labels = array_values(array_map(
+            static fn (ArchitectureRegion $region): string => $region->label,
+            array_filter(
+                $architecture->regions,
+                static fn (ArchitectureRegion $region): bool => str_starts_with($region->label, 'Shared / Feature'),
+            ),
+        ));
+
+        self::assertCount(2, $labels);
+        self::assertCount(2, array_unique($labels));
+        foreach ($labels as $label) {
+            self::assertSame($label, $architecture->resolveRegion($label)->label);
+        }
+    }
+
     public function testRegionIdsAndHierarchyAreDeterministicForSameMapDigest(): void
     {
         $builder = new ArchitectureMapBuilder();
@@ -90,8 +141,7 @@ final class ArchitectureMapBuilderTest extends TestCase
             ['src/Billing/Order.php', 'App\\Billing', 'Order'],
             ['src/Billing/Price.php', 'App\\Billing', 'Price'],
         ] as [$path, $namespace, $class]) {
-            $symbol = new SymbolEntry('class', $class, $namespace . '\\' . $class, 1, 20, [new MethodEntry('run', 'public', 5, 15)]);
-            $files[] = new FileEntry($path, 'sha256:' . strtolower($class), $namespace, [$symbol]);
+            $files[] = $this->file($path, $namespace, $class);
         }
 
         $relations = [];
@@ -128,6 +178,20 @@ final class ArchitectureMapBuilderTest extends TestCase
         );
 
         return new AgentMapIndex('2.0', '/tmp/agent-map-regions', 'test', $files, $relations);
+    }
+
+    private function file(string $path, string $namespace, string $class): FileEntry
+    {
+        $symbol = new SymbolEntry(
+            'class',
+            $class,
+            $namespace . '\\' . $class,
+            1,
+            20,
+            [new MethodEntry('run', 'public', 5, 15)],
+        );
+
+        return new FileEntry($path, 'sha256:' . strtolower($class), $namespace, [$symbol]);
     }
 
     private function pathForClass(string $class): string
