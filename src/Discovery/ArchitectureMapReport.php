@@ -64,10 +64,13 @@ final readonly class ArchitectureMapReport
     public function pathForFile(string $file): array
     {
         $region = $this->regionForFile($file);
-        if ($region === null) {
-            return [];
-        }
 
+        return $region === null ? [] : $this->pathForRegion($region);
+    }
+
+    /** @return non-empty-list<ArchitectureRegion> Selected region first, repository root last. */
+    public function pathForRegion(ArchitectureRegion $region): array
+    {
         $byId = [];
         foreach ($this->regions as $candidate) {
             $byId[$candidate->id] = $candidate;
@@ -89,17 +92,19 @@ final readonly class ArchitectureMapReport
             throw new InvalidArgumentException('Region query must not be empty.');
         }
 
-        $matches = [];
+        $exact = [];
+        $prefix = [];
         foreach ($this->regions as $region) {
             if ($region->id === $query || strcasecmp($region->label, $query) === 0) {
-                $matches[$region->id] = $region;
+                $exact[$region->id] = $region;
                 continue;
             }
             if (str_starts_with($region->id, $query)) {
-                $matches[$region->id] = $region;
+                $prefix[$region->id] = $region;
             }
         }
 
+        $matches = $exact !== [] ? $exact : $prefix;
         if ($matches === []) {
             throw new InvalidArgumentException('No architecture region matches: ' . $query);
         }
