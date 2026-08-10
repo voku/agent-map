@@ -9,6 +9,11 @@ final readonly class DeterministicCommunityDetector
     private const MAX_PASSES = 30;
     private const MIN_GAIN = 0.000001;
 
+    public function __construct(
+        private SingletonCommunityAbsorber $singletonAbsorber = new SingletonCommunityAbsorber(),
+    ) {
+    }
+
     /** @return list<CommunityPartition> Finest partition first. */
     public function cluster(WeightedFileGraph $graph, int $maximumLevels = 4): array
     {
@@ -26,7 +31,9 @@ final readonly class DeterministicCommunityDetector
         $current = $graph;
         $levels = [];
         for ($level = 0; $level < $maximumLevels && count($current->files) > 1; ++$level) {
-            $assignment = $this->absorbSingletons($current, $this->louvainPass($current, $resolution));
+            $assignment = $this->louvainPass($current, $resolution);
+            $assignment = $this->singletonAbsorber->absorb($current, $assignment);
+            $assignment = $this->denseAssignment($assignment);
             $projected = $this->project($assignment, $expansion);
 
             if (count($projected->communities) <= 1) {
@@ -121,53 +128,6 @@ final readonly class DeterministicCommunityDetector
         }
 
         return $this->denseAssignment($communityByNode);
-    }
-
-    /**
-     * @param array<string, int> $assignment
-     * @return array<string, int>
-     */
-    private function absorbSingletons(WeightedFileGraph $graph, array $assignment): array
-    {
-        /** @var array<int, non-empty-list<string>> $members */
-        $members = [];
-        foreach ($assignment as $node => $community) {
-            $members[$community][] = $node;
-        }
-        ksort($members, SORT_NUMERIC);
-
-        foreach ($members as $community => $nodes) {
-            if (count($nodes) !== 1) {
-                continue;
-            }
-            $node = $nodes[0];
-            $weights = [];
-            foreach ($graph->neighbours($node) as $neighbour => $weight) {
-                $targetCommunity = $assignment[$neighbour];
-                if ($targetCommunity === $community) {
-                    continue;
-                }
-                $weights[$targetCommunity] = ($weights[$targetCommunity] ?? 0.0) + $weight;
-            }
-            if ($weights === []) {
-                continue;
-            }
-
-            $bestCommunity = null;
-            $bestWeight = -1.0;
-            ksort($weights, SORT_NUMERIC);
-            foreach ($weights as $targetCommunity => $weight) {
-                if ($weight > $bestWeight + self::MIN_GAIN) {
-                    $bestCommunity = $targetCommunity;
-                    $bestWeight = $weight;
-                }
-            }
-            if (is_int($bestCommunity)) {
-                $assignment[$node] = $bestCommunity;
-            }
-        }
-
-        return $this->denseAssignment($assignment);
     }
 
     /**
