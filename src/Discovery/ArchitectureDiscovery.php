@@ -10,6 +10,10 @@ use voku\AgentMap\Index\RelationEntry;
 
 final readonly class ArchitectureDiscovery
 {
+    private const COUPLING_NAMESPACE = 'namespace';
+    private const COUPLING_DIRECTORY = 'directory';
+    private const COUPLING_FILE = 'file';
+
     public function discover(AgentMapIndex $map, int $limit = 10): RepositoryDiscoveryReport
     {
         if ($limit < 1) {
@@ -41,7 +45,9 @@ final readonly class ArchitectureDiscovery
             callHubs: $callHubs,
             orchestrators: $orchestrators,
             typeHubs: $typeHubs,
-            namespaceCoupling: $this->namespaceCoupling($catalog, $map->relations, $limit),
+            namespaceCoupling: $this->coupling($catalog, $map->relations, $limit, self::COUPLING_NAMESPACE),
+            directoryCoupling: $this->coupling($catalog, $map->relations, $limit, self::COUPLING_DIRECTORY),
+            fileCoupling: $this->coupling($catalog, $map->relations, $limit, self::COUPLING_FILE),
             quality: $this->quality($map),
         );
     }
@@ -128,10 +134,17 @@ final readonly class ArchitectureDiscovery
     }
 
     /**
+     * Derive coupling from independent structural axes instead of assuming PHP namespaces exist.
+     *
+     * Namespace coupling expresses logical package boundaries. Directory coupling keeps useful
+     * structure for namespace-less legacy code, while file coupling still works for completely flat
+     * projects where every PHP file lives in the same directory.
+     *
      * @param list<RelationEntry> $relations
+     * @param self::COUPLING_* $dimension
      * @return list<array{from: string, to: string, links: int, uncertain_links: int}>
      */
-    private function namespaceCoupling(GraphNodeCatalog $catalog, array $relations, int $limit): array
+    private function coupling(GraphNodeCatalog $catalog, array $relations, int $limit, string $dimension): array
     {
         /** @var array<string, array{from: string, to: string, links: array<string, true>, uncertain_links: array<string, true>}> $pairs */
         $pairs = [];
@@ -144,14 +157,18 @@ final readonly class ArchitectureDiscovery
             if ($source === null) {
                 continue;
             }
-            $from = $this->namespaceOf($source);
+            $from = $this->couplingRegion($source, $dimension);
+            if ($from === null) {
+                continue;
+            }
+
             foreach ($relation->targetIds as $targetId) {
                 $target = $catalog->find($targetId);
                 if ($target === null) {
                     continue;
                 }
-                $to = $this->namespaceOf($target);
-                if ($from === $to) {
+                $to = $this->couplingRegion($target, $dimension);
+                if ($to === null || $from === $to) {
                     continue;
                 }
 
@@ -190,6 +207,19 @@ final readonly class ArchitectureDiscovery
     }
 
     /**
+     * @param self::COUPLING_* $dimension
+     */
+    private function couplingRegion(GraphNode $node, string $dimension): ?string
+    {
+        return match ($dimension) {
+            self::COUPLING_NAMESPACE => $this->namespaceOf($node),
+            self::COUPLING_DIRECTORY => $this->directoryOf($node),
+            self::COUPLING_FILE => $node->file,
+            default => throw new InvalidArgumentException('Unknown coupling dimension: ' . $dimension),
+        };
+    }
+
+    /**
      * @param list<RelationEntry> $relations
      * @return array<string, true>
      */
@@ -214,14 +244,21 @@ final readonly class ArchitectureDiscovery
         return $neighbours;
     }
 
-    private function namespaceOf(GraphNode $node): string
+    private function namespaceOf(GraphNode $node): ?string
     {
         $name = str_contains($node->name, '::')
             ? substr($node->name, 0, (int) strrpos($node->name, '::'))
             : $node->name;
         $separator = strrpos($name, '\\');
 
-        return $separator === false ? '(global)' : substr($name, 0, $separator);
+        return $separator === false ? null : substr($name, 0, $separator);
+    }
+
+    private function directoryOf(GraphNode $node): string
+    {
+        $directory = str_replace('\\', '/', dirname($node->file));
+
+        return $directory === '.' ? '(root)' : $directory;
     }
 
     /**
