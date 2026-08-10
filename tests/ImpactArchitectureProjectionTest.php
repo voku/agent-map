@@ -18,8 +18,8 @@ final class ImpactArchitectureProjectionTest extends TestCase
     {
         $service = $this->symbol('Domain', 'Service', 'run');
         $helper = $this->symbol('Domain', 'Helper', 'help');
-        $controller = $this->symbol('App', 'Controller', 'handle');
-        $command = $this->symbol('App', 'Command', 'execute');
+        $controller = $this->symbol('Web', 'Controller', 'handle');
+        $command = $this->symbol('Web', 'Command', 'execute');
 
         $relations = [];
         foreach ([10, 11, 12] as $line) {
@@ -33,20 +33,20 @@ final class ImpactArchitectureProjectionTest extends TestCase
                 'phpstan_resolved',
             );
             $relations[] = RelationEntry::create(
-                'method:App\\Command::execute',
+                'method:Web\\Command::execute',
                 'calls',
-                ['method:App\\Controller::handle'],
-                'src/App/Command.php',
+                ['method:Web\\Controller::handle'],
+                'src/Web/Command.php',
                 $line,
                 $line,
                 'phpstan_resolved',
             );
         }
         $relations[] = RelationEntry::create(
-            'method:App\\Controller::handle',
+            'method:Web\\Controller::handle',
             'calls',
             ['method:Domain\\Service::run'],
-            'src/App/Controller.php',
+            'src/Web/Controller.php',
             20,
             20,
             'phpstan_resolved',
@@ -59,8 +59,8 @@ final class ImpactArchitectureProjectionTest extends TestCase
             [
                 new FileEntry('src/Domain/Service.php', 'sha256:service', 'Domain', [$service]),
                 new FileEntry('src/Domain/Helper.php', 'sha256:helper', 'Domain', [$helper]),
-                new FileEntry('src/App/Controller.php', 'sha256:controller', 'App', [$controller]),
-                new FileEntry('src/App/Command.php', 'sha256:command', 'App', [$command]),
+                new FileEntry('src/Web/Controller.php', 'sha256:controller', 'Web', [$controller]),
+                new FileEntry('src/Web/Command.php', 'sha256:command', 'Web', [$command]),
             ],
             $relations,
         );
@@ -69,9 +69,9 @@ final class ImpactArchitectureProjectionTest extends TestCase
 
         self::assertContains('Domain', $report->targetArchitecturePath);
         self::assertNotEmpty($report->regionBuckets);
-        self::assertSame('App', $report->regionBuckets[0]->label);
+        self::assertSame('Web', $report->regionBuckets[0]->label);
         self::assertCount(2, $report->regionBuckets[0]->nodeIds);
-        self::assertContains('App', $report->regionBuckets[0]->pathLabels);
+        self::assertContains('Web', $report->regionBuckets[0]->pathLabels);
     }
 
     private function symbol(string $namespace, string $class, string $method): SymbolEntry
