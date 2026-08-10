@@ -12,6 +12,8 @@ final readonly class RepositoryDiscoveryReport
      * @param list<RankedNode> $orchestrators
      * @param list<RankedNode> $typeHubs
      * @param list<array{from: string, to: string, links: int, uncertain_links: int}> $namespaceCoupling
+     * @param list<array{from: string, to: string, links: int, uncertain_links: int}> $directoryCoupling
+     * @param list<array{from: string, to: string, links: int, uncertain_links: int}> $fileCoupling
      * @param array{total_relations: int, certain_relations: int, uncertain_relations: int, dynamic_relations: int, multiple_target_relations: int, diagnostics: int} $quality
      */
     public function __construct(
@@ -21,6 +23,8 @@ final readonly class RepositoryDiscoveryReport
         public array $orchestrators,
         public array $typeHubs,
         public array $namespaceCoupling,
+        public array $directoryCoupling,
+        public array $fileCoupling,
         public array $quality,
     ) {
     }
@@ -35,6 +39,8 @@ final readonly class RepositoryDiscoveryReport
             'orchestrators' => array_map(static fn (RankedNode $node): array => $node->toArray(), $this->orchestrators),
             'type_hubs' => array_map(static fn (RankedNode $node): array => $node->toArray(), $this->typeHubs),
             'namespace_coupling' => $this->namespaceCoupling,
+            'directory_coupling' => $this->directoryCoupling,
+            'file_coupling' => $this->fileCoupling,
             'quality' => $this->quality,
         ];
     }
