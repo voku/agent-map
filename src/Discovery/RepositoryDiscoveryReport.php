@@ -18,6 +18,7 @@ final readonly class RepositoryDiscoveryReport
      */
     public function __construct(
         public string $mapDigest,
+        public ArchitectureMapReport $architecture,
         public array $entrypointCandidates,
         public array $callHubs,
         public array $orchestrators,
@@ -34,6 +35,7 @@ final readonly class RepositoryDiscoveryReport
     {
         return [
             'map_digest' => $this->mapDigest,
+            'architecture' => $this->architecture->toArray(),
             'entrypoint_candidates' => array_map(static fn (RankedNode $node): array => $node->toArray(), $this->entrypointCandidates),
             'call_hubs' => array_map(static fn (RankedNode $node): array => $node->toArray(), $this->callHubs),
             'orchestrators' => array_map(static fn (RankedNode $node): array => $node->toArray(), $this->orchestrators),
