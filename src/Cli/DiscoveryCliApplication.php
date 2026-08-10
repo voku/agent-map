@@ -35,7 +35,7 @@ final readonly class DiscoveryCliApplication
     /** @param list<string> $argv */
     public function shouldAppendToGeneralHelp(array $argv): bool
     {
-        return count($argv) === 2 && in_array($argv[1] ?? null, ['help', '-h', '--help'], true);
+        return count($argv) === 2 && in_array($argv[1], ['help', '-h', '--help'], true);
     }
 
     public function helpOverview(): string
