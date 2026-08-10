@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use voku\AgentMap\Cli\AgentMapApplication;
+use voku\AgentMap\Cli\DiscoveryCliApplication;
 
 // The outer autoloader comes first on purpose. When this package is installed as a dependency its
 // own vendor/ directory is normally absent, but a path repository, a mirrored checkout or a stale
@@ -24,4 +25,14 @@ if (function_exists('ini_set')) {
 
 require $autoload;
 
-exit((new AgentMapApplication())->run($argv));
+$discovery = new DiscoveryCliApplication();
+if ($discovery->supports($argv)) {
+    exit($discovery->run($argv));
+}
+
+$status = (new AgentMapApplication())->run($argv);
+if ($discovery->shouldAppendToGeneralHelp($argv)) {
+    echo $discovery->helpOverview();
+}
+
+exit($status);
