@@ -64,7 +64,10 @@ final readonly class RegionEvidenceAnalyzer
         );
     }
 
-    /** @param non-empty-list<string> $files @param array<string, FileEntry> $fileEntries */
+    /**
+     * @param non-empty-list<string> $files
+     * @param array<string, FileEntry> $fileEntries
+     */
     private function namespaceAgreement(array $files, array $fileEntries): float
     {
         $counts = [];
