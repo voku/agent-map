@@ -52,7 +52,7 @@ final readonly class RegionLabeler
         foreach ($directories as $segments) {
             $maximumDepth = max(1, count($segments) - 1);
             foreach ($segments as $depth => $segment) {
-                if ($segment === '.' || $this->isNoise($segment)) {
+                if ($this->isNoise($segment)) {
                     continue;
                 }
                 $scores[$segment] = ($scores[$segment] ?? 0.0) + 1.0 + $depth / $maximumDepth;
@@ -101,7 +101,7 @@ final readonly class RegionLabeler
 
     public function isNoise(string $token): bool
     {
-        return $token === '' || in_array(strtolower($token), self::NOISE, true);
+        return $token === '' || $token === '.' || in_array(strtolower($token), self::NOISE, true);
     }
 
     public function humanize(string $token): string
