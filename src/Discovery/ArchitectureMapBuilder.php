@@ -126,7 +126,10 @@ final readonly class ArchitectureMapBuilder
         return $drafts;
     }
 
-    /** @param array<string, RegionDraft> $drafts @return array<string, RegionDraft> */
+    /**
+     * @param array<string, RegionDraft> $drafts
+     * @return array<string, RegionDraft>
+     */
     private function disambiguateLabels(array $drafts): array
     {
         $groups = [];
@@ -185,7 +188,10 @@ final readonly class ArchitectureMapBuilder
         return [$parents, $children];
     }
 
-    /** @param non-empty-list<string> $container @param non-empty-list<string> $contained */
+    /**
+     * @param non-empty-list<string> $container
+     * @param non-empty-list<string> $contained
+     */
     private function containsAll(array $container, array $contained): bool
     {
         $set = array_fill_keys($container, true);
