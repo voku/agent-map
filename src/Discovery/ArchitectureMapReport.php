@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Discovery;
 
+use InvalidArgumentException;
+
 final readonly class ArchitectureMapReport
 {
     /**
@@ -78,5 +80,33 @@ final readonly class ArchitectureMapReport
         }
 
         return $path;
+    }
+
+    public function resolveRegion(string $query): ArchitectureRegion
+    {
+        $query = trim($query);
+        if ($query === '') {
+            throw new InvalidArgumentException('Region query must not be empty.');
+        }
+
+        $matches = [];
+        foreach ($this->regions as $region) {
+            if ($region->id === $query || strcasecmp($region->label, $query) === 0) {
+                $matches[$region->id] = $region;
+                continue;
+            }
+            if (str_starts_with($region->id, $query)) {
+                $matches[$region->id] = $region;
+            }
+        }
+
+        if ($matches === []) {
+            throw new InvalidArgumentException('No architecture region matches: ' . $query);
+        }
+        if (count($matches) > 1) {
+            throw new InvalidArgumentException('Architecture region query is ambiguous: ' . $query);
+        }
+
+        return array_values($matches)[0];
     }
 }
