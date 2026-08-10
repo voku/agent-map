@@ -12,6 +12,12 @@ use voku\AgentMap\Index\RelationEntry;
 
 final readonly class ImpactAnalyzer
 {
+    public function __construct(
+        private ArchitectureMapBuilder $architectureMapBuilder = new ArchitectureMapBuilder(),
+        private ImpactArchitectureProjector $architectureProjector = new ImpactArchitectureProjector(),
+    ) {
+    }
+
     /**
      * Find repository nodes that can depend on a changed method.
      *
@@ -159,6 +165,12 @@ final readonly class ImpactAnalyzer
                 ?: $left->node->id <=> $right->node->id;
         });
 
+        $architecture = $this->architectureMapBuilder->build($map);
+        $targetPath = array_map(
+            static fn (ArchitectureRegion $region): string => $region->label,
+            $architecture->pathForFile($target->file),
+        );
+
         return new ImpactReport(
             target: $target,
             impacts: $impacts,
@@ -166,6 +178,8 @@ final readonly class ImpactAnalyzer
             maximumNodes: $maximumNodes,
             truncated: $truncated,
             mapDigest: $map->mapDigest(),
+            targetArchitecturePath: $targetPath,
+            regionBuckets: $this->architectureProjector->project($architecture, $impacts),
         );
     }
 
