@@ -30,11 +30,12 @@ final readonly class GraphRanker
         }
 
         $catalog = new GraphNodeCatalog($map);
+        $adjacency = new GraphAdjacency($map);
         $ranked = [];
         foreach ($catalog->all($kind) as $node) {
             $neighbours = [];
             $uncertainRelations = [];
-            $relations = $metric->incoming() ? $map->incoming($node->id) : $map->outgoing($node->id);
+            $relations = $metric->incoming() ? $adjacency->incoming($node->id) : $adjacency->outgoing($node->id);
             foreach ($relations as $relation) {
                 if (!$metric->acceptsRelation($relation->kind)) {
                     continue;
