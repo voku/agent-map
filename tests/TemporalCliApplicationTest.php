@@ -55,6 +55,23 @@ final class TemporalCliApplicationTest extends TestCase
         }
     }
 
+    public function testHistoryShowDoesNotCreateMissingDatabase(): void
+    {
+        $database = sys_get_temp_dir() . '/agent-map-missing-history-' . bin2hex(random_bytes(6)) . '.sqlite';
+        @unlink($database);
+
+        $status = (new TemporalCliApplication())->run([
+            'agent-map',
+            'history',
+            'show',
+            'method:App\\Foo::run',
+            '--database=' . $database,
+        ]);
+
+        self::assertSame(1, $status);
+        self::assertFileDoesNotExist($database);
+    }
+
     public function testSupportsHistoryAndHelpRouting(): void
     {
         $application = new TemporalCliApplication();
