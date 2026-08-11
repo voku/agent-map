@@ -25,6 +25,7 @@ final class TemporalClaimAnalyzerTest extends TestCase
         self::assertSame('hidden_temporal_coupling', $claims[0]->kind);
         self::assertSame('src/A.php', $claims[0]->left);
         self::assertSame('src/B.php', $claims[0]->right);
+        self::assertSame([str_repeat('a', 40), str_repeat('b', 40)], $claims[0]->revisions);
         self::assertSame(4, $claims[0]->evidence['cochanges']);
         self::assertSame(0.8, $claims[0]->evidence['smaller_side_ratio']);
         self::assertSame(0.0, $claims[0]->evidence['semantic_static_weight']);
@@ -40,6 +41,7 @@ final class TemporalClaimAnalyzerTest extends TestCase
             rightChanges: 5,
             jaccard: 0.666667,
             smallerSideRatio: $ratio,
+            revisions: [str_repeat('a', 40), str_repeat('b', 40)],
             semanticStaticWeight: $semanticWeight,
             pathStaticWeight: 0.0,
             staticSignals: [],
