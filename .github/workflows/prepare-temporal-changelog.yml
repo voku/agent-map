@@ -1,0 +1,78 @@
+name: Prepare temporal changelog once
+
+on:
+  push:
+    branches: [agent/temporal-evolution]
+    paths:
+      - '.github/workflows/prepare-temporal-changelog.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: agent/temporal-evolution
+      - name: Prepend 0.7.0 release notes and remove this workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('CHANGELOG.md')
+          text = path.read_text()
+          marker = '## 0.6.0 - 2026-08-11\n'
+          if '## 0.7.0 - 2026-08-11\n' in text:
+              raise SystemExit('0.7.0 changelog section already exists')
+          if marker not in text:
+              raise SystemExit('0.6.0 changelog marker not found')
+
+          section = '''## 0.7.0 - 2026-08-11
+
+### Added
+
+- Added `agent-map history diff` for deterministic structural comparison of two
+  canonical maps. File, symbol, method, and semantic-relation lifecycle facts keep
+  before/after evidence while line-number-only relation movement is ignored.
+- Added `agent-map history coupling`, which compares bounded Git co-change evidence
+  with current semantic/path coupling and skips bulk commits by default.
+- Added rebuildable `.agent-map/history.sqlite` snapshots with `history observe` and
+  `history show`. Clean Git revisions retain compact declaration, architecture-region,
+  callers/callees, and dependency observations without storing source or embeddings.
+- Added `history claims` with the first deliberately narrow heuristic,
+  `hidden_temporal_coupling`, for strong repeated co-change that has no current
+  semantic graph edge. Claims expose thresholds and raw evidence rather than severity.
+- Added temporal-evolution documentation and ADR 0002 defining Git as historical source
+  and SQLite history as a derived projection.
+
+### Changed
+
+- Snapshot observation sequence, not Git commit timestamp, defines temporal ordering.
+  Commit timestamps remain metadata because rebases, cherry-picks, and synthetic merge
+  commits do not provide a reliable ordering relation.
+- CI now cancels superseded runs on the same ref, discovered while self-dogfooding the
+  feature through connector-generated incremental commits.
+
+### Validation
+
+- Self-dogfood compares agent-map with its own parent map, requires structural signal,
+  analyses 100 real Git commits for independent temporal coupling, validates heuristic
+  claim contracts, and records two real revision snapshots into one temporary history DB.
+- The final dogfood gate observed repeated co-change pairs absent from the semantic
+  graph, evidence-backed claims, a stable method across both snapshots, and a newly
+  introduced method in only the latest snapshot.
+- `composer ci` remains gated across PHP 8.2, 8.3, 8.4, and 8.5.
+
+'''
+          path.write_text(text.replace(marker, section + marker, 1))
+          PY
+          git rm .github/workflows/prepare-temporal-changelog.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CHANGELOG.md
+          git commit -m 'docs: prepare agent-map 0.7.0 changelog'
+          git push origin HEAD:agent/temporal-evolution
