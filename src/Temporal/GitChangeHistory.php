@@ -10,7 +10,7 @@ final readonly class GitChangeHistory
     {
     }
 
-    /** @return list<list<string>> */
+    /** @return list<array{revision: string, files: list<string>}> */
     public function commits(string $root, int $limit): array
     {
         $stdout = $this->git->run(realpath($root) ?: $root, [
@@ -24,36 +24,36 @@ final readonly class GitChangeHistory
         ]);
 
         $commits = [];
-        $current = [];
+        $revision = null;
+        $files = [];
         foreach (preg_split('/\R/', $stdout) ?: [] as $line) {
             $line = trim($line);
             if (str_starts_with($line, '__AGENT_MAP_COMMIT__')) {
-                if ($current !== []) {
-                    $commits[] = $this->uniquePaths($current);
-                }
-                $current = [];
+                $this->append($commits, $revision, $files);
+                $revision = substr($line, strlen('__AGENT_MAP_COMMIT__'));
+                $files = [];
                 continue;
             }
             if ($line !== '') {
-                $current[] = str_replace('\\', '/', $line);
+                $files[] = str_replace('\\', '/', $line);
             }
         }
-        if ($current !== []) {
-            $commits[] = $this->uniquePaths($current);
-        }
+        $this->append($commits, $revision, $files);
 
         return $commits;
     }
 
     /**
-     * @param list<string> $paths
-     * @return list<string>
+     * @param list<array{revision: string, files: list<string>}> $commits
+     * @param list<string> $files
      */
-    private function uniquePaths(array $paths): array
+    private function append(array &$commits, ?string $revision, array $files): void
     {
-        $paths = array_values(array_unique($paths));
-        sort($paths, SORT_STRING);
-
-        return $paths;
+        if ($revision === null || $revision === '' || $files === []) {
+            return;
+        }
+        $files = array_values(array_unique($files));
+        sort($files, SORT_STRING);
+        $commits[] = ['revision' => $revision, 'files' => $files];
     }
 }
