@@ -19,6 +19,7 @@ final readonly class TemporalClaimAnalyzer
                 kind: 'hidden_temporal_coupling',
                 left: $pair->left,
                 right: $pair->right,
+                revisions: $pair->revisions,
                 evidence: [
                     'cochanges' => $pair->coChanges,
                     'left_changes' => $pair->leftChanges,
