@@ -17,14 +17,16 @@ Historical defaults:
 
 ```text
 .agent-map/php-symbols.json
-.agent-map/php-symbols.toon
+.agent-map/map/php-symbols.toon
 .agent-map/search.sqlite
 ```
 
-Migrate existing generated state with:
+Migrate existing generated state explicitly:
 
 ```text
-.agent-map/ -> .agent-loop/map/
+.agent-map/php-symbols.json      -> .agent-loop/map/php-symbols.json
+.agent-map/map/php-symbols.toon -> .agent-loop/map/php-symbols.toon
+.agent-map/search.sqlite         -> .agent-loop/map/search.sqlite
 ```
 
 Because map/search state is derived, rebuilding it is also valid and often
