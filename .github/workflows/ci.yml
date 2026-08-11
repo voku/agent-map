@@ -19,3 +19,33 @@ jobs:
           tools: composer:v2
       - run: composer install --no-interaction --prefer-dist
       - run: composer ci
+
+  temporal-dogfood:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Compare agent-map with its parent revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          previous="$tmp/previous"
+          cleanup() {
+            git worktree remove --force "$previous" >/dev/null 2>&1 || true
+            rm -rf "$tmp"
+          }
+          trap cleanup EXIT
+
+          git worktree add --detach "$previous" HEAD^
+          php bin/agent-map build --root="$previous" --paths=src --out="$tmp/before.json" --phpstan-memory-limit=512M
+          php bin/agent-map build --root="$GITHUB_WORKSPACE" --paths=src --out="$tmp/after.json" --phpstan-memory-limit=512M
+          php bin/agent-map history diff --before="$tmp/before.json" --after="$tmp/after.json" --format=json --limit=500 > "$tmp/diff.json"
+          php tools/temporal-self-dogfood.php "$tmp/diff.json"
