@@ -62,9 +62,9 @@ final readonly class CliOptions
             'root' => getcwd() ?: '.',
             'paths' => '.',
             'scan' => '',
-            'out' => '.agent-map/php-symbols.json',
-            'index' => '.agent-map/php-symbols.json',
-            'database' => '.agent-map/search.sqlite',
+            'out' => '.agent-loop/map/php-symbols.json',
+            'index' => '.agent-loop/map/php-symbols.json',
+            'database' => '.agent-loop/map/search.sqlite',
             'cases' => 'tests/fixtures/search-cases.json',
             'format' => in_array($command, ['build', 'refresh'], true) ? 'json' : 'text',
             'limit' => $command === 'scope' ? '10' : '20',
@@ -133,7 +133,7 @@ final readonly class CliOptions
                 $values['format'] = 'toon';
             }
             if (!$outProvided && $values['format'] === 'toon') {
-                $values['out'] = '.agent-map/php-symbols.toon';
+                $values['out'] = '.agent-loop/map/php-symbols.toon';
             }
         }
 
@@ -196,6 +196,7 @@ final readonly class CliOptions
         if (!is_int($integer)) {
             throw new InvalidArgumentException('Invalid ' . $name . ': ' . $value);
         }
+
         return $integer;
     }
 
