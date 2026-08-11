@@ -17,20 +17,31 @@ $read = static function (string $path): array {
     return $data;
 };
 
+$describe = static fn (array $history): string => sprintf(
+    'entity=%s status=%s observations=%d latest=%s',
+    (string) ($history['entity_id'] ?? '?'),
+    (string) ($history['status'] ?? '?'),
+    (int) ($history['observation_count'] ?? 0),
+    (string) (($history['latest_snapshot']['revision'] ?? null) ?: '?'),
+);
+
 $observe = $read($argv[1]);
 $stable = $read($argv[2]);
 $new = $read($argv[3]);
 
 if (($observe['snapshot_count'] ?? null) !== 2) {
-    fwrite(STDERR, "[FAIL] temporal history did not persist exactly two revision snapshots.\n");
+    fwrite(STDERR, '[FAIL] temporal history did not persist exactly two revision snapshots; got '
+        . (int) ($observe['snapshot_count'] ?? 0) . ".\n");
     exit(1);
 }
 if (($stable['status'] ?? null) !== 'present' || ($stable['observation_count'] ?? 0) < 2) {
-    fwrite(STDERR, "[FAIL] stable agent-map entity is not visible across both temporal snapshots.\n");
+    fwrite(STDERR, '[FAIL] stable agent-map entity is not visible across both temporal snapshots: '
+        . $describe($stable) . "\n");
     exit(1);
 }
 if (($new['status'] ?? null) !== 'present' || ($new['observation_count'] ?? 0) !== 1) {
-    fwrite(STDERR, "[FAIL] newly introduced temporal entity does not have the expected one-snapshot lifecycle.\n");
+    fwrite(STDERR, '[FAIL] newly introduced temporal entity does not have the expected one-snapshot lifecycle: '
+        . $describe($new) . "\n");
     exit(1);
 }
 
