@@ -11,9 +11,7 @@ use voku\AgentMap\Index\FileEntry;
 
 final readonly class CoChangeAnalyzer
 {
-    /**
-     * @param list<list<string>> $commits
-     */
+    /** @param list<array{revision: string, files: list<string>}> $commits */
     public function analyze(
         AgentMapIndex $map,
         array $commits,
@@ -30,9 +28,9 @@ final readonly class CoChangeAnalyzer
         $analyzed = 0;
         $bulkSkipped = 0;
 
-        foreach ($commits as $commitFiles) {
+        foreach ($commits as $commit) {
             $files = [];
-            foreach ($commitFiles as $path) {
+            foreach ($commit['files'] as $path) {
                 if (isset($indexed[$path])) {
                     $files[$path] = true;
                 }
@@ -56,8 +54,9 @@ final readonly class CoChangeAnalyzer
                     $left = $files[$leftIndex];
                     $right = $files[$rightIndex];
                     $key = WeightedFileGraph::pairKey($left, $right);
-                    $pairs[$key] ??= ['left' => $left, 'right' => $right, 'count' => 0];
+                    $pairs[$key] ??= ['left' => $left, 'right' => $right, 'count' => 0, 'revisions' => []];
                     ++$pairs[$key]['count'];
+                    $pairs[$key]['revisions'][] = $commit['revision'];
                 }
             }
         }
@@ -85,6 +84,7 @@ final readonly class CoChangeAnalyzer
                 rightChanges: $rightChanges,
                 jaccard: $union > 0 ? round($coChanges / $union, 6) : 0.0,
                 smallerSideRatio: $smaller > 0 ? round($coChanges / $smaller, 6) : 0.0,
+                revisions: $pair['revisions'],
                 semanticStaticWeight: round(max(0.0, $semanticWeight), 6),
                 pathStaticWeight: round($pathWeight, 6),
                 staticSignals: $signals,
