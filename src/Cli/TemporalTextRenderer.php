@@ -53,6 +53,7 @@ final readonly class TemporalTextRenderer
                 $pair->jaccard,
                 $pair->smallerSideRatio,
             );
+            $out .= '  revisions=' . $this->revisions($pair->revisions) . "\n";
             $out .= sprintf(
                 "  static: semantic_weight=%.3f; path_weight=%.3f%s\n",
                 $pair->semanticStaticWeight,
@@ -80,6 +81,7 @@ final readonly class TemporalTextRenderer
                 (float) $claim->evidence['semantic_static_weight'],
                 (float) $claim->evidence['path_static_weight'],
             );
+            $out .= '  revisions=' . $this->revisions($claim->revisions) . "\n";
         }
 
         return $out;
@@ -114,6 +116,12 @@ final readonly class TemporalTextRenderer
         }
 
         return $out;
+    }
+
+    /** @param list<string> $revisions */
+    private function revisions(array $revisions): string
+    {
+        return implode(',', array_map(static fn (string $revision): string => substr($revision, 0, 12), $revisions));
     }
 
     private function evidenceLine(string $label, TemporalEvent $event, bool $before): string
