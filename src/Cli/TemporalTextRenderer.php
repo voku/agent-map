@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Cli;
 
+use voku\AgentMap\Temporal\CoChangeReport;
 use voku\AgentMap\Temporal\TemporalDiffReport;
 use voku\AgentMap\Temporal\TemporalEvent;
 
@@ -28,6 +29,34 @@ final readonly class TemporalTextRenderer
         }
         if (count($report->events) > $limit) {
             $out .= '  ... ' . (count($report->events) - $limit) . " more event(s)\n";
+        }
+
+        return $out;
+    }
+
+    public function coupling(CoChangeReport $report): string
+    {
+        $out = "Temporal co-change evidence\n\n";
+        $out .= 'Commits analysed: ' . $report->commitsAnalyzed . "\n";
+        $out .= 'Bulk commits skipped: ' . $report->bulkCommitsSkipped . "\n";
+        $out .= 'Pairs: ' . count($report->pairs) . "\n\n";
+
+        foreach ($report->pairs as $pair) {
+            $out .= $pair->left . ' <> ' . $pair->right . "\n";
+            $out .= sprintf(
+                "  cochanges=%d; left_changes=%d; right_changes=%d; jaccard=%.3f; smaller_side_ratio=%.3f\n",
+                $pair->coChanges,
+                $pair->leftChanges,
+                $pair->rightChanges,
+                $pair->jaccard,
+                $pair->smallerSideRatio,
+            );
+            $out .= sprintf(
+                "  static: semantic_weight=%.3f; path_weight=%.3f%s\n",
+                $pair->semanticStaticWeight,
+                $pair->pathStaticWeight,
+                $pair->staticSignals === [] ? '' : '; signals=' . implode(',', array_keys($pair->staticSignals)),
+            );
         }
 
         return $out;
