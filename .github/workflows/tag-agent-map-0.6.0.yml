@@ -1,0 +1,31 @@
+name: Tag agent-map 0.6.0
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/tag-agent-map-0.6.0.yml
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Create 0.6.0 tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git rev-parse --verify --quiet refs/tags/0.6.0 >/dev/null; then
+            echo 'Tag 0.6.0 already exists; refusing to move it.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a 0.6.0 1cec3c0b68c744fa16188ace5148c4439e2dc2b4 -m 'agent-map 0.6.0'
+          git push origin refs/tags/0.6.0
