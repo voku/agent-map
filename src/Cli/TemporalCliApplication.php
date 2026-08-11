@@ -11,17 +11,23 @@ use Throwable;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Temporal\CoChangeAnalyzer;
+use voku\AgentMap\Temporal\CoChangeReport;
 use voku\AgentMap\Temporal\EntityHistoryReport;
 use voku\AgentMap\Temporal\EntityObservationBuilder;
 use voku\AgentMap\Temporal\GitChangeHistory;
 use voku\AgentMap\Temporal\GitRevisionInspector;
 use voku\AgentMap\Temporal\StructuralDiffer;
+use voku\AgentMap\Temporal\TemporalClaim;
+use voku\AgentMap\Temporal\TemporalClaimAnalyzer;
 use voku\AgentMap\Temporal\TemporalHistoryStore;
 
 final readonly class TemporalCliApplication
 {
     private const DEFAULT_INDEX = '.agent-map/php-symbols.json';
     private const DEFAULT_DATABASE = '.agent-map/history.sqlite';
+
+    /** @var list<string> */
+    private const COUPLING_OPTIONS = ['index', 'root', 'commits', 'top', 'min-cochanges', 'max-files-per-commit'];
 
     public function __construct(
         private TemporalTextRenderer $textRenderer = new TemporalTextRenderer(),
@@ -52,6 +58,7 @@ final readonly class TemporalCliApplication
 Temporal evolution:
   history diff       Compare two canonical map snapshots
   history coupling   Compare Git co-change evidence with current static coupling
+  history claims     Derive explicit heuristic claims from temporal evidence
   history observe    Persist compact evidence for one clean Git revision
   history show       Inspect one entity across recorded revisions
 
@@ -73,6 +80,7 @@ TEXT;
                 'help', '-h', '--help' => $this->printHelp(),
                 'diff' => $this->diff(array_slice($argv, 3)),
                 'coupling' => $this->coupling(array_slice($argv, 3)),
+                'claims' => $this->claims(array_slice($argv, 3)),
                 'observe' => $this->observe(array_slice($argv, 3)),
                 'show' => $this->show(array_slice($argv, 3)),
                 default => throw new InvalidArgumentException('Unknown history command: ' . $subcommand),
@@ -103,35 +111,55 @@ TEXT;
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $reader = new IndexReader();
         $report = (new StructuralDiffer())->diff($reader->read($beforePath), $reader->read($afterPath));
-        $payload = ['type' => 'history_diff', ...$report->toArray($limit)];
 
-        echo $this->render($payload, $format, $this->textRenderer->diff($report, $limit));
+        echo $this->render(['type' => 'history_diff', ...$report->toArray($limit)], $format, $this->textRenderer->diff($report, $limit));
         return 0;
     }
 
     /** @param list<string> $tokens */
     private function coupling(array $tokens): int
     {
-        $parsed = $this->parse($tokens, ['index', 'root', 'commits', 'top', 'min-cochanges', 'max-files-per-commit', 'format']);
+        $parsed = $this->parse($tokens, [...self::COUPLING_OPTIONS, 'format']);
         if ($parsed['help']) {
             echo $this->help();
             return 0;
         }
         $this->rejectArguments($parsed['arguments'], 'history coupling');
+        $report = $this->coChangeReport($parsed['options']);
 
-        $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
-        $root = $parsed['options']['root'] ?? $map->root;
-        $commits = $this->positiveInt('commits', $parsed['options']['commits'] ?? '100');
-        $top = $this->positiveInt('top', $parsed['options']['top'] ?? '20');
-        $minimumCoChanges = $this->positiveInt('min-cochanges', $parsed['options']['min-cochanges'] ?? '2');
-        $maximumFiles = $this->positiveInt('max-files-per-commit', $parsed['options']['max-files-per-commit'] ?? '100');
-        $format = $this->format($parsed['options']['format'] ?? 'text');
+        echo $this->render(
+            ['type' => 'history_coupling', ...$report->toArray()],
+            $this->format($parsed['options']['format'] ?? 'text'),
+            $this->textRenderer->coupling($report),
+        );
+        return 0;
+    }
 
-        $history = (new GitChangeHistory())->commits($root, $commits);
-        $report = (new CoChangeAnalyzer())->analyze($map, $history, $minimumCoChanges, $top, $maximumFiles);
-        $payload = ['type' => 'history_coupling', ...$report->toArray()];
+    /** @param list<string> $tokens */
+    private function claims(array $tokens): int
+    {
+        $parsed = $this->parse($tokens, [...self::COUPLING_OPTIONS, 'min-ratio', 'format']);
+        if ($parsed['help']) {
+            echo $this->help();
+            return 0;
+        }
+        $this->rejectArguments($parsed['arguments'], 'history claims');
+        $minimumRatio = $this->ratio('min-ratio', $parsed['options']['min-ratio'] ?? '0.6');
+        $claims = (new TemporalClaimAnalyzer())->hiddenCoupling($this->coChangeReport($parsed['options']), $minimumRatio);
+        $payload = [
+            'type' => 'history_claims',
+            'claim_kind' => 'hidden_temporal_coupling',
+            'heuristic' => true,
+            'minimum_smaller_side_ratio' => $minimumRatio,
+            'claim_count' => count($claims),
+            'claims' => array_map(static fn (TemporalClaim $claim): array => $claim->toArray(), $claims),
+        ];
 
-        echo $this->render($payload, $format, $this->textRenderer->coupling($report));
+        echo $this->render(
+            $payload,
+            $this->format($parsed['options']['format'] ?? 'text'),
+            $this->textRenderer->claims($claims, $minimumRatio),
+        );
         return 0;
     }
 
@@ -188,10 +216,31 @@ TEXT;
         $database = $this->absolute(getcwd() ?: '.', $parsed['options']['database'] ?? self::DEFAULT_DATABASE);
         $store = new TemporalHistoryStore($database);
         $report = new EntityHistoryReport($entityId, $store->entityHistory($entityId), $store->latestSnapshot());
-        $payload = ['type' => 'history_entity', ...$report->toArray()];
 
-        echo $this->render($payload, $this->format($parsed['options']['format'] ?? 'text'), $this->textRenderer->entityHistory($report));
+        echo $this->render(
+            ['type' => 'history_entity', ...$report->toArray()],
+            $this->format($parsed['options']['format'] ?? 'text'),
+            $this->textRenderer->entityHistory($report),
+        );
         return 0;
+    }
+
+    /** @param array<string, string> $options */
+    private function coChangeReport(array $options): CoChangeReport
+    {
+        $map = $this->loadFresh($options['index'] ?? self::DEFAULT_INDEX);
+        $history = (new GitChangeHistory())->commits(
+            $options['root'] ?? $map->root,
+            $this->positiveInt('commits', $options['commits'] ?? '100'),
+        );
+
+        return (new CoChangeAnalyzer())->analyze(
+            $map,
+            $history,
+            $this->positiveInt('min-cochanges', $options['min-cochanges'] ?? '2'),
+            $this->positiveInt('top', $options['top'] ?? '20'),
+            $this->positiveInt('max-files-per-commit', $options['max-files-per-commit'] ?? '100'),
+        );
     }
 
     private function loadFresh(string $path): AgentMapIndex
@@ -237,17 +286,18 @@ TEXT;
 Temporal evolution:
   agent-map history diff --before=MAP --after=MAP [--limit=100] [--format=text|json|toon|markdown]
   agent-map history coupling [--index=MAP] [--root=PATH] [--commits=100] [--min-cochanges=2]
-                             [--max-files-per-commit=100] [--top=20] [--format=text|json|toon|markdown]
+                             [--max-files-per-commit=100] [--top=20] [--format=...]
+  agent-map history claims [same coupling options] [--min-ratio=0.6] [--format=...]
   agent-map history observe [--index=MAP] [--database=.agent-map/history.sqlite] [--format=...]
   agent-map history show ENTITY [--database=.agent-map/history.sqlite] [--format=...]
 
 `history diff` compares canonical map structure and ignores line-number-only relation movement.
 `history coupling` exposes bounded Git co-change beside current semantic/path coupling.
+`history claims` currently emits only `hidden_temporal_coupling`: repeated strong co-change for a pair
+with no current semantic graph edge. Claims are explicitly heuristic and always include raw evidence.
 `history observe` records compact entity metrics only for a clean Git revision, keeping history
 rebuildable from Git plus canonical maps. It stores no source text, embeddings, or raw relation events.
 `history show` reveals lifecycle, signature/path/region variants, and graph metric deltas for one entity.
-
-Temporal commands expose evidence. Rename, hotspot, and smell interpretations remain claims, never map facts.
 TEXT;
     }
 
@@ -304,6 +354,15 @@ TEXT;
         }
 
         return (int) $value;
+    }
+
+    private function ratio(string $name, string $value): float
+    {
+        if (!is_numeric($value) || (float) $value < 0.0 || (float) $value > 1.0) {
+            throw new InvalidArgumentException('--' . $name . ' must be a number between 0 and 1.');
+        }
+
+        return (float) $value;
     }
 
     private function format(string $value): string
