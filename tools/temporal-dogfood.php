@@ -35,11 +35,18 @@ if ((int) ($diff['event_count'] ?? 0) === 0 || $structural === 0) {
 }
 
 $pairs = is_array($coupling['pairs'] ?? null) ? $coupling['pairs'] : [];
-$independentPairs = array_filter($pairs, static fn (mixed $pair): bool => is_array($pair)
-    && (int) ($pair['cochanges'] ?? 0) >= 2
-    && (float) ($pair['semantic_static_weight'] ?? 1.0) <= 0.000001);
+$independentPairs = array_filter($pairs, static function (mixed $pair): bool {
+    if (!is_array($pair)) {
+        return false;
+    }
+    $revisions = is_array($pair['revisions'] ?? null) ? $pair['revisions'] : [];
+
+    return (int) ($pair['cochanges'] ?? 0) >= 2
+        && count($revisions) === (int) ($pair['cochanges'] ?? 0)
+        && (float) ($pair['semantic_static_weight'] ?? 1.0) <= 0.000001;
+});
 if ($independentPairs === []) {
-    fwrite(STDERR, "[FAIL] Git co-change added no signal beyond the semantic graph.\n");
+    fwrite(STDERR, "[FAIL] Git co-change added no independently attributable signal beyond the semantic graph.\n");
     exit(1);
 }
 
@@ -50,12 +57,14 @@ if ($claimRows === []) {
 }
 foreach ($claimRows as $claim) {
     $evidence = is_array($claim) && is_array($claim['evidence'] ?? null) ? $claim['evidence'] : [];
+    $revisions = is_array($claim) && is_array($claim['revisions'] ?? null) ? $claim['revisions'] : [];
     if (($claim['kind'] ?? null) !== 'hidden_temporal_coupling'
         || ($claim['heuristic'] ?? null) !== true
+        || count($revisions) !== (int) ($evidence['cochanges'] ?? -1)
         || (float) ($evidence['semantic_static_weight'] ?? 1.0) > 0.000001
         || (float) ($evidence['smaller_side_ratio'] ?? 0.0) < 0.6
     ) {
-        fwrite(STDERR, "[FAIL] temporal claim escaped its evidence contract.\n");
+        fwrite(STDERR, "[FAIL] temporal claim escaped its evidence/provenance contract.\n");
         exit(1);
     }
 }
@@ -88,11 +97,13 @@ printf(
 );
 foreach (array_slice($claimRows, 0, 5) as $claim) {
     $evidence = $claim['evidence'];
+    $revisions = $claim['revisions'];
     printf(
-        "  claim %s <> %s | together=%d | smaller-side=%.3f\n",
+        "  claim %s <> %s | together=%d | smaller-side=%.3f | commits=%s\n",
         (string) $claim['left'],
         (string) $claim['right'],
         (int) $evidence['cochanges'],
         (float) $evidence['smaller_side_ratio'],
+        implode(',', array_map(static fn (string $revision): string => substr($revision, 0, 8), array_slice($revisions, 0, 4))),
     );
 }
