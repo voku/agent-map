@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Cli;
 
 use voku\AgentMap\Temporal\CoChangeReport;
+use voku\AgentMap\Temporal\EntityHistoryReport;
 use voku\AgentMap\Temporal\TemporalDiffReport;
 use voku\AgentMap\Temporal\TemporalEvent;
 
@@ -57,6 +58,37 @@ final readonly class TemporalTextRenderer
                 $pair->pathStaticWeight,
                 $pair->staticSignals === [] ? '' : '; signals=' . implode(',', array_keys($pair->staticSignals)),
             );
+        }
+
+        return $out;
+    }
+
+    public function entityHistory(EntityHistoryReport $report): string
+    {
+        $out = "Temporal entity history\n\n";
+        $out .= 'Entity: ' . $report->entityId . "\n";
+        $out .= 'Status: ' . $report->status() . "\n";
+        $out .= 'Observations: ' . count($report->observations) . "\n";
+        $delta = $report->metricDelta();
+        $out .= sprintf(
+            "Metric delta: callers=%+d; callees=%+d; dependents=%+d; dependencies=%+d\n\n",
+            $delta['callers'],
+            $delta['callees'],
+            $delta['dependents'],
+            $delta['dependencies'],
+        );
+
+        foreach ($report->observations as $observation) {
+            $out .= substr($observation['revision'], 0, 12) . ' ' . $observation['committed_at'] . "\n";
+            $out .= '  path=' . $observation['file_path'] . '; region=' . ($observation['region_label'] ?? 'unassigned') . "\n";
+            $out .= sprintf(
+                "  callers=%d; callees=%d; dependents=%d; dependencies=%d\n",
+                $observation['callers'],
+                $observation['callees'],
+                $observation['dependents'],
+                $observation['dependencies'],
+            );
+            $out .= '  signature=' . $observation['signature'] . "\n";
         }
 
         return $out;
