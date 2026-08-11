@@ -214,6 +214,9 @@ TEXT;
 
         $entityId = $parsed['arguments'][0];
         $database = $this->absolute(getcwd() ?: '.', $parsed['options']['database'] ?? self::DEFAULT_DATABASE);
+        if (!is_file($database)) {
+            throw new RuntimeException('Temporal history database not found: ' . $database . '. Run agent-map history observe first.');
+        }
         $store = new TemporalHistoryStore($database);
         $report = new EntityHistoryReport($entityId, $store->entityHistory($entityId), $store->latestSnapshot());
 
@@ -294,10 +297,10 @@ Temporal evolution:
 `history diff` compares canonical map structure and ignores line-number-only relation movement.
 `history coupling` exposes bounded Git co-change beside current semantic/path coupling.
 `history claims` currently emits only `hidden_temporal_coupling`: repeated strong co-change for a pair
-with no current semantic graph edge. Claims are explicitly heuristic and always include raw evidence.
+with no current semantic graph edge. Claims are explicitly heuristic and carry their Git revisions.
 `history observe` records compact entity metrics only for a clean Git revision, keeping history
 rebuildable from Git plus canonical maps. It stores no source text, embeddings, or raw relation events.
-`history show` reveals lifecycle, signature/path/region variants, and graph metric deltas for one entity.
+`history show` is read-only and reveals lifecycle, signature/path/region variants, and graph metric deltas.
 TEXT;
     }
 
