@@ -11,12 +11,17 @@ use Throwable;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Temporal\CoChangeAnalyzer;
+use voku\AgentMap\Temporal\EntityHistoryReport;
+use voku\AgentMap\Temporal\EntityObservationBuilder;
 use voku\AgentMap\Temporal\GitChangeHistory;
+use voku\AgentMap\Temporal\GitRevisionInspector;
 use voku\AgentMap\Temporal\StructuralDiffer;
+use voku\AgentMap\Temporal\TemporalHistoryStore;
 
 final readonly class TemporalCliApplication
 {
     private const DEFAULT_INDEX = '.agent-map/php-symbols.json';
+    private const DEFAULT_DATABASE = '.agent-map/history.sqlite';
 
     public function __construct(
         private TemporalTextRenderer $textRenderer = new TemporalTextRenderer(),
@@ -47,6 +52,8 @@ final readonly class TemporalCliApplication
 Temporal evolution:
   history diff       Compare two canonical map snapshots
   history coupling   Compare Git co-change evidence with current static coupling
+  history observe    Persist compact evidence for one clean Git revision
+  history show       Inspect one entity across recorded revisions
 
 Run `agent-map help history` for details.
 TEXT;
@@ -66,6 +73,8 @@ TEXT;
                 'help', '-h', '--help' => $this->printHelp(),
                 'diff' => $this->diff(array_slice($argv, 3)),
                 'coupling' => $this->coupling(array_slice($argv, 3)),
+                'observe' => $this->observe(array_slice($argv, 3)),
+                'show' => $this->show(array_slice($argv, 3)),
                 default => throw new InvalidArgumentException('Unknown history command: ' . $subcommand),
             };
         } catch (Throwable $throwable) {
@@ -126,18 +135,86 @@ TEXT;
         return 0;
     }
 
+    /** @param list<string> $tokens */
+    private function observe(array $tokens): int
+    {
+        $parsed = $this->parse($tokens, ['index', 'database', 'format']);
+        if ($parsed['help']) {
+            echo $this->help();
+            return 0;
+        }
+        $this->rejectArguments($parsed['arguments'], 'history observe');
+
+        $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
+        $revision = (new GitRevisionInspector())->current($map->root);
+        $observations = (new EntityObservationBuilder())->build($map);
+        $database = $this->absolute($map->root, $parsed['options']['database'] ?? self::DEFAULT_DATABASE);
+        $store = new TemporalHistoryStore($database);
+        $snapshotId = $store->record($map, $revision, $observations);
+        $payload = [
+            'type' => 'history_observe',
+            'snapshot_id' => $snapshotId,
+            'revision' => $revision->commit,
+            'committed_at' => $revision->committedAt,
+            'map_digest' => $map->mapDigest(),
+            'observation_count' => count($observations),
+            'snapshot_count' => $store->snapshotCount(),
+            'database' => $database,
+        ];
+        $text = sprintf(
+            "Recorded temporal snapshot %d for %s with %d entity observation(s).\n",
+            $snapshotId,
+            substr($revision->commit, 0, 12),
+            count($observations),
+        );
+
+        echo $this->render($payload, $this->format($parsed['options']['format'] ?? 'text'), $text);
+        return 0;
+    }
+
+    /** @param list<string> $tokens */
+    private function show(array $tokens): int
+    {
+        $parsed = $this->parse($tokens, ['database', 'format']);
+        if ($parsed['help']) {
+            echo $this->help();
+            return 0;
+        }
+        if (count($parsed['arguments']) !== 1) {
+            throw new InvalidArgumentException('history show requires exactly one entity id.');
+        }
+
+        $entityId = $parsed['arguments'][0];
+        $database = $this->absolute(getcwd() ?: '.', $parsed['options']['database'] ?? self::DEFAULT_DATABASE);
+        $store = new TemporalHistoryStore($database);
+        $report = new EntityHistoryReport($entityId, $store->entityHistory($entityId), $store->latestSnapshot());
+        $payload = ['type' => 'history_entity', ...$report->toArray()];
+
+        echo $this->render($payload, $this->format($parsed['options']['format'] ?? 'text'), $this->textRenderer->entityHistory($report));
+        return 0;
+    }
+
     private function loadFresh(string $path): AgentMapIndex
     {
         $map = (new IndexReader())->read($path);
         $stale = $map->staleEntries();
         if ($stale !== []) {
             throw new RuntimeException(sprintf(
-                'Agent map is stale for %d file(s). Run agent-map refresh before temporal coupling analysis.',
+                'Agent map is stale for %d file(s). Run agent-map refresh before temporal analysis.',
                 count($stale),
             ));
         }
 
         return $map;
+    }
+
+    private function absolute(string $root, string $path): string
+    {
+        if ($path !== '' && ($path[0] === '/' || preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1)) {
+            return $path;
+        }
+
+        return rtrim(str_replace('\\', '/', $root), '/') . '/' . ltrim($path, '/');
     }
 
     /** @param list<string> $arguments */
@@ -161,14 +238,16 @@ Temporal evolution:
   agent-map history diff --before=MAP --after=MAP [--limit=100] [--format=text|json|toon|markdown]
   agent-map history coupling [--index=MAP] [--root=PATH] [--commits=100] [--min-cochanges=2]
                              [--max-files-per-commit=100] [--top=20] [--format=text|json|toon|markdown]
+  agent-map history observe [--index=MAP] [--database=.agent-map/history.sqlite] [--format=...]
+  agent-map history show ENTITY [--database=.agent-map/history.sqlite] [--format=...]
 
-`history diff` compares canonical map structure. It reports file, symbol, method, and semantic-relation
-changes while deliberately ignoring line-number-only movement in relations.
+`history diff` compares canonical map structure and ignores line-number-only relation movement.
+`history coupling` exposes bounded Git co-change beside current semantic/path coupling.
+`history observe` records compact entity metrics only for a clean Git revision, keeping history
+rebuildable from Git plus canonical maps. It stores no source text, embeddings, or raw relation events.
+`history show` reveals lifecycle, signature/path/region variants, and graph metric deltas for one entity.
 
-`history coupling` reads bounded Git history, filters it to files in the current map, skips bulk commits
-that would turn repository-wide formatting into artificial coupling, and exposes co-change ratios beside
-current semantic/path coupling. Neither command claims why a change happened; rename, hotspot, and smell
-interpretations must remain evidence-backed claims rather than map facts.
+Temporal commands expose evidence. Rename, hotspot, and smell interpretations remain claims, never map facts.
 TEXT;
     }
 
@@ -236,9 +315,7 @@ TEXT;
         return $value;
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     */
+    /** @param array<string, mixed> $payload */
     private function render(array $payload, string $format, string $text): string
     {
         return match ($format) {
