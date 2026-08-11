@@ -19,7 +19,7 @@ final readonly class CoChangeReport
      *     commits_analyzed: int,
      *     bulk_commits_skipped: int,
      *     pair_count: int,
-     *     pairs: list<array{left: string, right: string, cochanges: int, left_changes: int, right_changes: int, jaccard: float, smaller_side_ratio: float, semantic_static_weight: float, path_static_weight: float, static_signals: array<string, float>}>
+     *     pairs: list<array<string, mixed>>
      * }
      */
     public function toArray(): array
