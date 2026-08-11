@@ -51,18 +51,13 @@ jobs:
           git worktree add --detach "$previous" HEAD^
           php bin/agent-map build --root="$previous" --paths=src --out="$tmp/before.json" --phpstan-memory-limit=512M
           php bin/agent-map build --root="$GITHUB_WORKSPACE" --paths=src --out="$tmp/after.json" --phpstan-memory-limit=512M
-
           php bin/agent-map history diff --before="$tmp/before.json" --after="$tmp/after.json" --format=json --limit=500 > "$tmp/diff.json"
-          php tools/temporal-self-dogfood.php "$tmp/diff.json"
-
           php bin/agent-map history coupling --index="$tmp/after.json" --root="$GITHUB_WORKSPACE" --commits=100 --min-cochanges=2 --top=50 --format=json > "$tmp/coupling.json"
-          php tools/temporal-coupling-dogfood.php "$tmp/coupling.json"
-
           php bin/agent-map history claims --index="$tmp/after.json" --root="$GITHUB_WORKSPACE" --commits=100 --min-cochanges=2 --top=50 --min-ratio=0.6 --format=json > "$tmp/claims.json"
-          php tools/temporal-claims-dogfood.php "$tmp/claims.json"
-
           php bin/agent-map history observe --index="$tmp/before.json" --database="$tmp/history.sqlite" --format=json > "$tmp/observe-before.json"
           php bin/agent-map history observe --index="$tmp/after.json" --database="$tmp/history.sqlite" --format=json > "$tmp/observe-after.json"
           php bin/agent-map history show 'method:voku\AgentMap\Cli\AgentMapApplication::run' --database="$tmp/history.sqlite" --format=json > "$tmp/stable-history.json"
           php bin/agent-map history show 'method:voku\AgentMap\Temporal\TemporalHistoryStore::record' --database="$tmp/history.sqlite" --format=json > "$tmp/new-history.json"
-          php tools/temporal-history-dogfood.php "$tmp/observe-after.json" "$tmp/stable-history.json" "$tmp/new-history.json"
+          php tools/temporal-dogfood.php \
+            "$tmp/diff.json" "$tmp/coupling.json" "$tmp/claims.json" \
+            "$tmp/observe-after.json" "$tmp/stable-history.json" "$tmp/new-history.json"
