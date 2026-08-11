@@ -209,13 +209,21 @@ final readonly class StructuralDiffer
         return $relations;
     }
 
-    /** @param array{file: FileEntry, symbol: SymbolEntry} $item @return array<string, string|int|float|bool|null> */
+    /**
+     * @param array{file: FileEntry, symbol: SymbolEntry} $item
+     *
+     * @return array<string, string|int|float|bool|null>
+     */
     private function symbolPayload(array $item): array
     {
         return ['path' => $item['file']->path, 'signature' => $this->signatures->symbol($item['symbol'])];
     }
 
-    /** @param array{file: FileEntry, method: MethodEntry} $item @return array<string, string|int|float|bool|null> */
+    /**
+     * @param array{file: FileEntry, method: MethodEntry} $item
+     *
+     * @return array<string, string|int|float|bool|null>
+     */
     private function methodPayload(array $item): array
     {
         return ['path' => $item['file']->path, 'signature' => $this->signatures->method($item['method'])];
