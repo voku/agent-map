@@ -80,6 +80,9 @@ final class TemporalHistoryStore
     }
 
     /**
+     * Snapshot ids are the observation sequence. Git commit timestamps are metadata only: rebases,
+     * cherry-picks and synthetic merge commits do not provide a reliable chronological ordering.
+     *
      * @return list<array{
      *   snapshot_id: int,
      *   revision: string,
@@ -106,7 +109,7 @@ final class TemporalHistoryStore
              FROM entity_observations o
              JOIN temporal_snapshots s ON s.snapshot_id = o.snapshot_id
              WHERE o.entity_id = :entity_id
-             ORDER BY s.committed_at, s.snapshot_id',
+             ORDER BY s.snapshot_id',
         );
         $statement->execute(['entity_id' => $entityId]);
 
@@ -126,7 +129,7 @@ final class TemporalHistoryStore
         $statement = $this->pdo->query(
             'SELECT snapshot_id, revision, committed_at, map_digest
              FROM temporal_snapshots
-             ORDER BY committed_at DESC, snapshot_id DESC
+             ORDER BY snapshot_id DESC
              LIMIT 1',
         );
         if ($statement === false) {
