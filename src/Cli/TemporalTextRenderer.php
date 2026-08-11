@@ -6,6 +6,7 @@ namespace voku\AgentMap\Cli;
 
 use voku\AgentMap\Temporal\CoChangeReport;
 use voku\AgentMap\Temporal\EntityHistoryReport;
+use voku\AgentMap\Temporal\TemporalClaim;
 use voku\AgentMap\Temporal\TemporalDiffReport;
 use voku\AgentMap\Temporal\TemporalEvent;
 
@@ -57,6 +58,27 @@ final readonly class TemporalTextRenderer
                 $pair->semanticStaticWeight,
                 $pair->pathStaticWeight,
                 $pair->staticSignals === [] ? '' : '; signals=' . implode(',', array_keys($pair->staticSignals)),
+            );
+        }
+
+        return $out;
+    }
+
+    /** @param list<TemporalClaim> $claims */
+    public function claims(array $claims, float $minimumRatio): string
+    {
+        $out = "Temporal claims (heuristic)\n\n";
+        $out .= sprintf("hidden_temporal_coupling threshold: smaller_side_ratio >= %.3f\n", $minimumRatio);
+        $out .= 'Claims: ' . count($claims) . "\n\n";
+        foreach ($claims as $claim) {
+            $out .= $claim->kind . ': ' . $claim->left . ' <> ' . $claim->right . "\n";
+            $out .= sprintf(
+                "  cochanges=%d; smaller_side_ratio=%.3f; jaccard=%.3f; semantic_static_weight=%.3f; path_static_weight=%.3f\n",
+                (int) $claim->evidence['cochanges'],
+                (float) $claim->evidence['smaller_side_ratio'],
+                (float) $claim->evidence['jaccard'],
+                (float) $claim->evidence['semantic_static_weight'],
+                (float) $claim->evidence['path_static_weight'],
             );
         }
 
