@@ -20,7 +20,7 @@ use voku\AgentMap\Index\IndexReader;
 
 final readonly class DiscoveryCliApplication
 {
-    private const DEFAULT_INDEX = '.agent-map/php-symbols.json';
+    private const DEFAULT_INDEX = '.agent-loop/map/php-symbols.json';
 
     public function __construct(
         private DiscoveryTextRenderer $textRenderer = new DiscoveryTextRenderer(),
