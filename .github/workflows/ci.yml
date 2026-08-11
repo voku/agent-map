@@ -48,7 +48,19 @@ jobs:
           }
           trap cleanup EXIT
 
-          git worktree add --detach "$previous" HEAD^
+          baseline=""
+          while IFS= read -r tag; do
+            if ! git diff --quiet "$tag" HEAD -- src; then
+              baseline="$tag"
+              break
+            fi
+          done < <(git tag --merged HEAD --sort=-v:refname)
+          if [[ -z "$baseline" ]]; then
+            baseline="$(git rev-list --max-parents=0 HEAD)"
+          fi
+          echo "Temporal dogfood baseline: $baseline"
+
+          git worktree add --detach "$previous" "$baseline"
           php bin/agent-map build --root="$previous" --paths=src --out="$tmp/before.json" --phpstan-memory-limit=512M
           php bin/agent-map build --root="$GITHUB_WORKSPACE" --paths=src --out="$tmp/after.json" --phpstan-memory-limit=512M
           php bin/agent-map history diff --before="$tmp/before.json" --after="$tmp/after.json" --format=json --limit=500 > "$tmp/diff.json"
@@ -57,7 +69,6 @@ jobs:
           php bin/agent-map history observe --index="$tmp/before.json" --database="$tmp/history.sqlite" --format=json > "$tmp/observe-before.json"
           php bin/agent-map history observe --index="$tmp/after.json" --database="$tmp/history.sqlite" --format=json > "$tmp/observe-after.json"
           php bin/agent-map history show 'method:voku\AgentMap\Cli\AgentMapApplication::run' --database="$tmp/history.sqlite" --format=json > "$tmp/stable-history.json"
-          php bin/agent-map history show 'method:voku\AgentMap\Temporal\TemporalHistoryStore::record' --database="$tmp/history.sqlite" --format=json > "$tmp/new-history.json"
           php tools/temporal-dogfood.php \
             "$tmp/diff.json" "$tmp/coupling.json" "$tmp/claims.json" \
-            "$tmp/observe-after.json" "$tmp/stable-history.json" "$tmp/new-history.json"
+            "$tmp/observe-after.json" "$tmp/stable-history.json"

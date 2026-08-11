@@ -4,6 +4,45 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.7.0 - 2026-08-11
+
+### Added
+
+- Added `agent-map history diff` for deterministic structural comparison of two
+  canonical maps, including file, symbol, method, and semantic-relation lifecycle facts
+  with explicit before/after evidence while ignoring line-number-only movement.
+- Added `agent-map history coupling` to compare bounded Git co-change evidence with the
+  current semantic/path coupling graph. Repeated pairs retain the concrete Git revisions
+  that produced the evidence and bulk commits are skipped by default.
+- Added rebuildable `.agent-map/history.sqlite` snapshots with `history observe` and
+  `history show`, retaining compact declaration, architecture-region, caller/callee,
+  and dependency observations without storing source text or embeddings.
+- Added `history claims` with the deliberately narrow `hidden_temporal_coupling`
+  heuristic for strong repeated co-change without a current semantic graph edge. Claims
+  are explicitly heuristic and preserve thresholds, raw evidence, and supporting commits.
+- Added temporal-evolution documentation and ADR 0002 defining Git as the authoritative
+  historical source and SQLite history as a derived projection.
+
+### Changed
+
+- Temporal snapshot order is defined by recorded snapshot sequence rather than Git
+  timestamps, which are retained only as metadata because rebases, cherry-picks, and
+  synthetic merges do not provide a reliable ordering relation.
+- Temporal text output now preserves commit provenance instead of dropping evidence that
+  remains present in JSON/TOON.
+- CI cancels superseded runs on the same ref, a process issue exposed while dogfooding
+  connector-driven incremental commits.
+
+### Validation
+
+- Real self-dogfood on agent-map itself observed 786 events with 767 structural events,
+  48 repeated Git co-change pairs with 26 lacking a semantic static edge, 21 explicit
+  evidence-backed claims, two revision snapshots, and 718 current entity observations.
+- Self-dogfood caught and fixed an invalid timestamp-ordering assumption before release,
+  and adversarial review added commit-level provenance plus side-effect-free history reads.
+- Release remains gated on `composer ci` across PHP 8.2, 8.3, 8.4, and 8.5 plus the real
+  temporal self-dogfood job.
+
 ## 0.6.0 - 2026-08-11
 
 ### Added

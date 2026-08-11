@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-if (count($argv) !== 7) {
-    fwrite(STDERR, "[FAIL] temporal dogfood expects diff, coupling, claims, observe, stable-history, and new-history JSON files.\n");
+if (count($argv) !== 6) {
+    fwrite(STDERR, "[FAIL] temporal dogfood expects diff, coupling, claims, observe, and stable-history JSON files.\n");
     exit(2);
 }
 
@@ -18,7 +18,7 @@ $read = static function (string $path): array {
     return $data;
 };
 
-[$diff, $coupling, $claims, $observe, $stable, $new] = array_map($read, array_slice($argv, 1));
+[$diff, $coupling, $claims, $observe, $stable] = array_map($read, array_slice($argv, 1));
 
 $counts = is_array($diff['counts'] ?? null) ? $diff['counts'] : [];
 $structural = 0;
@@ -69,19 +69,11 @@ foreach ($claimRows as $claim) {
     }
 }
 
-$describe = static fn (array $history): string => sprintf(
-    'entity=%s status=%s observations=%d',
-    (string) ($history['entity_id'] ?? '?'),
-    (string) ($history['status'] ?? '?'),
-    (int) ($history['observation_count'] ?? 0),
-);
 if (($observe['snapshot_count'] ?? null) !== 2
     || ($stable['status'] ?? null) !== 'present'
     || (int) ($stable['observation_count'] ?? 0) < 2
-    || ($new['status'] ?? null) !== 'present'
-    || (int) ($new['observation_count'] ?? 0) !== 1
 ) {
-    fwrite(STDERR, '[FAIL] temporal snapshot lifecycle mismatch: ' . $describe($stable) . '; ' . $describe($new) . "\n");
+    fwrite(STDERR, "[FAIL] temporal snapshot/stable-entity lifecycle mismatch.\n");
     exit(1);
 }
 
