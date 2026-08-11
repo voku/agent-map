@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.6.0 - 2026-08-11
+
+### Added
+
+- Added deterministic PHP architecture regions derived from the persisted semantic map.
+  Weighted file coupling combines PHP-specific relations with a weak directory prior,
+  then performs deterministic multi-level community detection to infer modules,
+  subsystems, and systems without requiring a namespace convention.
+- Added region evidence including internal/external coupling, boundary ratio and
+  strength, internal density, cross-cut score, namespace agreement, directory
+  agreement, interface files, and dominant semantic signals instead of hiding the
+  inference behind one opaque confidence score.
+- Added cross-cutting file detection and down-weighting so high-degree utility or
+  infrastructure files do not collapse otherwise coherent regions into one graph.
+- Added `agent-map discover --region LABEL|ID` for bounded drill-down into an inferred
+  region using the architecture map as the navigation coordinate instead of guessing
+  repository paths first.
+- Added architecture-aware impact projection. The existing bounded impact traversal
+  remains the source of node-level evidence and uncertainty while affected nodes are
+  additionally grouped by inferred architecture region.
+
+### Changed
+
+- `agent-map discover` now leads with the inferred architecture hierarchy before raw
+  hubs and coupling statistics so an agent can orient itself before selecting symbols.
+- Architecture output is deterministic for a given map digest, including stable region
+  identities and tie-breaking.
+- Region labels use namespace evidence when useful, then directory structure and file
+  tokens; labels are globally disambiguated so label-based drill-down remains usable.
+- Structured region output includes the selected root-to-region path, matching the text
+  representation.
+- Impact text output preserves relation kinds, evidence IDs, and via-node IDs rather
+  than dropping provenance that remains present in JSON/TOON.
+
+### Fixed
+
+- Fixed singleton absorption so live community sizes are respected while assignments
+  change, preventing absorbed files from being stranded in communities that later
+  disappear from the region map.
+- Fixed parent/subsystem drill-down paths so they end at the region the user selected
+  instead of an arbitrary finest descendant containing the same file.
+- Exact region IDs and labels now take precedence over ID-prefix matches.
+- Root-level PHP files no longer infer `.` as a region label.
+- Cross-cut detection now requires a degree outlier above the median instead of marking
+  every member of a regular graph as high-degree.
+- Preserved the public 0.5 `RepositoryDiscoveryReport` constructor while making the new
+  architecture result additive.
+
+### Validation
+
+- Added real self-dogfood coverage that maps agent-map's own Discovery, Index, and Search
+  sources, requires multiple useful regions, no unassigned selected files, deterministic
+  output, and resolvable architecture paths.
+- Added regression tests for review findings covering singleton absorption, region-path
+  selection, label collisions, exact selectors, root-level labels, cross-cut evidence,
+  structured CLI output, and architecture-grouped impact.
+- Release remains gated on `composer ci` across PHP 8.2, 8.3, 8.4, and 8.5.
+
 ## 0.5.0 - 2026-08-10
 
 ### Added
