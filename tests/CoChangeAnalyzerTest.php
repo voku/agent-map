@@ -90,7 +90,11 @@ final class CoChangeAnalyzerTest extends TestCase
         self::assertSame(2, $report->pairs[0]->coChanges);
     }
 
-    /** @param list<string> $files @return array{revision: string, files: list<string>} */
+    /**
+     * @param list<string> $files
+     *
+     * @return array{revision: string, files: list<string>}
+     */
     private function commit(string $marker, array $files): array
     {
         return ['revision' => str_repeat($marker, 40), 'files' => $files];
