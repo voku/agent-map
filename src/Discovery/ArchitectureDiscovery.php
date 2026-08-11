@@ -14,6 +14,11 @@ final readonly class ArchitectureDiscovery
     private const COUPLING_DIRECTORY = 'directory';
     private const COUPLING_FILE = 'file';
 
+    public function __construct(
+        private ArchitectureMapBuilder $architectureMapBuilder = new ArchitectureMapBuilder(),
+    ) {
+    }
+
     public function discover(AgentMapIndex $map, int $limit = 10): RepositoryDiscoveryReport
     {
         if ($limit < 1) {
@@ -41,6 +46,7 @@ final readonly class ArchitectureDiscovery
 
         return new RepositoryDiscoveryReport(
             mapDigest: $map->mapDigest(),
+            architecture: $this->architectureMapBuilder->build($map),
             entrypointCandidates: $this->entrypointCandidates($map, $catalog, $adjacency, $limit),
             callHubs: $callHubs,
             orchestrators: $orchestrators,

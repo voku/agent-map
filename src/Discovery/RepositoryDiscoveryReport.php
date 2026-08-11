@@ -26,13 +26,14 @@ final readonly class RepositoryDiscoveryReport
         public array $directoryCoupling,
         public array $fileCoupling,
         public array $quality,
+        public ?ArchitectureMapReport $architecture = null,
     ) {
     }
 
     /** @return array<string, mixed> */
     public function toArray(): array
     {
-        return [
+        $payload = [
             'map_digest' => $this->mapDigest,
             'entrypoint_candidates' => array_map(static fn (RankedNode $node): array => $node->toArray(), $this->entrypointCandidates),
             'call_hubs' => array_map(static fn (RankedNode $node): array => $node->toArray(), $this->callHubs),
@@ -43,5 +44,10 @@ final readonly class RepositoryDiscoveryReport
             'file_coupling' => $this->fileCoupling,
             'quality' => $this->quality,
         ];
+        if ($this->architecture !== null) {
+            $payload['architecture'] = $this->architecture->toArray();
+        }
+
+        return $payload;
     }
 }

@@ -9,18 +9,23 @@ use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 use voku\AgentMap\Discovery\ArchitectureDiscovery;
+use voku\AgentMap\Discovery\ArchitectureImpactAnalyzer;
+use voku\AgentMap\Discovery\ArchitectureMapReport;
+use voku\AgentMap\Discovery\ArchitectureRegion;
 use voku\AgentMap\Discovery\GraphMetric;
 use voku\AgentMap\Discovery\GraphRanker;
-use voku\AgentMap\Discovery\ImpactAnalyzer;
-use voku\AgentMap\Discovery\ImpactNode;
 use voku\AgentMap\Discovery\RankedNode;
-use voku\AgentMap\Discovery\RepositoryDiscoveryReport;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
 
 final readonly class DiscoveryCliApplication
 {
     private const DEFAULT_INDEX = '.agent-map/php-symbols.json';
+
+    public function __construct(
+        private DiscoveryTextRenderer $textRenderer = new DiscoveryTextRenderer(),
+    ) {
+    }
 
     /** @param list<string> $argv */
     public function supports(array $argv): bool
@@ -44,7 +49,7 @@ final readonly class DiscoveryCliApplication
         return <<<'TEXT'
 
 Architecture discovery:
-  discover   Derive evidence-backed PHP architecture starting points from the map
+  discover   Infer PHP architecture regions and evidence-backed starting points
   rank       Rank nodes by one-hop graph importance
   impact     Trace bounded reverse impact for a method
 
@@ -62,11 +67,10 @@ TEXT;
                 return 0;
             }
 
-            $tokens = array_slice($argv, 2);
             return match ($command) {
-                'discover' => $this->discover($tokens),
-                'rank' => $this->rank($tokens),
-                'impact' => $this->impact($tokens),
+                'discover' => $this->discover(array_slice($argv, 2)),
+                'rank' => $this->rank(array_slice($argv, 2)),
+                'impact' => $this->impact(array_slice($argv, 2)),
                 default => 1,
             };
         } catch (Throwable $throwable) {
@@ -78,7 +82,7 @@ TEXT;
     /** @param list<string> $tokens */
     private function discover(array $tokens): int
     {
-        $parsed = $this->parse($tokens, ['index', 'limit', 'format']);
+        $parsed = $this->parse($tokens, ['index', 'limit', 'format', 'region']);
         if ($parsed['help']) {
             echo $this->help('discover');
             return 0;
@@ -89,12 +93,33 @@ TEXT;
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
         $report = (new ArchitectureDiscovery())->discover($map, $limit);
-        $payload = [
-            'type' => 'discover',
-            ...$report->toArray(),
-        ];
+        $architecture = $report->architecture;
+        if (!$architecture instanceof ArchitectureMapReport) {
+            throw new RuntimeException('Architecture discovery did not return an architecture map.');
+        }
+        $regionQuery = $parsed['options']['region'] ?? null;
 
-        echo $this->render($payload, $format, $this->discoveryText($report));
+        if ($regionQuery !== null) {
+            $region = $architecture->resolveRegion($regionQuery);
+            $payload = [
+                'type' => 'discover_region',
+                'map_digest' => $report->mapDigest,
+                'path' => $this->architecturePathPayload($architecture, $region),
+                'region' => $region->toArray(),
+            ];
+            echo $this->render(
+                $payload,
+                $format,
+                $this->textRenderer->region($region, $architecture, $limit),
+            );
+            return 0;
+        }
+
+        echo $this->render(
+            ['type' => 'discover', ...$report->toArray()],
+            $format,
+            $this->textRenderer->discovery($report),
+        );
         return 0;
     }
 
@@ -113,6 +138,7 @@ TEXT;
         if ($metric === null) {
             throw new InvalidArgumentException('Unknown graph metric: ' . $metricName);
         }
+
         $top = $this->positiveInt('top', $parsed['options']['top'] ?? '10');
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $kind = $parsed['options']['kind'] ?? null;
@@ -125,7 +151,7 @@ TEXT;
             'results' => array_map(static fn (RankedNode $row): array => $row->toArray(), $ranked),
         ];
 
-        echo $this->render($payload, $format, $this->rankText($metric, $ranked));
+        echo $this->render($payload, $format, $this->textRenderer->rank($metric, $ranked));
         return 0;
     }
 
@@ -145,13 +171,18 @@ TEXT;
         $maximumNodes = $this->positiveInt('max-nodes', $parsed['options']['max-nodes'] ?? '100');
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
-        $report = (new ImpactAnalyzer())->forMethod($map, $parsed['arguments'][0], $depth, $maximumNodes);
-        $payload = [
-            'type' => 'impact',
-            ...$report->toArray(),
-        ];
+        $report = (new ArchitectureImpactAnalyzer())->forMethod(
+            $map,
+            $parsed['arguments'][0],
+            $depth,
+            $maximumNodes,
+        );
 
-        echo $this->render($payload, $format, $this->impactText($report->target->name, $report->impacts, $report->truncated));
+        echo $this->render(
+            ['type' => 'impact', ...$report->toArray()],
+            $format,
+            $this->textRenderer->impact($report),
+        );
         return 0;
     }
 
@@ -169,6 +200,20 @@ TEXT;
         return $map;
     }
 
+    /** @return list<array{id: string, label: string, kind: string, level: int}> */
+    private function architecturePathPayload(ArchitectureMapReport $architecture, ArchitectureRegion $region): array
+    {
+        return array_map(
+            static fn (ArchitectureRegion $item): array => [
+                'id' => $item->id,
+                'label' => $item->label,
+                'kind' => $item->kind,
+                'level' => $item->level,
+            ],
+            array_reverse($architecture->pathForRegion($region)),
+        );
+    }
+
     /**
      * @param list<string> $tokens
      * @param list<string> $allowedOptions
@@ -179,8 +224,9 @@ TEXT;
         $arguments = [];
         $options = [];
         $help = false;
-        for ($i = 0, $count = count($tokens); $i < $count; ++$i) {
-            $token = $tokens[$i];
+
+        for ($index = 0, $count = count($tokens); $index < $count; ++$index) {
+            $token = $tokens[$index];
             if ($token === '-h' || $token === '--help') {
                 $help = true;
                 continue;
@@ -195,12 +241,13 @@ TEXT;
                 [$name, $value] = explode('=', $raw, 2);
             } else {
                 $name = $raw;
-                $value = $tokens[$i + 1] ?? null;
+                $value = $tokens[$index + 1] ?? null;
                 if (!is_string($value) || str_starts_with($value, '--')) {
                     throw new InvalidArgumentException('Missing value for option: --' . $name);
                 }
-                ++$i;
+                ++$index;
             }
+
             if (!in_array($name, $allowedOptions, true)) {
                 throw new InvalidArgumentException('Unknown option: --' . $name);
             }
@@ -251,100 +298,16 @@ TEXT;
         };
     }
 
-    private function discoveryText(RepositoryDiscoveryReport $report): string
-    {
-        $out = "PHP architecture discovery\n";
-        $out .= 'Map: ' . $report->mapDigest . "\n";
-        $out .= sprintf(
-            "Relations: %d certain, %d uncertain, %d diagnostic(s)\n\n",
-            $report->quality['certain_relations'],
-            $report->quality['uncertain_relations'],
-            $report->quality['diagnostics'],
-        );
-        $out .= $this->rankedSection('Entrypoint candidates', $report->entrypointCandidates);
-        $out .= $this->rankedSection('Call hubs', $report->callHubs);
-        $out .= $this->rankedSection('Orchestrators', $report->orchestrators);
-        $out .= $this->rankedSection('Type hubs', $report->typeHubs);
-        $out .= $this->couplingSection('Namespace coupling', $report->namespaceCoupling);
-        $out .= $this->couplingSection('Directory coupling', $report->directoryCoupling);
-        $out .= $this->couplingSection('File coupling', $report->fileCoupling);
-
-        return $out;
-    }
-
-    /** @param list<RankedNode> $rows */
-    private function rankedSection(string $title, array $rows): string
-    {
-        $out = $title . ":\n";
-        foreach ($rows as $row) {
-            $out .= sprintf(
-                "  %4d  ?%-3d  %s  %s:%d\n",
-                $row->score,
-                $row->uncertainRelations,
-                $row->node->name,
-                $row->node->file,
-                $row->node->lineStart,
-            );
-        }
-
-        return $out . "\n";
-    }
-
-    /**
-     * @param list<array{from: string, to: string, links: int, uncertain_links: int}> $rows
-     */
-    private function couplingSection(string $title, array $rows): string
-    {
-        $out = $title . ":\n";
-        foreach ($rows as $row) {
-            $out .= sprintf(
-                "  %4d link(s), %3d uncertain  %s -> %s\n",
-                $row['links'],
-                $row['uncertain_links'],
-                $row['from'],
-                $row['to'],
-            );
-        }
-
-        return $out . "\n";
-    }
-
-    /** @param list<RankedNode> $ranked */
-    private function rankText(GraphMetric $metric, array $ranked): string
-    {
-        return $this->rankedSection('Rank by ' . $metric->value, $ranked);
-    }
-
-    /** @param list<ImpactNode> $impacts */
-    private function impactText(string $target, array $impacts, bool $truncated): string
-    {
-        $out = 'Impact: ' . $target . "\n";
-        foreach ($impacts as $impact) {
-            $out .= sprintf(
-                "  d=%d %s%s [%s] %s:%d\n",
-                $impact->depth,
-                $impact->uncertain ? '? ' : '  ',
-                $impact->node->name,
-                implode(',', $impact->relationKinds),
-                $impact->node->file,
-                $impact->node->lineStart,
-            );
-        }
-        if ($truncated) {
-            $out .= "TRUNCATED: increase --max-nodes for a complete bounded traversal.\n";
-        }
-
-        return $out;
-    }
-
     private function help(string $command): string
     {
         return match ($command) {
             'discover' => <<<'TEXT'
-Usage: agent-map discover [--index PATH] [--limit N] [--format text|json|markdown|toon]
+Usage: agent-map discover [--index PATH] [--limit N] [--region LABEL|ID] [--format text|json|markdown|toon]
 
-Derive architecture orientation without a search query: entrypoint candidates,
+Infer deterministic PHP architecture regions first, then report entrypoint candidates,
 call hubs, orchestrators, type hubs, namespace/directory/file coupling and relation quality.
+Use --region after the first discovery pass to inspect a region without guessing file names.
+Region evidence exposes boundaries and structural agreement instead of an opaque confidence score.
 
 TEXT,
             'rank' => <<<'TEXT'
@@ -358,6 +321,7 @@ TEXT,
 Usage: agent-map impact Class::method [--depth N] [--max-nodes N] [--index PATH] [--format FORMAT]
 
 Trace bounded reverse dependency impact while preserving relation evidence and uncertainty.
+Impacted nodes are also grouped by the inferred PHP architecture map.
 
 TEXT,
             default => $this->helpOverview(),
