@@ -93,20 +93,24 @@ TEXT;
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
         $report = (new ArchitectureDiscovery())->discover($map, $limit);
+        $architecture = $report->architecture;
+        if (!$architecture instanceof ArchitectureMapReport) {
+            throw new RuntimeException('Architecture discovery did not return an architecture map.');
+        }
         $regionQuery = $parsed['options']['region'] ?? null;
 
         if ($regionQuery !== null) {
-            $region = $report->architecture->resolveRegion($regionQuery);
+            $region = $architecture->resolveRegion($regionQuery);
             $payload = [
                 'type' => 'discover_region',
                 'map_digest' => $report->mapDigest,
-                'path' => $this->architecturePathPayload($report->architecture, $region),
+                'path' => $this->architecturePathPayload($architecture, $region),
                 'region' => $region->toArray(),
             ];
             echo $this->render(
                 $payload,
                 $format,
-                $this->textRenderer->region($region, $report->architecture, $limit),
+                $this->textRenderer->region($region, $architecture, $limit),
             );
             return 0;
         }
