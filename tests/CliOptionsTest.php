@@ -25,7 +25,7 @@ final class CliOptionsTest extends TestCase
         $options = CliOptions::parse(['build', '--format=toon']);
 
         self::assertSame('toon', $options->format);
-        self::assertSame('.agent-map/php-symbols.toon', $options->out);
+        self::assertSame('.agent-loop/map/php-symbols.toon', $options->out);
     }
 
     public function testBuildInfersToonFormatFromExplicitOutputExtension(): void
@@ -48,7 +48,9 @@ final class CliOptionsTest extends TestCase
         $options = CliOptions::parse(['build']);
 
         self::assertSame(['.'], $options->paths);
-        self::assertSame('.agent-map/php-symbols.json', $options->out);
+        self::assertSame('.agent-loop/map/php-symbols.json', $options->out);
+        self::assertSame('.agent-loop/map/php-symbols.json', $options->index);
+        self::assertSame('.agent-loop/map/search.sqlite', $options->database);
         self::assertSame('json', $options->format);
         self::assertSame(20, $options->limit);
         self::assertSame(10, $options->symbolLimit);
