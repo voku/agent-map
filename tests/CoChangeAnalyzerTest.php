@@ -15,7 +15,7 @@ use voku\AgentMap\Temporal\CoChangePair;
 
 final class CoChangeAnalyzerTest extends TestCase
 {
-    public function testExposesTemporalCouplingAlongsideStaticEvidenceWithoutCollapsingThemIntoOneScore(): void
+    public function testExposesTemporalCouplingAndItsRevisionProvenanceBesideStaticEvidence(): void
     {
         $map = new AgentMapIndex(
             '2.0',
@@ -37,11 +37,11 @@ final class CoChangeAnalyzerTest extends TestCase
             )],
         );
         $commits = [
-            ['src/A.php', 'src/B.php'],
-            ['src/A.php', 'src/B.php'],
-            ['src/A.php', 'other/C.php'],
-            ['src/A.php', 'other/C.php'],
-            ['src/A.php', 'other/C.php'],
+            $this->commit('1', ['src/A.php', 'src/B.php']),
+            $this->commit('2', ['src/A.php', 'src/B.php']),
+            $this->commit('3', ['src/A.php', 'other/C.php']),
+            $this->commit('4', ['src/A.php', 'other/C.php']),
+            $this->commit('5', ['src/A.php', 'other/C.php']),
         ];
 
         $report = (new CoChangeAnalyzer())->analyze($map, $commits, 2, 10);
@@ -52,6 +52,7 @@ final class CoChangeAnalyzerTest extends TestCase
         self::assertSame(1.0, $hidden->smallerSideRatio);
         self::assertSame(0.0, $hidden->semanticStaticWeight);
         self::assertSame([], $hidden->staticSignals);
+        self::assertSame([str_repeat('3', 40), str_repeat('4', 40), str_repeat('5', 40)], $hidden->revisions);
 
         self::assertSame(2, $static->coChanges);
         self::assertGreaterThan(0.0, $static->semanticStaticWeight);
@@ -74,9 +75,9 @@ final class CoChangeAnalyzerTest extends TestCase
         $report = (new CoChangeAnalyzer())->analyze(
             $map,
             [
-                ['src/A.php', 'src/B.php', 'src/C.php'],
-                ['src/A.php', 'src/B.php'],
-                ['src/A.php', 'src/B.php'],
+                $this->commit('1', ['src/A.php', 'src/B.php', 'src/C.php']),
+                $this->commit('2', ['src/A.php', 'src/B.php']),
+                $this->commit('3', ['src/A.php', 'src/B.php']),
             ],
             minimumCoChanges: 2,
             top: 10,
@@ -87,6 +88,12 @@ final class CoChangeAnalyzerTest extends TestCase
         self::assertSame(1, $report->bulkCommitsSkipped);
         self::assertCount(1, $report->pairs);
         self::assertSame(2, $report->pairs[0]->coChanges);
+    }
+
+    /** @param list<string> $files @return array{revision: string, files: list<string>} */
+    private function commit(string $marker, array $files): array
+    {
+        return ['revision' => str_repeat($marker, 40), 'files' => $files];
     }
 
     /** @param list<CoChangePair> $pairs */
