@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -19,3 +23,41 @@ jobs:
           tools: composer:v2
       - run: composer install --no-interaction --prefer-dist
       - run: composer ci
+
+  temporal-dogfood:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Dogfood temporal evolution on agent-map itself
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          previous="$tmp/previous"
+          cleanup() {
+            git worktree remove --force "$previous" >/dev/null 2>&1 || true
+            rm -rf "$tmp"
+          }
+          trap cleanup EXIT
+
+          git worktree add --detach "$previous" HEAD^
+          php bin/agent-map build --root="$previous" --paths=src --out="$tmp/before.json" --phpstan-memory-limit=512M
+          php bin/agent-map build --root="$GITHUB_WORKSPACE" --paths=src --out="$tmp/after.json" --phpstan-memory-limit=512M
+          php bin/agent-map history diff --before="$tmp/before.json" --after="$tmp/after.json" --format=json --limit=500 > "$tmp/diff.json"
+          php bin/agent-map history coupling --index="$tmp/after.json" --root="$GITHUB_WORKSPACE" --commits=100 --min-cochanges=2 --top=50 --format=json > "$tmp/coupling.json"
+          php bin/agent-map history claims --index="$tmp/after.json" --root="$GITHUB_WORKSPACE" --commits=100 --min-cochanges=2 --top=50 --min-ratio=0.6 --format=json > "$tmp/claims.json"
+          php bin/agent-map history observe --index="$tmp/before.json" --database="$tmp/history.sqlite" --format=json > "$tmp/observe-before.json"
+          php bin/agent-map history observe --index="$tmp/after.json" --database="$tmp/history.sqlite" --format=json > "$tmp/observe-after.json"
+          php bin/agent-map history show 'method:voku\AgentMap\Cli\AgentMapApplication::run' --database="$tmp/history.sqlite" --format=json > "$tmp/stable-history.json"
+          php bin/agent-map history show 'method:voku\AgentMap\Temporal\TemporalHistoryStore::record' --database="$tmp/history.sqlite" --format=json > "$tmp/new-history.json"
+          php tools/temporal-dogfood.php \
+            "$tmp/diff.json" "$tmp/coupling.json" "$tmp/claims.json" \
+            "$tmp/observe-after.json" "$tmp/stable-history.json" "$tmp/new-history.json"
