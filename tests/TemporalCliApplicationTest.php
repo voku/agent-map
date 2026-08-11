@@ -41,7 +41,13 @@ final class TemporalCliApplicationTest extends TestCase
             $payload = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
             self::assertSame('history_diff', $payload['type'] ?? null);
             self::assertSame(1, $payload['counts']['method_added'] ?? null);
-            self::assertSame('method:App\\Foo::run', $payload['events'][0]['entity_id'] ?? null);
+
+            $methodEvents = array_values(array_filter(
+                is_array($payload['events'] ?? null) ? $payload['events'] : [],
+                static fn (mixed $event): bool => is_array($event) && ($event['kind'] ?? null) === 'method_added',
+            ));
+            self::assertCount(1, $methodEvents);
+            self::assertSame('method:App\\Foo::run', $methodEvents[0]['entity_id'] ?? null);
         } finally {
             @unlink($beforePath);
             @unlink($afterPath);
