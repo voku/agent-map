@@ -49,3 +49,6 @@ jobs:
           php bin/agent-map build --root="$GITHUB_WORKSPACE" --paths=src --out="$tmp/after.json" --phpstan-memory-limit=512M
           php bin/agent-map history diff --before="$tmp/before.json" --after="$tmp/after.json" --format=json --limit=500 > "$tmp/diff.json"
           php tools/temporal-self-dogfood.php "$tmp/diff.json"
+
+          php bin/agent-map history coupling --index="$tmp/after.json" --root="$GITHUB_WORKSPACE" --commits=100 --min-cochanges=2 --top=50 --format=json > "$tmp/coupling.json"
+          php tools/temporal-coupling-dogfood.php "$tmp/coupling.json"
