@@ -7,11 +7,14 @@ namespace voku\AgentMap\Temporal;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\MethodEntry;
-use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\SymbolEntry;
 
 final readonly class StructuralDiffer
 {
+    public function __construct(private DeclarationSignature $signatures = new DeclarationSignature())
+    {
+    }
+
     public function diff(AgentMapIndex $before, AgentMapIndex $after): TemporalDiffReport
     {
         $events = [
@@ -20,7 +23,6 @@ final readonly class StructuralDiffer
             ...$this->methodEvents($before, $after),
             ...$this->relationEvents($before, $after),
         ];
-
         usort(
             $events,
             static fn (TemporalEvent $left, TemporalEvent $right): int => [$left->kind, $left->entityType, $left->entityId]
@@ -36,7 +38,6 @@ final readonly class StructuralDiffer
         $old = $this->files($before);
         $new = $this->files($after);
         $events = [];
-
         foreach (array_diff_key($old, $new) as $path => $file) {
             $events[] = new TemporalEvent('file_removed', 'file', $path, ['path' => $path, 'sha256' => $file->sha256]);
         }
@@ -47,9 +48,7 @@ final readonly class StructuralDiffer
             $newFile = $new[$path];
             if ($oldFile->sha256 !== $newFile->sha256) {
                 $events[] = new TemporalEvent(
-                    'file_changed',
-                    'file',
-                    $path,
+                    'file_changed', 'file', $path,
                     ['path' => $path, 'sha256' => $oldFile->sha256],
                     ['path' => $path, 'sha256' => $newFile->sha256],
                 );
@@ -65,43 +64,26 @@ final readonly class StructuralDiffer
         $old = $this->symbols($before);
         $new = $this->symbols($after);
         $events = [];
-
         foreach (array_diff_key($old, $new) as $id => $item) {
-            $events[] = new TemporalEvent(
-                'symbol_removed',
-                'symbol',
-                $id,
-                ['path' => $item['file']->path, 'signature' => $this->symbolSignature($item['symbol'])],
-            );
+            $events[] = new TemporalEvent('symbol_removed', 'symbol', $id, $this->symbolPayload($item));
         }
         foreach (array_diff_key($new, $old) as $id => $item) {
-            $events[] = new TemporalEvent(
-                'symbol_added',
-                'symbol',
-                $id,
-                [],
-                ['path' => $item['file']->path, 'signature' => $this->symbolSignature($item['symbol'])],
-            );
+            $events[] = new TemporalEvent('symbol_added', 'symbol', $id, [], $this->symbolPayload($item));
         }
         foreach (array_intersect_key($old, $new) as $id => $oldItem) {
             $newItem = $new[$id];
             if ($oldItem['file']->path !== $newItem['file']->path) {
                 $events[] = new TemporalEvent(
-                    'symbol_moved',
-                    'symbol',
-                    $id,
+                    'symbol_moved', 'symbol', $id,
                     ['path' => $oldItem['file']->path],
                     ['path' => $newItem['file']->path],
                 );
             }
-
-            $oldSignature = $this->symbolSignature($oldItem['symbol']);
-            $newSignature = $this->symbolSignature($newItem['symbol']);
+            $oldSignature = $this->signatures->symbol($oldItem['symbol']);
+            $newSignature = $this->signatures->symbol($newItem['symbol']);
             if ($oldSignature !== $newSignature) {
                 $events[] = new TemporalEvent(
-                    'symbol_signature_changed',
-                    'symbol',
-                    $id,
+                    'symbol_signature_changed', 'symbol', $id,
                     ['path' => $oldItem['file']->path, 'signature' => $oldSignature],
                     ['path' => $newItem['file']->path, 'signature' => $newSignature],
                 );
@@ -117,33 +99,19 @@ final readonly class StructuralDiffer
         $old = $this->methods($before);
         $new = $this->methods($after);
         $events = [];
-
         foreach (array_diff_key($old, $new) as $id => $item) {
-            $events[] = new TemporalEvent(
-                'method_removed',
-                'method',
-                $id,
-                ['path' => $item['file']->path, 'signature' => $this->methodSignature($item['method'])],
-            );
+            $events[] = new TemporalEvent('method_removed', 'method', $id, $this->methodPayload($item));
         }
         foreach (array_diff_key($new, $old) as $id => $item) {
-            $events[] = new TemporalEvent(
-                'method_added',
-                'method',
-                $id,
-                [],
-                ['path' => $item['file']->path, 'signature' => $this->methodSignature($item['method'])],
-            );
+            $events[] = new TemporalEvent('method_added', 'method', $id, [], $this->methodPayload($item));
         }
         foreach (array_intersect_key($old, $new) as $id => $oldItem) {
             $newItem = $new[$id];
-            $oldSignature = $this->methodSignature($oldItem['method']);
-            $newSignature = $this->methodSignature($newItem['method']);
+            $oldSignature = $this->signatures->method($oldItem['method']);
+            $newSignature = $this->signatures->method($newItem['method']);
             if ($oldSignature !== $newSignature) {
                 $events[] = new TemporalEvent(
-                    'method_signature_changed',
-                    'method',
-                    $id,
+                    'method_signature_changed', 'method', $id,
                     ['path' => $oldItem['file']->path, 'signature' => $oldSignature],
                     ['path' => $newItem['file']->path, 'signature' => $newSignature],
                 );
@@ -159,23 +127,16 @@ final readonly class StructuralDiffer
         $old = $this->relations($before);
         $new = $this->relations($after);
         $events = [];
-
         foreach (array_diff_key($old, $new) as $id => $item) {
-            $events[] = new TemporalEvent('relation_removed', 'relation', $id, $this->relationPayload($item));
+            $events[] = new TemporalEvent('relation_removed', 'relation', $id, $item);
         }
         foreach (array_diff_key($new, $old) as $id => $item) {
-            $events[] = new TemporalEvent('relation_added', 'relation', $id, [], $this->relationPayload($item));
+            $events[] = new TemporalEvent('relation_added', 'relation', $id, [], $item);
         }
         foreach (array_intersect_key($old, $new) as $id => $oldItem) {
             $newItem = $new[$id];
             if ($oldItem['count'] !== $newItem['count']) {
-                $events[] = new TemporalEvent(
-                    'relation_multiplicity_changed',
-                    'relation',
-                    $id,
-                    $this->relationPayload($oldItem),
-                    $this->relationPayload($newItem),
-                );
+                $events[] = new TemporalEvent('relation_multiplicity_changed', 'relation', $id, $oldItem, $newItem);
             }
         }
 
@@ -208,14 +169,14 @@ final readonly class StructuralDiffer
         return $symbols;
     }
 
-    /** @return array<string, array{file: FileEntry, symbol: SymbolEntry, method: MethodEntry}> */
+    /** @return array<string, array{file: FileEntry, method: MethodEntry}> */
     private function methods(AgentMapIndex $map): array
     {
         $methods = [];
         foreach ($map->files as $file) {
             foreach ($file->symbols as $symbol) {
                 foreach ($symbol->methods as $method) {
-                    $methods[$symbol->methodId($method)] = ['file' => $file, 'symbol' => $symbol, 'method' => $method];
+                    $methods[$symbol->methodId($method)] = ['file' => $file, 'method' => $method];
                 }
             }
         }
@@ -224,9 +185,7 @@ final readonly class StructuralDiffer
         return $methods;
     }
 
-    /**
-     * @return array<string, array{source_id: string, kind: string, target_ids: string, resolution: string, receiver_type: ?string, result_type: ?string, count: int}>
-     */
+    /** @return array<string, array{source_id: string, kind: string, target_ids: string, resolution: string, receiver_type: ?string, result_type: ?string, count: int}> */
     private function relations(AgentMapIndex $map): array
     {
         $relations = [];
@@ -241,11 +200,8 @@ final readonly class StructuralDiffer
                 'receiver_type' => $relation->receiverType,
                 'result_type' => $relation->resultType,
             ];
-            $identity = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-            $id = 'relation-semantic:' . hash('sha256', $identity);
-            if (!isset($relations[$id])) {
-                $relations[$id] = [...$payload, 'count' => 0];
-            }
+            $id = 'relation-semantic:' . hash('sha256', json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            $relations[$id] ??= [...$payload, 'count' => 0];
             ++$relations[$id]['count'];
         }
         ksort($relations, SORT_STRING);
@@ -253,73 +209,15 @@ final readonly class StructuralDiffer
         return $relations;
     }
 
-    private function symbolSignature(SymbolEntry $symbol): string
+    /** @param array{file: FileEntry, symbol: SymbolEntry} $item @return array<string, string|int|float|bool|null> */
+    private function symbolPayload(array $item): array
     {
-        $parts = [$symbol->kind, ltrim($symbol->fqn, '\\')];
-        if ($symbol->parameters !== []) {
-            $parts[] = '(' . implode(', ', $symbol->displayParameters()) . ')';
-        }
-        if ($symbol->displayReturnType() !== null) {
-            $parts[] = ': ' . $symbol->displayReturnType();
-        }
-        if ($symbol->extends !== []) {
-            $extends = $symbol->extends;
-            sort($extends, SORT_STRING);
-            $parts[] = 'extends ' . implode(',', $extends);
-        }
-        if ($symbol->implements !== []) {
-            $implements = $symbol->implements;
-            sort($implements, SORT_STRING);
-            $parts[] = 'implements ' . implode(',', $implements);
-        }
-        if ($symbol->uses !== []) {
-            $uses = $symbol->uses;
-            sort($uses, SORT_STRING);
-            $parts[] = 'uses ' . implode(',', $uses);
-        }
-        if ($symbol->attributes !== []) {
-            $attributes = $symbol->attributes;
-            sort($attributes, SORT_STRING);
-            $parts[] = 'attributes ' . implode(',', $attributes);
-        }
-        if ($symbol->templates !== []) {
-            $templates = $symbol->templates;
-            ksort($templates, SORT_STRING);
-            $parts[] = 'templates ' . json_encode($templates, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-        }
-
-        return implode(' ', $parts);
+        return ['path' => $item['file']->path, 'signature' => $this->signatures->symbol($item['symbol'])];
     }
 
-    private function methodSignature(MethodEntry $method): string
+    /** @param array{file: FileEntry, method: MethodEntry} $item @return array<string, string|int|float|bool|null> */
+    private function methodPayload(array $item): array
     {
-        $attributes = $method->attributes;
-        sort($attributes, SORT_STRING);
-        $modifiers = array_values(array_filter([
-            $method->visibility,
-            $method->static ? 'static' : null,
-            $method->abstract ? 'abstract' : null,
-            $method->final ? 'final' : null,
-        ]));
-        $signature = implode(' ', $modifiers)
-            . ' ' . $method->name
-            . '(' . implode(', ', $method->displayParameters()) . ')';
-        if ($method->displayReturnType() !== null) {
-            $signature .= ': ' . $method->displayReturnType();
-        }
-        if ($attributes !== []) {
-            $signature .= ' attributes ' . implode(',', $attributes);
-        }
-
-        return trim($signature);
-    }
-
-    /**
-     * @param array{source_id: string, kind: string, target_ids: string, resolution: string, receiver_type: ?string, result_type: ?string, count: int} $item
-     * @return array<string, string|int|float|bool|null>
-     */
-    private function relationPayload(array $item): array
-    {
-        return $item;
+        return ['path' => $item['file']->path, 'signature' => $this->signatures->method($item['method'])];
     }
 }
