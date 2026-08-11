@@ -4,18 +4,16 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Temporal;
 
-use RuntimeException;
-
 final readonly class GitChangeHistory
 {
+    public function __construct(private GitCommandRunner $git = new GitCommandRunner())
+    {
+    }
+
     /** @return list<list<string>> */
     public function commits(string $root, int $limit): array
     {
-        $root = realpath($root) ?: $root;
-        $command = [
-            'git',
-            '-C',
-            $root,
+        $stdout = $this->git->run(realpath($root) ?: $root, [
             'log',
             '--no-merges',
             '--no-renames',
@@ -23,25 +21,7 @@ final readonly class GitChangeHistory
             (string) max(1, $limit),
             '--name-only',
             '--pretty=format:__AGENT_MAP_COMMIT__%H',
-        ];
-
-        $process = proc_open(
-            $command,
-            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-            $pipes,
-        );
-        if (!is_resource($process)) {
-            throw new RuntimeException('Unable to start git history process.');
-        }
-
-        $stdout = stream_get_contents($pipes[1]);
-        $stderr = stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        $status = proc_close($process);
-        if ($status !== 0 || !is_string($stdout)) {
-            throw new RuntimeException('Unable to read git history.' . (is_string($stderr) && trim($stderr) !== '' ? ' ' . trim($stderr) : ''));
-        }
+        ]);
 
         $commits = [];
         $current = [];
