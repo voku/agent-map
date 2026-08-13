@@ -1,0 +1,107 @@
+name: Normalize Issue 12 Source
+
+on:
+  push:
+    branches:
+      - agent/issue-12-symbol-less-search
+    paths:
+      - '.github/workflows/normalize-issue-12-source.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Normalize PHP indentation and source-boundary docs
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/Search/ChunkExtractor.php')
+          text = path.read_text(encoding='utf-8')
+
+          old = (
+              "            if ($file->symbols === []) {\n"
+              "        $fileChunks = $this->fileChunks($root, $file);\n"
+              "        if ($fileChunks === null) {\n"
+              "            $this->skippedPaths[] = $file->path;\n"
+              "        } else {\n"
+              "            foreach ($fileChunks as $chunk) {\n"
+              "                $chunks[] = $chunk;\n"
+              "            }\n"
+              "        }\n"
+              "        continue;\n"
+              "    }\n"
+          )
+          new = (
+              "            if ($file->symbols === []) {\n"
+              "                $fileChunks = $this->fileChunks($root, $file);\n"
+              "                if ($fileChunks === null) {\n"
+              "                    $this->skippedPaths[] = $file->path;\n"
+              "                } else {\n"
+              "                    foreach ($fileChunks as $chunk) {\n"
+              "                        $chunks[] = $chunk;\n"
+              "                    }\n"
+              "                }\n"
+              "                continue;\n"
+              "            }\n"
+          )
+          if text.count(old) != 1:
+              raise SystemExit('symbol-less branch shape changed')
+          text = text.replace(old, new)
+
+          old = (
+              "    /**\n"
+              " * @return list<CodeChunk>|null null when the mapped source is stale\n"
+              " */\n"
+              "    private function fileChunks(string $root, FileEntry $file): ?array\n"
+          )
+          new = (
+              "    /**\n"
+              "     * @return list<CodeChunk>|null null when the mapped source is stale\n"
+              "     */\n"
+              "    private function fileChunks(string $root, FileEntry $file): ?array\n"
+          )
+          if text.count(old) != 1:
+              raise SystemExit('fileChunks docblock shape changed')
+          text = text.replace(old, new)
+
+          old = (
+              " * Turns canonical map symbols into searchable chunks.\n"
+              " *\n"
+              " * Deliberately not a parser. Every chunk comes from a symbol the map already recorded, with the\n"
+              " * line range the map already resolved, read through the materializer that already verifies the file\n"
+              " * hash. A second parsing pipeline would be a second answer to \"what is in this file\", and the two\n"
+              " * would disagree the first time one of them was upgraded.\n"
+          )
+          new = (
+              " * Turns canonical mapped PHP source into searchable chunks.\n"
+              " *\n"
+              " * Deliberately not a parser. Symbol-bearing files use the declarations and ranges already recorded\n"
+              " * by the map. Mapped files without declarations use bounded source slices from that same file entry.\n"
+              " * Both paths read through the materializer that verifies the current file hash, so Search never\n"
+              " * creates a second answer to what source belongs to the canonical map snapshot.\n"
+          )
+          if text.count(old) != 1:
+              raise SystemExit('ChunkExtractor class doc shape changed')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
+          git rm .github/workflows/normalize-issue-12-source.yml
+          git diff --check
+
+      - name: Commit normalized source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'style: normalize symbol-less search path'
+          git push origin HEAD:agent/issue-12-symbol-less-search
