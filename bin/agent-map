@@ -43,5 +43,16 @@ if ($temporal->shouldAppendToGeneralHelp($argv)) {
 if ($discovery->shouldAppendToGeneralHelp($argv)) {
     echo $discovery->helpOverview();
 }
+if ($status === 0 && (in_array('help', $argv, true) || in_array('--help', $argv, true) || in_array('-h', $argv, true))) {
+    echo <<<'TXT'
+
+Artifact path contract:
+  --out, --index, and --database are resolved relative to --root.
+  Absolute artifact paths remain unchanged.
+  Example: --root=target --database=.agent-loop/map/search.sqlite
+           -> target/.agent-loop/map/search.sqlite
+
+TXT;
+}
 
 exit($status);
