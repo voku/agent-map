@@ -148,9 +148,9 @@ final readonly class CliOptions
             root: $values['root'],
             paths: self::splitPaths($values['paths']),
             scanPaths: self::splitList($values['scan']),
-            out: $values['out'],
-            index: $values['index'],
-            database: $values['database'],
+            out: self::artifactPath($values['root'], $values['out']),
+            index: self::artifactPath($values['root'], $values['index']),
+            database: self::artifactPath($values['root'], $values['database']),
             cases: $values['cases'],
             format: $values['format'],
             limit: self::positiveInt('limit', $values['limit'], 1),
@@ -188,6 +188,27 @@ final readonly class CliOptions
             throw new InvalidArgumentException('Missing value for option: --' . $raw);
         }
         return [$raw, $value, true];
+    }
+
+    private static function artifactPath(string $root, string $path): string
+    {
+        if (self::isAbsolutePath($path)) {
+            return $path;
+        }
+
+        if (!self::isAbsolutePath($root)) {
+            $cwd = rtrim(getcwd() ?: '.', '/\\');
+            $root = $root === '.' ? $cwd : $cwd . '/' . $root;
+        }
+
+        return rtrim($root, '/\\') . '/' . ltrim($path, '/\\');
+    }
+
+    private static function isAbsolutePath(string $path): bool
+    {
+        return str_starts_with($path, '/')
+            || str_starts_with($path, '\\')
+            || preg_match('/\A[A-Za-z]:[\\\\\/]/', $path) === 1;
     }
 
     private static function positiveInt(string $name, string $value, int $minimum): int

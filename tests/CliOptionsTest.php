@@ -16,8 +16,39 @@ final class CliOptionsTest extends TestCase
 
         self::assertSame('build', $options->command);
         self::assertSame(['src', 'tests'], $options->paths);
-        self::assertSame('map.json', $options->out);
+        self::assertSame((getcwd() ?: '.') . '/map.json', $options->out);
         self::assertSame('512M', $options->phpStanMemoryLimit);
+    }
+
+    public function testArtifactPathsAreResolvedRelativeToRoot(): void
+    {
+        $cwd = getcwd() ?: '.';
+        $options = CliOptions::parse([
+            'build',
+            '--root=target',
+            '--out=.agent-loop/map/php-symbols.json',
+            '--index=.agent-loop/map/php-symbols.json',
+            '--database=.agent-loop/map/search.sqlite',
+        ]);
+
+        self::assertSame($cwd . '/target/.agent-loop/map/php-symbols.json', $options->out);
+        self::assertSame($cwd . '/target/.agent-loop/map/php-symbols.json', $options->index);
+        self::assertSame($cwd . '/target/.agent-loop/map/search.sqlite', $options->database);
+    }
+
+    public function testAbsoluteArtifactPathsRemainAbsolute(): void
+    {
+        $options = CliOptions::parse([
+            'build',
+            '--root=target',
+            '--out=/tmp/agent-map/map.json',
+            '--index=/tmp/agent-map/map.json',
+            '--database=/tmp/agent-map/search.sqlite',
+        ]);
+
+        self::assertSame('/tmp/agent-map/map.json', $options->out);
+        self::assertSame('/tmp/agent-map/map.json', $options->index);
+        self::assertSame('/tmp/agent-map/search.sqlite', $options->database);
     }
 
     public function testBuildToonFormatUsesToonDefaultOutput(): void
@@ -25,7 +56,7 @@ final class CliOptionsTest extends TestCase
         $options = CliOptions::parse(['build', '--format=toon']);
 
         self::assertSame('toon', $options->format);
-        self::assertSame('.agent-loop/map/php-symbols.toon', $options->out);
+        self::assertSame((getcwd() ?: '.') . '/.agent-loop/map/php-symbols.toon', $options->out);
     }
 
     public function testBuildInfersToonFormatFromExplicitOutputExtension(): void
@@ -33,7 +64,7 @@ final class CliOptionsTest extends TestCase
         $options = CliOptions::parse(['build', '--out=map.toon']);
 
         self::assertSame('toon', $options->format);
-        self::assertSame('map.toon', $options->out);
+        self::assertSame((getcwd() ?: '.') . '/map.toon', $options->out);
     }
 
     public function testParsesRepeatedExclude(): void
@@ -46,11 +77,12 @@ final class CliOptionsTest extends TestCase
     public function testParsesDefaultValues(): void
     {
         $options = CliOptions::parse(['build']);
+        $cwd = getcwd() ?: '.';
 
         self::assertSame(['.'], $options->paths);
-        self::assertSame('.agent-loop/map/php-symbols.json', $options->out);
-        self::assertSame('.agent-loop/map/php-symbols.json', $options->index);
-        self::assertSame('.agent-loop/map/search.sqlite', $options->database);
+        self::assertSame($cwd . '/.agent-loop/map/php-symbols.json', $options->out);
+        self::assertSame($cwd . '/.agent-loop/map/php-symbols.json', $options->index);
+        self::assertSame($cwd . '/.agent-loop/map/search.sqlite', $options->database);
         self::assertSame('json', $options->format);
         self::assertSame(20, $options->limit);
         self::assertSame(10, $options->symbolLimit);
