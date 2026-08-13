@@ -11,7 +11,7 @@ final class BinHelpTest extends TestCase
 {
     public function testBuildHelpDocumentsArtifactPathBase(): void
     {
-        [$exit, $stdout, $stderr] = $this->run(['build', '--help']);
+        [$exit, $stdout, $stderr] = $this->executeAgentMap(['build', '--help']);
 
         self::assertSame(0, $exit, $stderr);
         self::assertStringContainsString(
@@ -27,7 +27,7 @@ final class BinHelpTest extends TestCase
         file_put_contents($root . '/Example.php', "<?php\nfinal class Example {}\n");
 
         try {
-            [$exit, $stdout, $stderr] = $this->run([
+            [$exit, $stdout, $stderr] = $this->executeAgentMap([
                 'build',
                 'help',
                 '--root=' . $root,
@@ -45,10 +45,11 @@ final class BinHelpTest extends TestCase
         }
     }
 
-    /** @param list<string> $arguments
-     *  @return array{int, string, string}
+    /**
+     * @param list<string> $arguments
+     * @return array{int, string, string}
      */
-    private function run(array $arguments): array
+    private function executeAgentMap(array $arguments): array
     {
         $process = proc_open(
             [PHP_BINARY, dirname(__DIR__) . '/bin/agent-map', ...$arguments],
