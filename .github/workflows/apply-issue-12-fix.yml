@@ -47,13 +47,8 @@ jobs:
 
           extractor = Path('src/Search/ChunkExtractor.php')
           text = extractor.read_text(encoding='utf-8')
-          needle = """        foreach ($candidates as $file) {
-              $before = count($chunks);
-              foreach ($file->symbols as $symbol) {
-          """
-          replacement = """        foreach ($candidates as $file) {
-              $before = count($chunks);
-              if ($file->symbols === []) {
+          needle = '            $before = count($chunks);\n'
+          replacement = needle + """            if ($file->symbols === []) {
                   $fileChunks = $this->fileChunks($root, $file);
                   if ($fileChunks === null) {
                       $this->skippedPaths[] = $file->path;
@@ -65,7 +60,6 @@ jobs:
                   continue;
               }
 
-              foreach ($file->symbols as $symbol) {
           """
           if text.count(needle) != 1:
               raise SystemExit('ChunkExtractor loop anchor changed')
