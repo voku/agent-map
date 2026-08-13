@@ -720,6 +720,9 @@ final class SearchIndexStore
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'code_chunks'",
         );
         $schema = $statement === false ? false : $statement->fetchColumn();
+        if ($statement !== false) {
+            $statement->closeCursor();
+        }
         if (!is_string($schema) || str_contains($schema, "'file_body'")) {
             return false;
         }
