@@ -109,6 +109,18 @@ final class ChunkExtractor
         $chunks = [];
         foreach ($candidates as $file) {
             $before = count($chunks);
+            if ($file->symbols === []) {
+        $fileChunks = $this->fileChunks($root, $file);
+        if ($fileChunks === null) {
+            $this->skippedPaths[] = $file->path;
+        } else {
+            foreach ($fileChunks as $chunk) {
+                $chunks[] = $chunk;
+            }
+        }
+        continue;
+    }
+
             foreach ($file->symbols as $symbol) {
                 if ($symbol->kind === 'function') {
                     $chunk = $this->functionChunk($root, $file, $symbol);
@@ -367,6 +379,48 @@ final class ChunkExtractor
     // ──────────────────────────────────────────────────────────────────────────────────────────────
     // Chunk builders (shared by sequential and parallel paths)
     // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+ * @return list<CodeChunk>|null null when the mapped source is stale
+ */
+    private function fileChunks(string $root, FileEntry $file): ?array
+    {
+        $chunks = [];
+        $startLine = 1;
+        $segment = 1;
+
+        while (true) {
+            $requestedEndLine = $startLine + ChunkPolicy::MAX_FILE_LINES - 1;
+            $slice = $this->slice($root, $file, $startLine, $requestedEndLine);
+            if ($slice === null) {
+                return null;
+            }
+            if ($slice['content'] === '') {
+                break;
+            }
+
+            $symbolId = 'file:' . $file->path . ':segment:' . $segment;
+            $chunks[] = CodeChunk::create(
+                symbolId: $symbolId,
+                kind: CodeChunk::KIND_FILE_BODY,
+                filePath: $file->path,
+                symbolName: $file->path,
+                startLine: $slice['start'],
+                endLine: $slice['end'],
+                sourceSha256: $file->sha256,
+                signature: 'file ' . $file->path,
+                content: $slice['content'],
+            );
+
+            if ($slice['end'] < $requestedEndLine) {
+                break;
+            }
+            $startLine = $requestedEndLine + 1;
+            ++$segment;
+        }
+
+        return $chunks;
+    }
 
     /**
      * The declaration plus its method signatures, without any body: this is what answers "what is

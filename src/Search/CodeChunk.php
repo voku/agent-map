@@ -22,6 +22,8 @@ final readonly class CodeChunk
 
     public const KIND_FUNCTION_BODY = 'function_body';
 
+    public const KIND_FILE_BODY = 'file_body';
+
     public function __construct(
         public string $chunkId,
         public string $symbolId,
@@ -68,6 +70,7 @@ final readonly class CodeChunk
     {
         $suffix = match ($kind) {
             self::KIND_SYMBOL_OVERVIEW => 'overview',
+            self::KIND_FILE_BODY       => 'file',
             default                    => 'body',
         };
 
