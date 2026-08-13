@@ -37,11 +37,12 @@ if ($discovery->supports($argv)) {
 }
 
 $status = (new AgentMapApplication())->run($argv);
-if (
-    in_array('help', $argv, true)
-    || in_array('--help', $argv, true)
-    || in_array('-h', $argv, true)
-) {
+$command = $argv[1] ?? null;
+$remainingArguments = array_slice($argv, 2);
+$helpRequested = in_array($command, ['help', '--help', '-h'], true)
+    || in_array('--help', $remainingArguments, true)
+    || in_array('-h', $remainingArguments, true);
+if ($helpRequested) {
     echo <<<'TXT'
 
 Artifact paths:
