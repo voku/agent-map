@@ -20,6 +20,41 @@ final class CliOptionsTest extends TestCase
         self::assertSame('512M', $options->phpStanMemoryLimit);
     }
 
+    public function testArtifactPathsAreResolvedAgainstExplicitRoot(): void
+    {
+        $cwd = getcwd();
+        self::assertIsString($cwd);
+        $root = rtrim($cwd, '/\\') . DIRECTORY_SEPARATOR . 'target';
+
+        $options = CliOptions::parse(['build', '--root=target']);
+
+        self::assertSame($root, $options->root);
+        self::assertSame($root . DIRECTORY_SEPARATOR . '.agent-loop/map/php-symbols.json', $options->out);
+        self::assertSame($root . DIRECTORY_SEPARATOR . '.agent-loop/map/php-symbols.json', $options->index);
+        self::assertSame($root . DIRECTORY_SEPARATOR . '.agent-loop/map/search.sqlite', $options->database);
+    }
+
+    public function testAbsoluteArtifactPathsRemainAuthoritative(): void
+    {
+        $root = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'agent-map-root';
+        $out = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'agent-map-out.json';
+        $index = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'agent-map-index.json';
+        $database = rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'agent-map-search.sqlite';
+
+        $options = CliOptions::parse([
+            'build',
+            '--root=' . $root,
+            '--out=' . $out,
+            '--index=' . $index,
+            '--database=' . $database,
+        ]);
+
+        self::assertSame($root, $options->root);
+        self::assertSame($out, $options->out);
+        self::assertSame($index, $options->index);
+        self::assertSame($database, $options->database);
+    }
+
     public function testBuildToonFormatUsesToonDefaultOutput(): void
     {
         $options = CliOptions::parse(['build', '--format=toon']);
