@@ -197,7 +197,8 @@ final readonly class CliOptions
         }
 
         if (!self::isAbsolutePath($root)) {
-            $root = rtrim(getcwd() ?: '.', '/\\') . '/' . $root;
+            $cwd = rtrim(getcwd() ?: '.', '/\\');
+            $root = $root === '.' ? $cwd : $cwd . '/' . $root;
         }
 
         return rtrim($root, '/\\') . '/' . ltrim($path, '/\\');
