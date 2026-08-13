@@ -25,19 +25,18 @@ jobs:
           from pathlib import Path
 
           path = Path('src/Search/SearchIndexStore.php')
-          text = path.read_text(encoding='utf-8')
-          old = """        $schema = $statement === false ? false : $statement->fetchColumn();
-          if (!is_string($schema) || str_contains($schema, "'file_body'")) {
-          """
-          new = """        $schema = $statement === false ? false : $statement->fetchColumn();
-          if ($statement !== false) {
-              $statement->closeCursor();
-          }
-          if (!is_string($schema) || str_contains($schema, "'file_body'")) {
-          """
-          if text.count(old) != 1:
-              raise SystemExit('schema inspection anchor changed')
-          path.write_text(text.replace(old, new), encoding='utf-8')
+          lines = path.read_text(encoding='utf-8').splitlines()
+          anchor = '        $schema = $statement === false ? false : $statement->fetchColumn();'
+          indexes = [index for index, line in enumerate(lines) if line == anchor]
+          if len(indexes) != 1:
+              raise SystemExit(f'expected one schema inspection line, found {len(indexes)}')
+          index = indexes[0]
+          lines[index + 1:index + 1] = [
+              '        if ($statement !== false) {',
+              '            $statement->closeCursor();',
+              '        }',
+          ]
+          path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
 
           git rm .github/workflows/close-search-migration-cursor.yml
