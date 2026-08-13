@@ -23,7 +23,7 @@ use voku\AgentMap\Search\Embedding\EmbeddingVector;
  */
 final class SearchIndexStore
 {
-    public const SCHEMA_VERSION = '1.0';
+    public const SCHEMA_VERSION = '1.1';
 
     private PDO $pdo;
 
@@ -683,6 +683,71 @@ final class SearchIndexStore
         return $quoted === [] ? null : implode($operator, $quoted);
     }
 
+    private function createCodeChunksTable(): void
+{
+    $this->pdo->exec(
+        "CREATE TABLE IF NOT EXISTS code_chunks (
+            rowid INTEGER PRIMARY KEY,
+            chunk_id TEXT NOT NULL UNIQUE,
+            symbol_id TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            symbol_name TEXT NOT NULL,
+            chunk_kind TEXT NOT NULL CHECK (
+                chunk_kind IN ('symbol_overview', 'method_body', 'function_body', 'method_fragment', 'file_body')
+            ),
+            start_line INTEGER NOT NULL,
+            end_line INTEGER NOT NULL,
+            source_sha256 TEXT NOT NULL,
+            content_sha256 TEXT NOT NULL,
+            signature TEXT NOT NULL,
+            content TEXT NOT NULL
+        )",
+    );
+}
+
+/**
+ * Search is derived, but preserving row ids keeps an existing vector projection aligned.
+ * Schema 1.1 only widens the allowed chunk kinds, so existing chunks can be copied verbatim
+ * before the FTS projection is rebuilt.
+ */
+private function migrateChunkKindConstraint(): bool
+{
+    if ($this->meta('schema_version') !== '1.0') {
+        return false;
+    }
+
+    $statement = $this->pdo->query(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'code_chunks'",
+    );
+    $schema = $statement === false ? false : $statement->fetchColumn();
+    if (!is_string($schema) || str_contains($schema, "'file_body'")) {
+        return false;
+    }
+
+    $this->pdo->beginTransaction();
+    try {
+        $this->pdo->exec('DROP TABLE IF EXISTS code_chunks_fts');
+        $this->pdo->exec('ALTER TABLE code_chunks RENAME TO code_chunks_v10');
+        $this->createCodeChunksTable();
+        $this->pdo->exec(
+            'INSERT INTO code_chunks
+                (rowid, chunk_id, symbol_id, file_path, symbol_name, chunk_kind, start_line, end_line,
+                 source_sha256, content_sha256, signature, content)
+             SELECT
+                rowid, chunk_id, symbol_id, file_path, symbol_name, chunk_kind, start_line, end_line,
+                source_sha256, content_sha256, signature, content
+             FROM code_chunks_v10',
+        );
+        $this->pdo->exec('DROP TABLE code_chunks_v10');
+        $this->pdo->commit();
+    } catch (\Throwable $exception) {
+        $this->pdo->rollBack();
+        throw $exception;
+    }
+
+    return true;
+}
+
     private function migrate(): void
     {
         $this->pdo->exec(
@@ -691,24 +756,8 @@ final class SearchIndexStore
                 value TEXT NOT NULL
             )',
         );
-        $this->pdo->exec(
-            "CREATE TABLE IF NOT EXISTS code_chunks (
-                rowid INTEGER PRIMARY KEY,
-                chunk_id TEXT NOT NULL UNIQUE,
-                symbol_id TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                symbol_name TEXT NOT NULL,
-                chunk_kind TEXT NOT NULL CHECK (
-                    chunk_kind IN ('symbol_overview', 'method_body', 'function_body', 'method_fragment')
-                ),
-                start_line INTEGER NOT NULL,
-                end_line INTEGER NOT NULL,
-                source_sha256 TEXT NOT NULL,
-                content_sha256 TEXT NOT NULL,
-                signature TEXT NOT NULL,
-                content TEXT NOT NULL
-            )",
-        );
+        $rebuildFts = $this->migrateChunkKindConstraint();
+        $this->createCodeChunksTable();
         $this->pdo->exec('CREATE INDEX IF NOT EXISTS idx_code_chunks_symbol ON code_chunks(symbol_id)');
         $this->pdo->exec('CREATE INDEX IF NOT EXISTS idx_code_chunks_file ON code_chunks(file_path)');
         $this->pdo->exec('CREATE INDEX IF NOT EXISTS idx_code_chunks_hash ON code_chunks(content_sha256)');
@@ -721,6 +770,9 @@ final class SearchIndexStore
                 content_rowid='rowid'
             )",
         );
+        if ($rebuildFts) {
+            $this->pdo->exec("INSERT INTO code_chunks_fts(code_chunks_fts) VALUES ('rebuild')");
+        }
         $this->pdo->exec(
             'CREATE TABLE IF NOT EXISTS embedding_cache (
                 model_fingerprint TEXT NOT NULL,
