@@ -37,6 +37,18 @@ if ($discovery->supports($argv)) {
 }
 
 $status = (new AgentMapApplication())->run($argv);
+if (
+    in_array('help', $argv, true)
+    || in_array('--help', $argv, true)
+    || in_array('-h', $argv, true)
+) {
+    echo <<<'TXT'
+
+Artifact paths:
+  --out, --index, and --database are relative to --root unless an absolute path is given.
+
+TXT;
+}
 if ($temporal->shouldAppendToGeneralHelp($argv)) {
     echo $temporal->helpOverview();
 }
