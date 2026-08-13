@@ -142,15 +142,21 @@ final readonly class CliOptions
             throw new InvalidArgumentException('Unknown format for ' . $command . ': ' . $values['format']);
         }
 
+        $root = self::absolutePath(getcwd() ?: '.', $values['root']);
+        $canonicalRoot = realpath($root);
+        if (is_string($canonicalRoot)) {
+            $root = $canonicalRoot;
+        }
+
         return new self(
             command: $command,
             argument: $argument,
-            root: $values['root'],
+            root: $root,
             paths: self::splitPaths($values['paths']),
             scanPaths: self::splitList($values['scan']),
-            out: $values['out'],
-            index: $values['index'],
-            database: $values['database'],
+            out: self::absolutePath($root, $values['out']),
+            index: self::absolutePath($root, $values['index']),
+            database: self::absolutePath($root, $values['database']),
             cases: $values['cases'],
             format: $values['format'],
             limit: self::positiveInt('limit', $values['limit'], 1),
@@ -210,6 +216,22 @@ final readonly class CliOptions
         }
 
         return strtoupper($value);
+    }
+
+    private static function absolutePath(string $root, string $path): string
+    {
+        if (self::isAbsolutePath($path)) {
+            return $path;
+        }
+
+        return rtrim($root, '/\\') . DIRECTORY_SEPARATOR . ltrim($path, '/\\');
+    }
+
+    private static function isAbsolutePath(string $path): bool
+    {
+        return str_starts_with($path, '/')
+            || str_starts_with($path, '\\')
+            || preg_match('/\A[A-Za-z]:[\\\\\/]/', $path) === 1;
     }
 
     /** @return list<string> */
