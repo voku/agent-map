@@ -11,12 +11,12 @@ use voku\AgentMap\Index\MethodEntry;
 use voku\AgentMap\Index\SymbolEntry;
 
 /**
- * Turns canonical map symbols into searchable chunks.
+ * Turns canonical mapped PHP source into searchable chunks.
  *
- * Deliberately not a parser. Every chunk comes from a symbol the map already recorded, with the
- * line range the map already resolved, read through the materializer that already verifies the file
- * hash. A second parsing pipeline would be a second answer to "what is in this file", and the two
- * would disagree the first time one of them was upgraded.
+ * Deliberately not a parser. Symbol-bearing files use the declarations and ranges already recorded
+ * by the map. Mapped files without declarations use bounded source slices from that same file entry.
+ * Both paths read through the materializer that verifies the current file hash, so Search never
+ * creates a second answer to what source belongs to the canonical map snapshot.
  *
  * When pcntl_fork and stream_socket_pair are available in a CLI context and the file list is large
  * enough to justify the fork overhead, extraction is parallelised across worker processes (one per
@@ -109,6 +109,18 @@ final class ChunkExtractor
         $chunks = [];
         foreach ($candidates as $file) {
             $before = count($chunks);
+            if ($file->symbols === []) {
+                $fileChunks = $this->fileChunks($root, $file);
+                if ($fileChunks === null) {
+                    $this->skippedPaths[] = $file->path;
+                } else {
+                    foreach ($fileChunks as $chunk) {
+                        $chunks[] = $chunk;
+                    }
+                }
+                continue;
+            }
+
             foreach ($file->symbols as $symbol) {
                 if ($symbol->kind === 'function') {
                     $chunk = $this->functionChunk($root, $file, $symbol);
@@ -131,7 +143,7 @@ final class ChunkExtractor
                 }
             }
 
-            if ($file->symbols !== [] && count($chunks) === $before) {
+            if (count($chunks) === $before) {
                 $this->skippedPaths[] = $file->path;
             }
         }
@@ -367,6 +379,48 @@ final class ChunkExtractor
     // ──────────────────────────────────────────────────────────────────────────────────────────────
     // Chunk builders (shared by sequential and parallel paths)
     // ──────────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @return list<CodeChunk>|null null when the mapped source is stale
+     */
+    private function fileChunks(string $root, FileEntry $file): ?array
+    {
+        $chunks = [];
+        $startLine = 1;
+        $segment = 1;
+
+        while (true) {
+            $requestedEndLine = $startLine + ChunkPolicy::MAX_FILE_LINES - 1;
+            $slice = $this->slice($root, $file, $startLine, $requestedEndLine);
+            if ($slice === null) {
+                return null;
+            }
+            if ($slice['content'] === '') {
+                break;
+            }
+
+            $symbolId = 'file:' . $file->path . ':segment:' . $segment;
+            $chunks[] = CodeChunk::create(
+                symbolId: $symbolId,
+                kind: CodeChunk::KIND_FILE_BODY,
+                filePath: $file->path,
+                symbolName: $file->path,
+                startLine: $slice['start'],
+                endLine: $slice['end'],
+                sourceSha256: $file->sha256,
+                signature: 'file ' . $file->path,
+                content: $slice['content'],
+            );
+
+            if ($slice['end'] < $requestedEndLine) {
+                break;
+            }
+            $startLine = $requestedEndLine + 1;
+            ++$segment;
+        }
+
+        return $chunks;
+    }
 
     /**
      * The declaration plus its method signatures, without any body: this is what answers "what is

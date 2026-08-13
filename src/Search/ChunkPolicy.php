@@ -17,4 +17,7 @@ final readonly class ChunkPolicy
 
     /** Methods longer than this are indexed by their head; the full body stays reachable via the map. */
     public const MAX_BODY_LINES = 400;
+
+    /** Symbol-less mapped files are indexed in bounded source-backed segments of this size. */
+    public const MAX_FILE_LINES = 400;
 }
