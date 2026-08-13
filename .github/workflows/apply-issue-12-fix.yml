@@ -26,78 +26,58 @@ jobs:
 
           policy = Path('src/Search/ChunkPolicy.php')
           text = policy.read_text(encoding='utf-8')
-          old = """    /** Methods longer than this are indexed by their head; the full body stays reachable via the map. */
-              public const MAX_BODY_LINES = 400;
-          """
-          new = """    /** Methods longer than this are indexed by their head; the full body stays reachable via the map. */
-              public const MAX_BODY_LINES = 400;
-
-              /** Symbol-less mapped files are indexed in bounded source-backed segments of this size. */
-              public const MAX_FILE_LINES = 400;
-          """
-          if text.count(old) != 1:
+          needle = '    public const MAX_BODY_LINES = 400;\n'
+          replacement = needle + "\n    /** Symbol-less mapped files are indexed in bounded source-backed segments of this size. */\n    public const MAX_FILE_LINES = 400;\n"
+          if text.count(needle) != 1:
               raise SystemExit('ChunkPolicy anchor changed')
-          policy.write_text(text.replace(old, new), encoding='utf-8')
+          policy.write_text(text.replace(needle, replacement), encoding='utf-8')
 
           chunk = Path('src/Search/CodeChunk.php')
           text = chunk.read_text(encoding='utf-8')
-          old = """    public const KIND_FUNCTION_BODY = 'function_body';
-          """
-          new = """    public const KIND_FUNCTION_BODY = 'function_body';
-
-              public const KIND_FILE_BODY = 'file_body';
-          """
-          if text.count(old) != 1:
+          needle = "    public const KIND_FUNCTION_BODY = 'function_body';\n"
+          replacement = needle + "\n    public const KIND_FILE_BODY = 'file_body';\n"
+          if text.count(needle) != 1:
               raise SystemExit('CodeChunk kind anchor changed')
-          text = text.replace(old, new)
-          old = """        $suffix = match ($kind) {
-                  self::KIND_SYMBOL_OVERVIEW => 'overview',
-                  default                    => 'body',
-              };
-          """
-          new = """        $suffix = match ($kind) {
-                  self::KIND_SYMBOL_OVERVIEW => 'overview',
-                  self::KIND_FILE_BODY       => 'file',
-                  default                    => 'body',
-              };
-          """
-          if text.count(old) != 1:
+          text = text.replace(needle, replacement)
+          needle = "            self::KIND_SYMBOL_OVERVIEW => 'overview',\n"
+          replacement = needle + "            self::KIND_FILE_BODY       => 'file',\n"
+          if text.count(needle) != 1:
               raise SystemExit('CodeChunk identity anchor changed')
-          chunk.write_text(text.replace(old, new), encoding='utf-8')
+          chunk.write_text(text.replace(needle, replacement), encoding='utf-8')
 
           extractor = Path('src/Search/ChunkExtractor.php')
           text = extractor.read_text(encoding='utf-8')
-          old = """        foreach ($candidates as $file) {
-                  $before = count($chunks);
-                  foreach ($file->symbols as $symbol) {
+          needle = """        foreach ($candidates as $file) {
+              $before = count($chunks);
+              foreach ($file->symbols as $symbol) {
           """
-          new = """        foreach ($candidates as $file) {
-                  $before = count($chunks);
-                  if ($file->symbols === []) {
-                      $fileChunks = $this->fileChunks($root, $file);
-                      if ($fileChunks === null) {
-                          $this->skippedPaths[] = $file->path;
-                      } else {
-                          foreach ($fileChunks as $chunk) {
-                              $chunks[] = $chunk;
-                          }
+          replacement = """        foreach ($candidates as $file) {
+              $before = count($chunks);
+              if ($file->symbols === []) {
+                  $fileChunks = $this->fileChunks($root, $file);
+                  if ($fileChunks === null) {
+                      $this->skippedPaths[] = $file->path;
+                  } else {
+                      foreach ($fileChunks as $chunk) {
+                          $chunks[] = $chunk;
                       }
-                      continue;
                   }
+                  continue;
+              }
 
-                  foreach ($file->symbols as $symbol) {
+              foreach ($file->symbols as $symbol) {
           """
-          if text.count(old) != 1:
+          if text.count(needle) != 1:
               raise SystemExit('ChunkExtractor loop anchor changed')
-          text = text.replace(old, new)
+          text = text.replace(needle, replacement)
 
-          anchor = """    /**
-           * The declaration plus its method signatures, without any body: this is what answers \"what is
-           * this class for\", and keeping bodies out of it stops one large class from dominating every
-           * lexical hit.
-           */
-              private function overviewChunk(string $root, FileEntry $file, SymbolEntry $symbol): ?CodeChunk
-          """
+          method = '    private function overviewChunk(string $root, FileEntry $file, SymbolEntry $symbol): ?CodeChunk\n'
+          method_pos = text.find(method)
+          if method_pos < 0:
+              raise SystemExit('ChunkExtractor overview method changed')
+          doc_pos = text.rfind('    /**\n', 0, method_pos)
+          if doc_pos < 0:
+              raise SystemExit('ChunkExtractor overview docblock changed')
           helper = """    /**
            * @return list<CodeChunk>|null null when the mapped source is stale
            */
@@ -140,16 +120,8 @@ jobs:
                   return $chunks;
               }
 
-              /**
-           * The declaration plus its method signatures, without any body: this is what answers \"what is
-           * this class for\", and keeping bodies out of it stops one large class from dominating every
-           * lexical hit.
-           */
-              private function overviewChunk(string $root, FileEntry $file, SymbolEntry $symbol): ?CodeChunk
           """
-          if text.count(anchor) != 1:
-              raise SystemExit('ChunkExtractor helper anchor changed')
-          extractor.write_text(text.replace(anchor, helper), encoding='utf-8')
+          extractor.write_text(text[:doc_pos] + helper + text[doc_pos:], encoding='utf-8')
           PY
 
           git rm .github/workflows/apply-issue-12-fix.yml
