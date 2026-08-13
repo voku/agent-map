@@ -143,7 +143,7 @@ final class ChunkExtractor
                 }
             }
 
-            if ($file->symbols !== [] && count($chunks) === $before) {
+            if (count($chunks) === $before) {
                 $this->skippedPaths[] = $file->path;
             }
         }
