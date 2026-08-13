@@ -16,15 +16,13 @@ final class CliOptionsTest extends TestCase
 
         self::assertSame('build', $options->command);
         self::assertSame(['src', 'tests'], $options->paths);
-        self::assertSame('map.json', $options->out);
+        self::assertSame($this->cwd() . DIRECTORY_SEPARATOR . 'map.json', $options->out);
         self::assertSame('512M', $options->phpStanMemoryLimit);
     }
 
     public function testArtifactPathsAreResolvedAgainstExplicitRoot(): void
     {
-        $cwd = getcwd();
-        self::assertIsString($cwd);
-        $root = rtrim($cwd, '/\\') . DIRECTORY_SEPARATOR . 'target';
+        $root = $this->cwd() . DIRECTORY_SEPARATOR . 'target';
 
         $options = CliOptions::parse(['build', '--root=target']);
 
@@ -60,7 +58,7 @@ final class CliOptionsTest extends TestCase
         $options = CliOptions::parse(['build', '--format=toon']);
 
         self::assertSame('toon', $options->format);
-        self::assertSame('.agent-loop/map/php-symbols.toon', $options->out);
+        self::assertSame($this->cwd() . DIRECTORY_SEPARATOR . '.agent-loop/map/php-symbols.toon', $options->out);
     }
 
     public function testBuildInfersToonFormatFromExplicitOutputExtension(): void
@@ -68,7 +66,7 @@ final class CliOptionsTest extends TestCase
         $options = CliOptions::parse(['build', '--out=map.toon']);
 
         self::assertSame('toon', $options->format);
-        self::assertSame('map.toon', $options->out);
+        self::assertSame($this->cwd() . DIRECTORY_SEPARATOR . 'map.toon', $options->out);
     }
 
     public function testParsesRepeatedExclude(): void
@@ -83,9 +81,9 @@ final class CliOptionsTest extends TestCase
         $options = CliOptions::parse(['build']);
 
         self::assertSame(['.'], $options->paths);
-        self::assertSame('.agent-loop/map/php-symbols.json', $options->out);
-        self::assertSame('.agent-loop/map/php-symbols.json', $options->index);
-        self::assertSame('.agent-loop/map/search.sqlite', $options->database);
+        self::assertSame($this->cwd() . DIRECTORY_SEPARATOR . '.agent-loop/map/php-symbols.json', $options->out);
+        self::assertSame($this->cwd() . DIRECTORY_SEPARATOR . '.agent-loop/map/php-symbols.json', $options->index);
+        self::assertSame($this->cwd() . DIRECTORY_SEPARATOR . '.agent-loop/map/search.sqlite', $options->database);
         self::assertSame('json', $options->format);
         self::assertSame(20, $options->limit);
         self::assertSame(10, $options->symbolLimit);
@@ -147,5 +145,13 @@ final class CliOptionsTest extends TestCase
         $this->expectExceptionMessage('Invalid phpstan-memory-limit');
 
         CliOptions::parse(['build', '--phpstan-memory-limit=-1']);
+    }
+
+    private function cwd(): string
+    {
+        $cwd = getcwd();
+        self::assertIsString($cwd);
+
+        return rtrim($cwd, '/\\');
     }
 }
