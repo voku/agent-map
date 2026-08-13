@@ -1,0 +1,166 @@
+name: Apply Issue 12 Fix
+
+on:
+  push:
+    branches:
+      - agent/issue-12-symbol-less-search
+    paths:
+      - '.github/workflows/apply-issue-12-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Add bounded file segments for mapped PHP files without symbols
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          policy = Path('src/Search/ChunkPolicy.php')
+          text = policy.read_text(encoding='utf-8')
+          old = """    /** Methods longer than this are indexed by their head; the full body stays reachable via the map. */
+              public const MAX_BODY_LINES = 400;
+          """
+          new = """    /** Methods longer than this are indexed by their head; the full body stays reachable via the map. */
+              public const MAX_BODY_LINES = 400;
+
+              /** Symbol-less mapped files are indexed in bounded source-backed segments of this size. */
+              public const MAX_FILE_LINES = 400;
+          """
+          if text.count(old) != 1:
+              raise SystemExit('ChunkPolicy anchor changed')
+          policy.write_text(text.replace(old, new), encoding='utf-8')
+
+          chunk = Path('src/Search/CodeChunk.php')
+          text = chunk.read_text(encoding='utf-8')
+          old = """    public const KIND_FUNCTION_BODY = 'function_body';
+          """
+          new = """    public const KIND_FUNCTION_BODY = 'function_body';
+
+              public const KIND_FILE_BODY = 'file_body';
+          """
+          if text.count(old) != 1:
+              raise SystemExit('CodeChunk kind anchor changed')
+          text = text.replace(old, new)
+          old = """        $suffix = match ($kind) {
+                  self::KIND_SYMBOL_OVERVIEW => 'overview',
+                  default                    => 'body',
+              };
+          """
+          new = """        $suffix = match ($kind) {
+                  self::KIND_SYMBOL_OVERVIEW => 'overview',
+                  self::KIND_FILE_BODY       => 'file',
+                  default                    => 'body',
+              };
+          """
+          if text.count(old) != 1:
+              raise SystemExit('CodeChunk identity anchor changed')
+          chunk.write_text(text.replace(old, new), encoding='utf-8')
+
+          extractor = Path('src/Search/ChunkExtractor.php')
+          text = extractor.read_text(encoding='utf-8')
+          old = """        foreach ($candidates as $file) {
+                  $before = count($chunks);
+                  foreach ($file->symbols as $symbol) {
+          """
+          new = """        foreach ($candidates as $file) {
+                  $before = count($chunks);
+                  if ($file->symbols === []) {
+                      $fileChunks = $this->fileChunks($root, $file);
+                      if ($fileChunks === null) {
+                          $this->skippedPaths[] = $file->path;
+                      } else {
+                          foreach ($fileChunks as $chunk) {
+                              $chunks[] = $chunk;
+                          }
+                      }
+                      continue;
+                  }
+
+                  foreach ($file->symbols as $symbol) {
+          """
+          if text.count(old) != 1:
+              raise SystemExit('ChunkExtractor loop anchor changed')
+          text = text.replace(old, new)
+
+          anchor = """    /**
+           * The declaration plus its method signatures, without any body: this is what answers \"what is
+           * this class for\", and keeping bodies out of it stops one large class from dominating every
+           * lexical hit.
+           */
+              private function overviewChunk(string $root, FileEntry $file, SymbolEntry $symbol): ?CodeChunk
+          """
+          helper = """    /**
+           * @return list<CodeChunk>|null null when the mapped source is stale
+           */
+              private function fileChunks(string $root, FileEntry $file): ?array
+              {
+                  $chunks = [];
+                  $startLine = 1;
+                  $segment = 1;
+
+                  while (true) {
+                      $requestedEndLine = $startLine + ChunkPolicy::MAX_FILE_LINES - 1;
+                      $slice = $this->slice($root, $file, $startLine, $requestedEndLine);
+                      if ($slice === null) {
+                          return null;
+                      }
+                      if ($slice['content'] === '') {
+                          break;
+                      }
+
+                      $symbolId = 'file:' . $file->path . ':segment:' . $segment;
+                      $chunks[] = CodeChunk::create(
+                          symbolId: $symbolId,
+                          kind: CodeChunk::KIND_FILE_BODY,
+                          filePath: $file->path,
+                          symbolName: $file->path,
+                          startLine: $slice['start'],
+                          endLine: $slice['end'],
+                          sourceSha256: $file->sha256,
+                          signature: 'file ' . $file->path,
+                          content: $slice['content'],
+                      );
+
+                      if ($slice['end'] < $requestedEndLine) {
+                          break;
+                      }
+                      $startLine = $requestedEndLine + 1;
+                      ++$segment;
+                  }
+
+                  return $chunks;
+              }
+
+              /**
+           * The declaration plus its method signatures, without any body: this is what answers \"what is
+           * this class for\", and keeping bodies out of it stops one large class from dominating every
+           * lexical hit.
+           */
+              private function overviewChunk(string $root, FileEntry $file, SymbolEntry $symbol): ?CodeChunk
+          """
+          if text.count(anchor) != 1:
+              raise SystemExit('ChunkExtractor helper anchor changed')
+          extractor.write_text(text.replace(anchor, helper), encoding='utf-8')
+          PY
+
+          git rm .github/workflows/apply-issue-12-fix.yml
+          git diff --check
+          git diff -- src/Search/ChunkPolicy.php src/Search/CodeChunk.php src/Search/ChunkExtractor.php tests/SymbolLessSearchTest.php
+
+      - name: Commit bounded production fix
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: index symbol-less mapped PHP files'
+          git push origin HEAD:agent/issue-12-symbol-less-search
