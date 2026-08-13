@@ -1,0 +1,53 @@
+name: Close Search Migration Cursor
+
+on:
+  push:
+    branches:
+      - agent/issue-12-symbol-less-search
+    paths:
+      - '.github/workflows/close-search-migration-cursor.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Close schema inspection cursor before DDL
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/Search/SearchIndexStore.php')
+          text = path.read_text(encoding='utf-8')
+          old = """        $schema = $statement === false ? false : $statement->fetchColumn();
+          if (!is_string($schema) || str_contains($schema, "'file_body'")) {
+          """
+          new = """        $schema = $statement === false ? false : $statement->fetchColumn();
+          if ($statement !== false) {
+              $statement->closeCursor();
+          }
+          if (!is_string($schema) || str_contains($schema, "'file_body'")) {
+          """
+          if text.count(old) != 1:
+              raise SystemExit('schema inspection anchor changed')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
+          git rm .github/workflows/close-search-migration-cursor.yml
+          git diff --check
+
+      - name: Commit migration fix
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: release search schema cursor before migration'
+          git push origin HEAD:agent/issue-12-symbol-less-search
