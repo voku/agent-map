@@ -5,14 +5,15 @@ declare(strict_types=1);
 namespace voku\AgentMap\Search;
 
 /**
- * One searchable unit of code, derived from a canonical map symbol.
+ * One searchable unit derived from canonical mapped PHP source.
  *
- * The identity is the canonical symbol id plus a chunk kind, never a storage row id: an index that
- * is rebuilt from the same map must produce the same chunk ids, or a result cannot be traced back
- * to the map it came from.
+ * Symbol chunks use the canonical symbol id. Symbol-less file chunks use a deterministic synthetic
+ * file-segment id. Neither identity depends on a storage row id: rebuilding from the same map and
+ * source must produce the same chunk ids, or a result cannot be traced back to its map snapshot.
  *
- * `contentSha256` covers the chunk policy, the symbol id and the normalized content, so an unchanged
- * method keeps its fingerprint - and its cached embedding - when a neighbouring method changes.
+ * `contentSha256` covers the chunk policy, the source identity and the normalized content, so
+ * unchanged source keeps its fingerprint - and its cached embedding - when neighbouring source
+ * changes.
  */
 final readonly class CodeChunk
 {
