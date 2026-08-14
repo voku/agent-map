@@ -24,19 +24,4 @@ if (function_exists('ini_set')) {
 
 require $autoload;
 
-$status = (new CliApplication())->run($argv);
-$command = $argv[1] ?? null;
-$remainingArguments = array_slice($argv, 2);
-$helpRequested = in_array($command, ['help', '--help', '-h'], true)
-    || in_array('--help', $remainingArguments, true)
-    || in_array('-h', $remainingArguments, true);
-if ($helpRequested) {
-    echo <<<'TXT'
-
-Artifact paths:
-  --out, --index, and --database are relative to --root unless an absolute path is given.
-
-TXT;
-}
-
-exit($status);
+exit((new CliApplication())->run($argv));
