@@ -21,7 +21,7 @@ final readonly class CliApplication
         private ?string $projectRoot = null,
         ?string $mapRoot = null,
     ) {
-        $this->artifacts = $mapRoot === null
+        $this->artifacts = $projectRoot === null && $mapRoot === null
             ? null
             : MapArtifactPaths::forProject($projectRoot ?? (getcwd() ?: '.'), $mapRoot);
     }
