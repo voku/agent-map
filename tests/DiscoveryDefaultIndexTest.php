@@ -21,7 +21,7 @@ final class DiscoveryDefaultIndexTest extends TestCase
     {
         $this->root = sys_get_temp_dir() . '/agent-map-default-index-' . bin2hex(random_bytes(6));
         mkdir($this->root . '/src', 0o775, true);
-        mkdir($this->root . '/.agent-loop/map', 0o775, true);
+        mkdir($this->root . '/.agent-map', 0o775, true);
 
         $source = $this->root . '/src/Foo.php';
         file_put_contents($source, "<?php\n");
@@ -35,7 +35,7 @@ final class DiscoveryDefaultIndexTest extends TestCase
                 'test',
                 [new FileEntry('src/Foo.php', 'sha256:' . $hash, '', [])],
             ),
-            $this->root . '/.agent-loop/map/php-symbols.json',
+            $this->root . '/.agent-map/php-symbols.json',
         );
     }
 
@@ -59,7 +59,7 @@ final class DiscoveryDefaultIndexTest extends TestCase
         rmdir($this->root);
     }
 
-    public function testDiscoveryWithoutIndexUsesCompactDefault(): void
+    public function testDiscoveryWithoutIndexUsesStandaloneDefault(): void
     {
         $previousDirectory = getcwd();
         self::assertNotFalse($previousDirectory);
