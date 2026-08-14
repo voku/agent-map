@@ -7,6 +7,7 @@ namespace voku\AgentMap\Tests;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use voku\AgentMap\Cli\CliOptions;
+use voku\AgentMap\MapArtifactPaths;
 
 final class CliOptionsTest extends TestCase
 {
@@ -56,7 +57,7 @@ final class CliOptionsTest extends TestCase
         $options = CliOptions::parse(['build', '--format=toon']);
 
         self::assertSame('toon', $options->format);
-        self::assertSame((getcwd() ?: '.') . '/.agent-loop/map/php-symbols.toon', $options->out);
+        self::assertSame((getcwd() ?: '.') . '/.agent-map/php-symbols.toon', $options->out);
     }
 
     public function testBuildInfersToonFormatFromExplicitOutputExtension(): void
@@ -80,14 +81,45 @@ final class CliOptionsTest extends TestCase
         $cwd = getcwd() ?: '.';
 
         self::assertSame(['.'], $options->paths);
-        self::assertSame($cwd . '/.agent-loop/map/php-symbols.json', $options->out);
-        self::assertSame($cwd . '/.agent-loop/map/php-symbols.json', $options->index);
-        self::assertSame($cwd . '/.agent-loop/map/search.sqlite', $options->database);
+        self::assertSame($cwd . '/.agent-map/php-symbols.json', $options->out);
+        self::assertSame($cwd . '/.agent-map/php-symbols.json', $options->index);
+        self::assertSame($cwd . '/.agent-map/search.sqlite', $options->database);
         self::assertSame('json', $options->format);
         self::assertSame(20, $options->limit);
         self::assertSame(10, $options->symbolLimit);
         self::assertSame(10, $options->methodLimit);
         self::assertSame('main', $options->base);
+    }
+
+    public function testEmbeddedMapRootDoesNotMoveWithExplicitSourceRoot(): void
+    {
+        $artifacts = MapArtifactPaths::forProject('/project', 'var/agent-state/map');
+        $options = CliOptions::parse(
+            ['build', '--root=/other/source'],
+            $artifacts,
+            '/project',
+        );
+
+        self::assertSame('/other/source', $options->root);
+        self::assertSame('/project/var/agent-state/map/php-symbols.json', $options->out);
+        self::assertSame('/project/var/agent-state/map/php-symbols.json', $options->index);
+        self::assertSame('/project/var/agent-state/map/search.sqlite', $options->database);
+    }
+
+    public function testExplicitArtifactPathsOverrideEmbeddedDefaults(): void
+    {
+        $artifacts = MapArtifactPaths::forProject('/project', 'var/agent-state/map');
+        $options = CliOptions::parse([
+            'build',
+            '--root=/project',
+            '--out=custom/map.json',
+            '--index=custom/read.json',
+            '--database=custom/search.sqlite',
+        ], $artifacts, '/project');
+
+        self::assertSame('/project/custom/map.json', $options->out);
+        self::assertSame('/project/custom/read.json', $options->index);
+        self::assertSame('/project/custom/search.sqlite', $options->database);
     }
 
     public function testParsesFormatLimitAndBase(): void
@@ -112,6 +144,14 @@ final class CliOptionsTest extends TestCase
         self::assertSame(4, $options->maxCallees);
         self::assertSame(5, $options->maxTests);
         self::assertSame(6, $options->maxFiles);
+    }
+
+    public function testRejectsEmptyArtifactOption(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Empty value for option: --out');
+
+        CliOptions::parse(['build', '--out=']);
     }
 
     public function testRejectsUnknownFormat(): void
