@@ -11,7 +11,7 @@ use voku\AgentMap\MapArtifactPaths;
  *
  * Temporal, discovery and structural/search commands remain separate focused
  * implementations. This class owns the one routing decision between them and,
- * when embedded, the one artifact-root default shared by all of them.
+ * when embedded, the one artifact-root default shared by their CLI inputs.
  */
 final readonly class CliApplication
 {
@@ -35,9 +35,7 @@ final readonly class CliApplication
             return $discovery->run($resolved);
         }
 
-        $root = $this->effectiveProjectRoot($resolved);
-        $artifacts = MapArtifactPaths::forProject($root, $this->mapRoot);
-        $status = (new AgentMapApplication(mapRoot: $artifacts->root()))->run($resolved);
+        $status = (new AgentMapApplication())->run($resolved);
         if ($temporal->shouldAppendToGeneralHelp($resolved)) {
             echo $temporal->helpOverview();
         }
@@ -48,8 +46,9 @@ final readonly class CliApplication
         return $status;
     }
 
-    /** @param list<string> $argv
-     *  @return list<string>
+    /**
+     * @param list<string> $argv
+     * @return list<string>
      */
     private function resolveDefaults(array $argv): array
     {
@@ -84,8 +83,9 @@ final readonly class CliApplication
         return $argv;
     }
 
-    /** @param list<string> $argv
-     *  @return list<string>
+    /**
+     * @param list<string> $argv
+     * @return list<string>
      */
     private function resolveHistoryDefaults(array $argv, MapArtifactPaths $artifacts): array
     {
