@@ -9,147 +9,67 @@ use voku\AgentMap\MapArtifactPaths;
 /**
  * Public agent-map CLI entry point.
  *
- * Temporal, discovery and structural/search commands remain separate focused
- * implementations. This class owns the one routing decision between them and,
- * when embedded, the one artifact-root default shared by their CLI inputs.
+ * Temporal, discovery and structural/search commands remain focused
+ * implementations. This class owns only the routing decision between them and
+ * the optional artifact mount point supplied by an embedding application.
  */
 final readonly class CliApplication
 {
+    private ?MapArtifactPaths $artifacts;
+
     public function __construct(
         private ?string $projectRoot = null,
-        private ?string $mapRoot = null,
+        ?string $mapRoot = null,
     ) {
+        $this->artifacts = $mapRoot === null
+            ? null
+            : MapArtifactPaths::forProject($projectRoot ?? (getcwd() ?: '.'), $mapRoot);
     }
 
     /** @param list<string> $argv */
     public function run(array $argv): int
     {
-        $resolved = $this->resolveDefaults($argv);
-        $temporal = new TemporalCliApplication();
-        if ($temporal->supports($resolved)) {
-            return $temporal->run($resolved);
+        $temporal = new TemporalCliApplication(artifacts: $this->artifacts);
+        if ($temporal->supports($argv)) {
+            return $temporal->run($argv);
         }
 
-        $discovery = new DiscoveryCliApplication();
-        if ($discovery->supports($resolved)) {
-            return $discovery->run($resolved);
+        $discovery = new DiscoveryCliApplication(artifacts: $this->artifacts);
+        if ($discovery->supports($argv)) {
+            return $discovery->run($argv);
         }
 
-        $status = (new AgentMapApplication())->run($resolved);
-        if ($temporal->shouldAppendToGeneralHelp($resolved)) {
+        $status = (new AgentMapApplication(
+            artifacts: $this->artifacts,
+            defaultRoot: $this->projectRoot,
+        ))->run($argv);
+
+        if ($this->isGeneralHelp($argv)) {
+            echo <<<'TEXT'
+
+Artifact paths:
+  --out, --index, and --database are relative to --root unless an absolute path is given.
+
+TEXT;
+        }
+        if ($temporal->shouldAppendToGeneralHelp($argv)) {
             echo $temporal->helpOverview();
         }
-        if ($discovery->shouldAppendToGeneralHelp($resolved)) {
+        if ($discovery->shouldAppendToGeneralHelp($argv)) {
             echo $discovery->helpOverview();
         }
 
         return $status;
     }
 
-    /**
-     * @param list<string> $argv
-     * @return list<string>
-     */
-    private function resolveDefaults(array $argv): array
-    {
-        $command = $argv[1] ?? 'help';
-        if (in_array($command, ['help', '--help', '-h', ''], true)) {
-            return $argv;
-        }
-
-        $root = $this->effectiveProjectRoot($argv);
-        $artifacts = MapArtifactPaths::forProject($root, $this->mapRoot);
-
-        if ($command === 'history') {
-            return $this->resolveHistoryDefaults($argv, $artifacts);
-        }
-
-        if (($command === 'build' || $command === 'refresh') && !$this->hasOption($argv, 'root')) {
-            $argv[] = '--root=' . $root;
-        }
-
-        if (($command === 'build' || $command === 'refresh') && !$this->hasOption($argv, 'out')) {
-            $argv[] = '--out=' . ($this->optionValue($argv, 'format') === 'toon' ? $artifacts->indexToon() : $artifacts->indexJson());
-        }
-
-        if ($command !== 'build' && !$this->hasOption($argv, 'index')) {
-            $argv[] = '--index=' . $artifacts->indexJson();
-        }
-
-        if (in_array($command, ['search-index', 'search'], true) && !$this->hasOption($argv, 'database')) {
-            $argv[] = '--database=' . $artifacts->searchDatabase();
-        }
-
-        return $argv;
-    }
-
-    /**
-     * @param list<string> $argv
-     * @return list<string>
-     */
-    private function resolveHistoryDefaults(array $argv, MapArtifactPaths $artifacts): array
-    {
-        $subcommand = $argv[2] ?? 'help';
-        if (in_array($subcommand, ['coupling', 'claims'], true)) {
-            if (!$this->hasOption($argv, 'index')) {
-                $argv[] = '--index=' . $artifacts->indexJson();
-            }
-            if (!$this->hasOption($argv, 'root')) {
-                $argv[] = '--root=' . $this->effectiveProjectRoot($argv);
-            }
-        }
-
-        if ($subcommand === 'observe' && !$this->hasOption($argv, 'index')) {
-            $argv[] = '--index=' . $artifacts->indexJson();
-        }
-
-        if (in_array($subcommand, ['observe', 'show'], true) && !$this->hasOption($argv, 'database')) {
-            $argv[] = '--database=' . $artifacts->historyDatabase();
-        }
-
-        return $argv;
-    }
-
     /** @param list<string> $argv */
-    private function effectiveProjectRoot(array $argv): string
+    private function isGeneralHelp(array $argv): bool
     {
-        return $this->optionValue($argv, 'root')
-            ?? $this->projectRoot
-            ?? (getcwd() ?: '.');
-    }
+        $command = $argv[1] ?? null;
+        $remaining = array_slice($argv, 2);
 
-    /** @param list<string> $tokens */
-    private function hasOption(array $tokens, string $name): bool
-    {
-        foreach ($tokens as $token) {
-            if ($token === '--' . $name || str_starts_with($token, '--' . $name . '=')) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /** @param list<string> $tokens */
-    private function optionValue(array $tokens, string $name): ?string
-    {
-        $prefix = '--' . $name . '=';
-        $count = count($tokens);
-        for ($i = 0; $i < $count; ++$i) {
-            if (str_starts_with($tokens[$i], $prefix)) {
-                $value = substr($tokens[$i], strlen($prefix));
-
-                return $value !== '' ? $value : null;
-            }
-            if ($tokens[$i] !== '--' . $name) {
-                continue;
-            }
-
-            $value = $tokens[$i + 1] ?? null;
-
-            return is_string($value) && $value !== '' && !str_starts_with($value, '--') ? $value : null;
-        }
-
-        return null;
+        return in_array($command, ['help', '--help', '-h'], true)
+            || in_array('--help', $remaining, true)
+            || in_array('-h', $remaining, true);
     }
 }
