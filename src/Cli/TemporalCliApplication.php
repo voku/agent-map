@@ -27,13 +27,10 @@ final readonly class TemporalCliApplication
     /** @var list<string> */
     private const COUPLING_OPTIONS = ['index', 'root', 'commits', 'top', 'min-cochanges', 'max-files-per-commit'];
 
-    private MapArtifactPaths $artifacts;
-
     public function __construct(
         private TemporalTextRenderer $textRenderer = new TemporalTextRenderer(),
-        ?MapArtifactPaths $artifacts = null,
+        private ?MapArtifactPaths $artifacts = null,
     ) {
-        $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
     }
 
     /** @param list<string> $argv */
@@ -175,10 +172,10 @@ TEXT;
         }
         $this->rejectArguments($parsed['arguments'], 'history observe');
 
-        $map = $this->loadFresh($parsed['options']['index'] ?? $this->artifacts->indexJson());
+        $map = $this->loadFresh($parsed['options']['index'] ?? $this->indexPath());
         $revision = (new GitRevisionInspector())->current($map->root);
         $observations = (new EntityObservationBuilder())->build($map);
-        $database = $this->absolute($map->root, $parsed['options']['database'] ?? $this->artifacts->historyDatabase());
+        $database = $this->absolute($map->root, $parsed['options']['database'] ?? $this->historyDatabase($map->root));
         $store = new TemporalHistoryStore($database);
         $snapshotId = $store->record($map, $revision, $observations);
         $payload = [
@@ -215,7 +212,8 @@ TEXT;
         }
 
         $entityId = $parsed['arguments'][0];
-        $database = $this->absolute(getcwd() ?: '.', $parsed['options']['database'] ?? $this->artifacts->historyDatabase());
+        $root = getcwd() ?: '.';
+        $database = $this->absolute($root, $parsed['options']['database'] ?? $this->historyDatabase($root));
         if (!is_file($database)) {
             throw new RuntimeException('Temporal history database not found: ' . $database . '. Run agent-map history observe first.');
         }
@@ -233,7 +231,7 @@ TEXT;
     /** @param array<string, string> $options */
     private function coChangeReport(array $options): CoChangeReport
     {
-        $map = $this->loadFresh($options['index'] ?? $this->artifacts->indexJson());
+        $map = $this->loadFresh($options['index'] ?? $this->indexPath());
         $history = (new GitChangeHistory())->commits(
             $options['root'] ?? $map->root,
             $this->positiveInt('commits', $options['commits'] ?? '100'),
@@ -246,6 +244,16 @@ TEXT;
             $this->positiveInt('top', $options['top'] ?? '20'),
             $this->positiveInt('max-files-per-commit', $options['max-files-per-commit'] ?? '100'),
         );
+    }
+
+    private function indexPath(): string
+    {
+        return ($this->artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.'))->indexJson();
+    }
+
+    private function historyDatabase(string $root): string
+    {
+        return ($this->artifacts ?? MapArtifactPaths::forProject($root))->historyDatabase();
     }
 
     private function loadFresh(string $path): AgentMapIndex
