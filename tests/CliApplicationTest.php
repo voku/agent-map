@@ -69,6 +69,32 @@ final class CliApplicationTest extends TestCase
         self::assertJson($discovery);
     }
 
+    public function testProjectRootAloneGivesEveryRouterTheSameStandaloneMount(): void
+    {
+        $root = sys_get_temp_dir() . '/agent-map-cli-project-root-' . bin2hex(random_bytes(6));
+        mkdir($root . '/src', 0o775, true);
+        $source = $root . '/src/Foo.php';
+        file_put_contents($source, "<?php\n");
+        $hash = hash_file('sha256', $source);
+        self::assertIsString($hash);
+
+        (new IndexWriter())->write(
+            new AgentMapIndex('2.0', $root, 'test', [new FileEntry('src/Foo.php', 'sha256:' . $hash, '', [])]),
+            MapArtifactPaths::forProject($root)->indexJson(),
+        );
+
+        try {
+            ob_start();
+            $exit = (new CliApplication(projectRoot: $root))->run(['agent-map', 'discover', '--format=json']);
+            $output = (string) ob_get_clean();
+        } finally {
+            $this->removeDirectory($root);
+        }
+
+        self::assertSame(0, $exit);
+        self::assertJson($output);
+    }
+
     private function removeDirectory(string $path): void
     {
         if (!is_dir($path)) {
