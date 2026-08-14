@@ -24,12 +24,14 @@ final readonly class MapReadinessInspector
         $mapState = 'missing';
         $map = null;
         $mapSnapshot = null;
+        /** @var list<array{path: string, reason: 'missing'|'hash'}> $staleEntries */
         $staleEntries = [];
         $mapFailure = null;
 
         if (is_file($mapPath)) {
             try {
                 $map = (new IndexReader())->read($mapPath);
+                /** @var list<array{path: string, reason: 'missing'|'hash'}> $staleEntries */
                 $staleEntries = $map->staleEntries();
                 $mapSnapshot = $map->fingerprint?->sourceDigest;
                 if ($mapSnapshot === '') {
@@ -112,12 +114,7 @@ final readonly class MapReadinessInspector
         if (!defined('PDO::SQLITE_ATTR_OPEN_FLAGS') || !defined('PDO::SQLITE_OPEN_READONLY')) {
             throw new RuntimeException('PDO SQLite read-only open flags are unavailable.');
         }
-        $attribute = constant('PDO::SQLITE_ATTR_OPEN_FLAGS');
-        $readOnly = constant('PDO::SQLITE_OPEN_READONLY');
-        if (!is_int($attribute) || !is_int($readOnly)) {
-            throw new RuntimeException('PDO SQLite read-only open flags are invalid.');
-        }
-        $options[$attribute] = $readOnly;
+        $options[constant('PDO::SQLITE_ATTR_OPEN_FLAGS')] = constant('PDO::SQLITE_OPEN_READONLY');
 
         return new PDO($dsn, null, null, $options);
     }
