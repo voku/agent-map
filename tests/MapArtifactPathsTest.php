@@ -13,7 +13,6 @@ final class MapArtifactPathsTest extends TestCase
     {
         $paths = MapArtifactPaths::forProject('/project');
 
-        self::assertSame('/project/.agent-map', $paths->root());
         self::assertSame('/project/.agent-map/php-symbols.json', $paths->indexJson());
         self::assertSame('/project/.agent-map/php-symbols.toon', $paths->indexToon());
         self::assertSame('/project/.agent-map/search.sqlite', $paths->searchDatabase());
@@ -26,7 +25,6 @@ final class MapArtifactPathsTest extends TestCase
     {
         $paths = MapArtifactPaths::forProject('/project', '/project/var/agent-state/map');
 
-        self::assertSame('/project/var/agent-state/map', $paths->root());
         self::assertSame('/project/var/agent-state/map/php-symbols.json', $paths->indexJson());
         self::assertSame('/project/var/agent-state/map/search.sqlite', $paths->searchDatabase());
         self::assertSame('/project/var/agent-state/map/history.sqlite', $paths->historyDatabase());
@@ -37,12 +35,12 @@ final class MapArtifactPathsTest extends TestCase
     public function testRelativeAndWindowsRootsAreNormalized(): void
     {
         self::assertSame(
-            'C:/project/var/map',
-            MapArtifactPaths::forProject('C:\\project', 'var\\map')->root(),
+            'C:/project/var/map/php-symbols.json',
+            MapArtifactPaths::forProject('C:\\project', 'var\\map')->indexJson(),
         );
         self::assertSame(
-            'D:/agent-map',
-            MapArtifactPaths::forProject('C:\\project', 'D:\\agent-map')->root(),
+            'D:/agent-map/php-symbols.json',
+            MapArtifactPaths::forProject('C:\\project', 'D:\\agent-map')->indexJson(),
         );
     }
 }
