@@ -33,7 +33,7 @@ final readonly class MapArtifactPaths
 
     public static function forProject(string $projectRoot, ?string $artifactRoot = null): self
     {
-        $projectRoot = rtrim(str_replace('\\', '/', $projectRoot), '/');
+        $projectRoot = self::absolute($projectRoot);
         if ($artifactRoot === null || trim($artifactRoot) === '') {
             return new self($projectRoot . '/.agent-map');
         }
@@ -81,10 +81,21 @@ final readonly class MapArtifactPaths
         return $this->root . '/' . self::PHPSTAN_CACHE_DIRECTORY;
     }
 
+    private static function absolute(string $path): string
+    {
+        $path = str_replace('\\', '/', $path);
+        if (self::isAbsolute($path)) {
+            return rtrim($path, '/');
+        }
+
+        $cwd = rtrim(str_replace('\\', '/', getcwd() ?: '.'), '/');
+
+        return $path === '.' ? $cwd : $cwd . '/' . trim($path, '/');
+    }
+
     private static function isAbsolute(string $path): bool
     {
         return str_starts_with($path, '/')
-            || str_starts_with($path, '//')
             || preg_match('/\A[A-Za-z]:[\\\\\/]/', $path) === 1;
     }
 }
