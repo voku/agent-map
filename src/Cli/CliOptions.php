@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Cli;
 
 use InvalidArgumentException;
+use voku\AgentMap\MapArtifactPaths;
 
 final readonly class CliOptions
 {
@@ -40,12 +41,16 @@ final readonly class CliOptions
         public int $maxCallees,
         public int $maxTests,
         public int $maxTypeDefinitions,
+        public MapArtifactPaths $artifacts,
     ) {
     }
 
     /** @param list<string> $tokens */
-    public static function parse(array $tokens): self
-    {
+    public static function parse(
+        array $tokens,
+        ?MapArtifactPaths $artifacts = null,
+        ?string $defaultRoot = null,
+    ): self {
         $command = array_shift($tokens);
         if ($command === null || $command === '') {
             throw new InvalidArgumentException('Missing command. Run agent-map help.');
@@ -59,12 +64,12 @@ final readonly class CliOptions
         }
 
         $values = [
-            'root' => getcwd() ?: '.',
+            'root' => $defaultRoot ?? (getcwd() ?: '.'),
             'paths' => '.',
             'scan' => '',
-            'out' => '.agent-loop/map/php-symbols.json',
-            'index' => '.agent-loop/map/php-symbols.json',
-            'database' => '.agent-loop/map/search.sqlite',
+            'out' => '',
+            'index' => '',
+            'database' => '',
             'cases' => 'tests/fixtures/search-cases.json',
             'format' => in_array($command, ['build', 'refresh'], true) ? 'json' : 'text',
             'limit' => $command === 'scope' ? '10' : '20',
@@ -87,6 +92,8 @@ final readonly class CliOptions
         $semantic = false;
         $formatProvided = false;
         $outProvided = false;
+        $indexProvided = false;
+        $databaseProvided = false;
 
         for ($i = 0, $count = count($tokens); $i < $count; ++$i) {
             $token = $tokens[$i];
@@ -123,18 +130,28 @@ final readonly class CliOptions
             $values[$name] = $value;
             $formatProvided = $formatProvided || $name === 'format';
             $outProvided = $outProvided || $name === 'out';
+            $indexProvided = $indexProvided || $name === 'index';
+            $databaseProvided = $databaseProvided || $name === 'database';
         }
 
         if (in_array($command, ['query', 'file', 'related', 'scope', 'callers', 'callees', 'context', 'search'], true) && !$help && ($argument === null || $argument === '')) {
             throw new InvalidArgumentException('Missing argument for command: ' . $command);
         }
+
+        $artifacts ??= MapArtifactPaths::forProject($values['root']);
         if ($command === 'build' || $command === 'refresh') {
-            if (!$formatProvided && str_ends_with(strtolower($values['out']), '.toon')) {
+            if (!$formatProvided && $outProvided && str_ends_with(strtolower($values['out']), '.toon')) {
                 $values['format'] = 'toon';
             }
-            if (!$outProvided && $values['format'] === 'toon') {
-                $values['out'] = '.agent-loop/map/php-symbols.toon';
+            if (!$outProvided) {
+                $values['out'] = $values['format'] === 'toon' ? $artifacts->indexToon() : $artifacts->indexJson();
             }
+        }
+        if (!$indexProvided) {
+            $values['index'] = $artifacts->indexJson();
+        }
+        if (!$databaseProvided) {
+            $values['database'] = $artifacts->searchDatabase();
         }
 
         $allowedFormats = in_array($command, ['build', 'refresh'], true) ? ['json', 'toon'] : ['text', 'json', 'markdown', 'toon'];
@@ -169,6 +186,7 @@ final readonly class CliOptions
             maxCallees: self::positiveInt('max-callees', $values['max-callees'], 0),
             maxTests: self::positiveInt('max-tests', $values['max-tests'], 0),
             maxTypeDefinitions: self::positiveInt('max-type-definitions', $values['max-type-definitions'], 0),
+            artifacts: $artifacts,
         );
     }
 
@@ -181,12 +199,17 @@ final readonly class CliOptions
         $raw = substr($token, 2);
         if (str_contains($raw, '=')) {
             [$name, $value] = explode('=', $raw, 2);
+            if ($value === '') {
+                throw new InvalidArgumentException('Empty value for option: --' . $name);
+            }
+
             return [$name, $value, false];
         }
         $value = $tokens[$index + 1] ?? null;
-        if (!is_string($value) || str_starts_with($value, '--')) {
+        if (!is_string($value) || $value === '' || str_starts_with($value, '--')) {
             throw new InvalidArgumentException('Missing value for option: --' . $raw);
         }
+
         return [$raw, $value, true];
     }
 
