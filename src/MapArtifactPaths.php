@@ -12,17 +12,17 @@ namespace voku\AgentMap;
  */
 final readonly class MapArtifactPaths
 {
-    public const string INDEX_JSON_FILENAME = 'php-symbols.json';
+    public const INDEX_JSON_FILENAME = 'php-symbols.json';
 
-    public const string INDEX_TOON_FILENAME = 'php-symbols.toon';
+    public const INDEX_TOON_FILENAME = 'php-symbols.toon';
 
-    public const string SEARCH_DATABASE_FILENAME = 'search.sqlite';
+    public const SEARCH_DATABASE_FILENAME = 'search.sqlite';
 
-    public const string HISTORY_DATABASE_FILENAME = 'history.sqlite';
+    public const HISTORY_DATABASE_FILENAME = 'history.sqlite';
 
-    public const string STRUCTURAL_CACHE_FILENAME = 'structural-cache.json';
+    public const STRUCTURAL_CACHE_FILENAME = 'structural-cache.json';
 
-    public const string PHPSTAN_CACHE_DIRECTORY = 'phpstan-cache';
+    public const PHPSTAN_CACHE_DIRECTORY = 'phpstan-cache';
 
     private string $root;
 
