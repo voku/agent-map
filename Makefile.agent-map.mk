@@ -1,5 +1,5 @@
 AGENT_MAP ?= vendor/bin/agent-map
-AGENT_MAP_INDEX ?= .agent-loop/map/php-symbols.json
+AGENT_MAP_INDEX ?= .agent-map/php-symbols.json
 AGENT_MAP_PATHS ?= src,tests
 AGENT_MAP_BASE ?= main
 AGENT_MAP_FORMAT ?= text
