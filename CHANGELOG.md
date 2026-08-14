@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.8.1 - 2026-08-15
+
+### Added
+
+- Added immutable `MapReadiness` and `MapReadinessInspector` owner boundaries so
+  embedders can consume current map freshness, source snapshot identity, and derived
+  Search compatibility without reconstructing agent-map policy from artifact presence.
+- Search readiness is inspected read-only and distinguishes unavailable, missing,
+  invalid, stale, and current state without rebuilding, repairing, migrating, or
+  creating Search state.
+
+### Validation
+
+- Regression coverage proves missing, invalid, stale, fingerprint-less, and current map
+  states; missing, corrupt, mismatched, and current Search state; and that inspection
+  does not mutate or create the Search database.
+- `composer ci` is green on PHP 8.2, 8.3, 8.4, and 8.5, and the temporal self-dogfood
+  job is green for the exact implementation candidate.
+
 ## 0.8.0 - 2026-08-14
 
 ### Added
