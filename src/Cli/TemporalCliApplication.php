@@ -10,6 +10,7 @@ use RuntimeException;
 use Throwable;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Temporal\CoChangeAnalyzer;
 use voku\AgentMap\Temporal\CoChangeReport;
 use voku\AgentMap\Temporal\EntityHistoryReport;
@@ -23,15 +24,16 @@ use voku\AgentMap\Temporal\TemporalHistoryStore;
 
 final readonly class TemporalCliApplication
 {
-    private const DEFAULT_INDEX = '.agent-map/php-symbols.json';
-    private const DEFAULT_DATABASE = '.agent-map/history.sqlite';
-
     /** @var list<string> */
     private const COUPLING_OPTIONS = ['index', 'root', 'commits', 'top', 'min-cochanges', 'max-files-per-commit'];
 
+    private MapArtifactPaths $artifacts;
+
     public function __construct(
         private TemporalTextRenderer $textRenderer = new TemporalTextRenderer(),
+        ?MapArtifactPaths $artifacts = null,
     ) {
+        $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
     }
 
     /** @param list<string> $argv */
@@ -173,10 +175,10 @@ TEXT;
         }
         $this->rejectArguments($parsed['arguments'], 'history observe');
 
-        $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
+        $map = $this->loadFresh($parsed['options']['index'] ?? $this->artifacts->indexJson());
         $revision = (new GitRevisionInspector())->current($map->root);
         $observations = (new EntityObservationBuilder())->build($map);
-        $database = $this->absolute($map->root, $parsed['options']['database'] ?? self::DEFAULT_DATABASE);
+        $database = $this->absolute($map->root, $parsed['options']['database'] ?? $this->artifacts->historyDatabase());
         $store = new TemporalHistoryStore($database);
         $snapshotId = $store->record($map, $revision, $observations);
         $payload = [
@@ -213,7 +215,7 @@ TEXT;
         }
 
         $entityId = $parsed['arguments'][0];
-        $database = $this->absolute(getcwd() ?: '.', $parsed['options']['database'] ?? self::DEFAULT_DATABASE);
+        $database = $this->absolute(getcwd() ?: '.', $parsed['options']['database'] ?? $this->artifacts->historyDatabase());
         if (!is_file($database)) {
             throw new RuntimeException('Temporal history database not found: ' . $database . '. Run agent-map history observe first.');
         }
@@ -231,7 +233,7 @@ TEXT;
     /** @param array<string, string> $options */
     private function coChangeReport(array $options): CoChangeReport
     {
-        $map = $this->loadFresh($options['index'] ?? self::DEFAULT_INDEX);
+        $map = $this->loadFresh($options['index'] ?? $this->artifacts->indexJson());
         $history = (new GitChangeHistory())->commits(
             $options['root'] ?? $map->root,
             $this->positiveInt('commits', $options['commits'] ?? '100'),
@@ -291,8 +293,8 @@ Temporal evolution:
   agent-map history coupling [--index=MAP] [--root=PATH] [--commits=100] [--min-cochanges=2]
                              [--max-files-per-commit=100] [--top=20] [--format=...]
   agent-map history claims [same coupling options] [--min-ratio=0.6] [--format=...]
-  agent-map history observe [--index=MAP] [--database=.agent-map/history.sqlite] [--format=...]
-  agent-map history show ENTITY [--database=.agent-map/history.sqlite] [--format=...]
+  agent-map history observe [--index=MAP] [--database=PATH] [--format=...]
+  agent-map history show ENTITY [--database=PATH] [--format=...]
 
 `history diff` compares canonical map structure and ignores line-number-only relation movement.
 `history coupling` exposes bounded Git co-change beside current semantic/path coupling.
