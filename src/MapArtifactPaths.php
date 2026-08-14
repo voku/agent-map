@@ -4,46 +4,32 @@ declare(strict_types=1);
 
 namespace voku\AgentMap;
 
-/**
- * One owner for the files agent-map keeps below its artifact root.
- *
- * The embedding application chooses where that root is mounted. agent-map
- * alone decides what lives below it.
- */
+/** The embedder chooses the root; agent-map owns every filename below it. */
 final readonly class MapArtifactPaths
 {
-    public const INDEX_JSON_FILENAME = 'php-symbols.json';
+    private const DEFAULT_ROOT = '.agent-map';
+    private const INDEX_JSON = 'php-symbols.json';
+    private const INDEX_TOON = 'php-symbols.toon';
+    private const SEARCH_DATABASE = 'search.sqlite';
+    private const HISTORY_DATABASE = 'history.sqlite';
+    private const STRUCTURAL_CACHE = 'structural-cache.json';
+    private const PHPSTAN_CACHE = 'phpstan-cache';
 
-    public const INDEX_TOON_FILENAME = 'php-symbols.toon';
-
-    public const SEARCH_DATABASE_FILENAME = 'search.sqlite';
-
-    public const HISTORY_DATABASE_FILENAME = 'history.sqlite';
-
-    public const STRUCTURAL_CACHE_FILENAME = 'structural-cache.json';
-
-    public const PHPSTAN_CACHE_DIRECTORY = 'phpstan-cache';
-
-    private string $root;
-
-    private function __construct(string $root)
+    private function __construct(private string $root)
     {
-        $this->root = rtrim(str_replace('\\', '/', $root), '/');
     }
 
     public static function forProject(string $projectRoot, ?string $artifactRoot = null): self
     {
         $projectRoot = self::absolute($projectRoot);
-        if ($artifactRoot === null || trim($artifactRoot) === '') {
-            return new self($projectRoot . '/.agent-map');
+        $root = $artifactRoot === null || trim($artifactRoot) === ''
+            ? $projectRoot . '/' . self::DEFAULT_ROOT
+            : trim(str_replace('\\', '/', $artifactRoot));
+        if (!self::isAbsolute($root)) {
+            $root = $projectRoot . '/' . trim($root, '/');
         }
 
-        $artifactRoot = trim(str_replace('\\', '/', $artifactRoot));
-        if (!self::isAbsolute($artifactRoot)) {
-            $artifactRoot = $projectRoot . '/' . trim($artifactRoot, '/');
-        }
-
-        return new self($artifactRoot);
+        return new self(rtrim($root, '/'));
     }
 
     public function root(): string
@@ -53,32 +39,37 @@ final readonly class MapArtifactPaths
 
     public function indexJson(): string
     {
-        return $this->root . '/' . self::INDEX_JSON_FILENAME;
+        return $this->path(self::INDEX_JSON);
     }
 
     public function indexToon(): string
     {
-        return $this->root . '/' . self::INDEX_TOON_FILENAME;
+        return $this->path(self::INDEX_TOON);
     }
 
     public function searchDatabase(): string
     {
-        return $this->root . '/' . self::SEARCH_DATABASE_FILENAME;
+        return $this->path(self::SEARCH_DATABASE);
     }
 
     public function historyDatabase(): string
     {
-        return $this->root . '/' . self::HISTORY_DATABASE_FILENAME;
+        return $this->path(self::HISTORY_DATABASE);
     }
 
     public function structuralCache(): string
     {
-        return $this->root . '/' . self::STRUCTURAL_CACHE_FILENAME;
+        return $this->path(self::STRUCTURAL_CACHE);
     }
 
     public function phpStanCache(): string
     {
-        return $this->root . '/' . self::PHPSTAN_CACHE_DIRECTORY;
+        return $this->path(self::PHPSTAN_CACHE);
+    }
+
+    private function path(string $name): string
+    {
+        return $this->root . '/' . $name;
     }
 
     private static function absolute(string $path): string
@@ -95,7 +86,6 @@ final readonly class MapArtifactPaths
 
     private static function isAbsolute(string $path): bool
     {
-        return str_starts_with($path, '/')
-            || preg_match('/\A[A-Za-z]:[\\\\\/]/', $path) === 1;
+        return str_starts_with($path, '/') || preg_match('/\A[A-Za-z]:[\\\\\/]/', $path) === 1;
     }
 }
