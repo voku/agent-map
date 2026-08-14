@@ -41,6 +41,7 @@ final readonly class CliOptions
         public int $maxCallees,
         public int $maxTests,
         public int $maxTypeDefinitions,
+        public MapArtifactPaths $artifacts,
     ) {
     }
 
@@ -175,6 +176,7 @@ final readonly class CliOptions
             maxCallees: self::positiveInt('max-callees', $values['max-callees'], 0),
             maxTests: self::positiveInt('max-tests', $values['max-tests'], 0),
             maxTypeDefinitions: self::positiveInt('max-type-definitions', $values['max-type-definitions'], 0),
+            artifacts: $artifacts,
         );
     }
 
