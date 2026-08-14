@@ -8,6 +8,7 @@ use PDO;
 use PDOException;
 use RuntimeException;
 use Throwable;
+use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
 
@@ -20,113 +21,61 @@ final readonly class MapReadinessInspector
     {
         $mapPath = $artifacts->indexJson();
         $searchPath = $artifacts->searchDatabase();
+        $mapState = 'missing';
+        $map = null;
+        $mapSnapshot = null;
+        $staleEntries = [];
+        $mapFailure = null;
 
-        if (!is_file($mapPath)) {
-            return new MapReadiness(
-                mapState: 'missing',
-                mapPath: $mapPath,
-                mapSnapshot: null,
-                staleEntries: [],
-                searchState: 'unavailable',
-                searchPath: $searchPath,
-                searchSnapshot: null,
-            );
+        if (is_file($mapPath)) {
+            try {
+                $map = (new IndexReader())->read($mapPath);
+                $staleEntries = $map->staleEntries();
+                $mapSnapshot = $map->fingerprint?->sourceDigest;
+                if ($mapSnapshot === '') {
+                    $mapSnapshot = null;
+                }
+                $mapState = $staleEntries === [] ? 'ready' : 'stale';
+            } catch (Throwable $exception) {
+                $mapState = 'invalid';
+                $mapFailure = $exception->getMessage();
+                $map = null;
+            }
         }
 
-        try {
-            $map = (new IndexReader())->read($mapPath);
-        } catch (Throwable $exception) {
-            return new MapReadiness(
-                mapState: 'invalid',
-                mapPath: $mapPath,
-                mapSnapshot: null,
-                staleEntries: [],
-                searchState: 'unavailable',
-                searchPath: $searchPath,
-                searchSnapshot: null,
-                mapFailure: $exception->getMessage(),
-            );
-        }
-
-        $staleEntries = $map->staleEntries();
-        $mapSnapshot = $map->fingerprint?->sourceDigest;
-        if ($staleEntries !== []) {
-            return new MapReadiness(
-                mapState: 'stale',
-                mapPath: $mapPath,
-                mapSnapshot: $mapSnapshot,
-                staleEntries: $staleEntries,
-                searchState: 'unavailable',
-                searchPath: $searchPath,
-                searchSnapshot: null,
-                map: $map,
-            );
-        }
-
-        if ($mapSnapshot === null || $mapSnapshot === '') {
-            return new MapReadiness(
-                mapState: 'ready',
-                mapPath: $mapPath,
-                mapSnapshot: null,
-                staleEntries: [],
-                searchState: 'unavailable',
-                searchPath: $searchPath,
-                searchSnapshot: null,
-                map: $map,
-            );
-        }
-
-        if (!is_file($searchPath)) {
-            return new MapReadiness(
-                mapState: 'ready',
-                mapPath: $mapPath,
-                mapSnapshot: $mapSnapshot,
-                staleEntries: [],
-                searchState: 'missing',
-                searchPath: $searchPath,
-                searchSnapshot: null,
-                map: $map,
-            );
-        }
-
-        try {
-            $searchSnapshot = $this->readSearchSnapshot($searchPath);
-        } catch (RuntimeException $exception) {
-            return new MapReadiness(
-                mapState: 'ready',
-                mapPath: $mapPath,
-                mapSnapshot: $mapSnapshot,
-                staleEntries: [],
-                searchState: 'invalid',
-                searchPath: $searchPath,
-                searchSnapshot: null,
-                searchFailure: $exception->getMessage(),
-                map: $map,
-            );
-        }
-
-        if ($searchSnapshot === null || $searchSnapshot === '') {
-            return new MapReadiness(
-                mapState: 'ready',
-                mapPath: $mapPath,
-                mapSnapshot: $mapSnapshot,
-                staleEntries: [],
-                searchState: 'invalid',
-                searchPath: $searchPath,
-                searchSnapshot: null,
-                searchFailure: 'Search index does not record the map snapshot it was built from.',
-                map: $map,
-            );
+        $searchState = 'unavailable';
+        $searchSnapshot = null;
+        $searchFailure = null;
+        if ($mapState === 'ready' && $mapSnapshot !== null) {
+            if (!is_file($searchPath)) {
+                $searchState = 'missing';
+            } else {
+                try {
+                    $searchSnapshot = $this->readSearchSnapshot($searchPath);
+                    if ($searchSnapshot === null || $searchSnapshot === '') {
+                        $searchState = 'invalid';
+                        $searchSnapshot = null;
+                        $searchFailure = 'Search index does not record the map snapshot it was built from.';
+                    } else {
+                        $searchState = hash_equals($mapSnapshot, $searchSnapshot) ? 'ready' : 'stale';
+                    }
+                } catch (RuntimeException $exception) {
+                    $searchState = 'invalid';
+                    $searchFailure = $exception->getMessage();
+                }
+            }
         }
 
         return new MapReadiness(
-            mapState: 'ready',
+            mapState: $mapState,
             mapPath: $mapPath,
             mapSnapshot: $mapSnapshot,
-            staleEntries: [],
-            searchState: hash_equals($mapSnapshot, $searchSnapshot) ? 'ready' : 'stale',
+            staleEntries: $staleEntries,
+            searchState: $searchState,
             searchPath: $searchPath,
             searchSnapshot: $searchSnapshot,
+            mapFailure: $mapFailure,
+            searchFailure: $searchFailure,
             map: $map,
         );
     }
