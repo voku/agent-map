@@ -7,14 +7,6 @@ namespace voku\AgentMap;
 /** The embedder chooses the root; agent-map owns every filename below it. */
 final readonly class MapArtifactPaths
 {
-    private const DEFAULT_ROOT = '.agent-map';
-    private const INDEX_JSON = 'php-symbols.json';
-    private const INDEX_TOON = 'php-symbols.toon';
-    private const SEARCH_DATABASE = 'search.sqlite';
-    private const HISTORY_DATABASE = 'history.sqlite';
-    private const STRUCTURAL_CACHE = 'structural-cache.json';
-    private const PHPSTAN_CACHE = 'phpstan-cache';
-
     private function __construct(private string $root)
     {
     }
@@ -23,48 +15,40 @@ final readonly class MapArtifactPaths
     {
         $projectRoot = self::absolute($projectRoot);
         $root = $artifactRoot === null || trim($artifactRoot) === ''
-            ? $projectRoot . '/' . self::DEFAULT_ROOT
+            ? '.agent-map'
             : trim(str_replace('\\', '/', $artifactRoot));
-        if (!self::isAbsolute($root)) {
-            $root = $projectRoot . '/' . trim($root, '/');
-        }
 
-        return new self(rtrim($root, '/'));
-    }
-
-    public function root(): string
-    {
-        return $this->root;
+        return new self(rtrim(self::isAbsolute($root) ? $root : $projectRoot . '/' . trim($root, '/'), '/'));
     }
 
     public function indexJson(): string
     {
-        return $this->path(self::INDEX_JSON);
+        return $this->path('php-symbols.json');
     }
 
     public function indexToon(): string
     {
-        return $this->path(self::INDEX_TOON);
+        return $this->path('php-symbols.toon');
     }
 
     public function searchDatabase(): string
     {
-        return $this->path(self::SEARCH_DATABASE);
+        return $this->path('search.sqlite');
     }
 
     public function historyDatabase(): string
     {
-        return $this->path(self::HISTORY_DATABASE);
+        return $this->path('history.sqlite');
     }
 
     public function structuralCache(): string
     {
-        return $this->path(self::STRUCTURAL_CACHE);
+        return $this->path('structural-cache.json');
     }
 
     public function phpStanCache(): string
     {
-        return $this->path(self::PHPSTAN_CACHE);
+        return $this->path('phpstan-cache');
     }
 
     private function path(string $name): string
