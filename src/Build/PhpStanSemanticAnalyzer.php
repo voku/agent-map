@@ -10,9 +10,14 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
 use Throwable;
+use voku\AgentMap\MapArtifactPaths;
 
 final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
 {
+    public function __construct(private ?MapArtifactPaths $artifacts = null)
+    {
+    }
+
     public function analyse(
         string $root,
         array $relativeFiles,
@@ -238,7 +243,7 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
 
     private function resultCacheDirectory(string $root): string
     {
-        $directory = $root . '/.agent-map/phpstan-cache';
+        $directory = ($this->artifacts ?? MapArtifactPaths::forProject($root))->phpStanCache();
         if (!is_dir($directory) && !mkdir($directory, 0o775, true) && !is_dir($directory)) {
             throw new RuntimeException('Unable to create PHPStan result cache directory: ' . $directory);
         }
