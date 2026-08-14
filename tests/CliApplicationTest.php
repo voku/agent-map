@@ -95,6 +95,40 @@ final class CliApplicationTest extends TestCase
         self::assertJson($output);
     }
 
+    public function testExplicitSourceRootDoesNotRelocateEmbeddedArtifactRoot(): void
+    {
+        $projectRoot = sys_get_temp_dir() . '/agent-map-cli-project-' . bin2hex(random_bytes(6));
+        $sourceRoot = sys_get_temp_dir() . '/agent-map-cli-source-' . bin2hex(random_bytes(6));
+        mkdir($projectRoot . '/src', 0o775, true);
+        mkdir($sourceRoot, 0o775, true);
+        $source = $projectRoot . '/src/Foo.php';
+        file_put_contents($source, "<?php\n");
+        $hash = hash_file('sha256', $source);
+        self::assertIsString($hash);
+
+        (new IndexWriter())->write(
+            new AgentMapIndex('2.0', $projectRoot, 'test', [new FileEntry('src/Foo.php', 'sha256:' . $hash, '', [])]),
+            MapArtifactPaths::forProject($projectRoot, 'var/agent-state/map')->indexJson(),
+        );
+
+        try {
+            ob_start();
+            $exit = (new CliApplication(projectRoot: $projectRoot, mapRoot: 'var/agent-state/map'))->run([
+                'agent-map',
+                'summary',
+                '--root=' . $sourceRoot,
+                '--format=json',
+            ]);
+            $output = (string) ob_get_clean();
+        } finally {
+            $this->removeDirectory($projectRoot);
+            $this->removeDirectory($sourceRoot);
+        }
+
+        self::assertSame(0, $exit);
+        self::assertJson($output);
+    }
+
     private function removeDirectory(string $path): void
     {
         if (!is_dir($path)) {
