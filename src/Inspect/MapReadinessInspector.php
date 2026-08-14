@@ -7,6 +7,7 @@ namespace voku\AgentMap\Inspect;
 use PDO;
 use PDOException;
 use RuntimeException;
+use Throwable;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
 
@@ -34,7 +35,7 @@ final readonly class MapReadinessInspector
 
         try {
             $map = (new IndexReader())->read($mapPath);
-        } catch (RuntimeException $exception) {
+        } catch (Throwable $exception) {
             return new MapReadiness(
                 mapState: 'invalid',
                 mapPath: $mapPath,
@@ -159,10 +160,13 @@ final readonly class MapReadinessInspector
             return new \Pdo\Sqlite($dsn, null, null, $options);
         }
 
+        if (!defined('PDO::SQLITE_ATTR_OPEN_FLAGS') || !defined('PDO::SQLITE_OPEN_READONLY')) {
+            throw new RuntimeException('PDO SQLite read-only open flags are unavailable.');
+        }
         $attribute = constant('PDO::SQLITE_ATTR_OPEN_FLAGS');
         $readOnly = constant('PDO::SQLITE_OPEN_READONLY');
         if (!is_int($attribute) || !is_int($readOnly)) {
-            throw new RuntimeException('PDO SQLite read-only open flags are unavailable.');
+            throw new RuntimeException('PDO SQLite read-only open flags are invalid.');
         }
         $options[$attribute] = $readOnly;
 
