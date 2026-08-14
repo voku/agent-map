@@ -14,6 +14,7 @@ use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\IO\PhpFileFinder;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Search\ChunkExtractor;
 use voku\AgentMap\Search\HybridSearch;
 use voku\AgentMap\Search\Embedding\CorpusEmbeddingProvider;
@@ -27,6 +28,8 @@ final readonly class AgentMapApplication
 {
     public function __construct(
         private OutputFormatter $formatter = new OutputFormatter(),
+        private ?MapArtifactPaths $artifacts = null,
+        private ?string $defaultRoot = null,
     ) {
     }
 
@@ -38,7 +41,7 @@ final readonly class AgentMapApplication
         array_shift($argv);
 
         try {
-            $options = CliOptions::parse($argv);
+            $options = CliOptions::parse($argv, $this->artifacts, $this->defaultRoot);
             if ($options->command === 'help' || $options->help) {
                 echo $this->help($options->command);
                 return 0;
@@ -75,7 +78,7 @@ final readonly class AgentMapApplication
             $previous = (new IndexReader())->read($options->out);
         }
 
-        $index = (new AgentMapBuilder())->build(
+        $index = (new AgentMapBuilder(artifacts: $options->artifacts))->build(
             $options->root,
             $options->paths,
             $options->excludes,
@@ -134,7 +137,7 @@ final readonly class AgentMapApplication
             return 0;
         }
 
-        $rebuilt = (new AgentMapBuilder())->build(
+        $rebuilt = (new AgentMapBuilder(artifacts: $options->artifacts))->build(
             $options->root,
             array_keys($changed),
             $options->excludes,
