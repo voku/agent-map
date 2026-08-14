@@ -3,9 +3,7 @@
 
 declare(strict_types=1);
 
-use voku\AgentMap\Cli\AgentMapApplication;
-use voku\AgentMap\Cli\DiscoveryCliApplication;
-use voku\AgentMap\Cli\TemporalCliApplication;
+use voku\AgentMap\Cli\CliApplication;
 
 // The outer autoloader comes first on purpose. When this package is installed as a dependency its
 // own vendor/ directory is normally absent, but a path repository, a mirrored checkout or a stale
@@ -26,17 +24,7 @@ if (function_exists('ini_set')) {
 
 require $autoload;
 
-$temporal = new TemporalCliApplication();
-if ($temporal->supports($argv)) {
-    exit($temporal->run($argv));
-}
-
-$discovery = new DiscoveryCliApplication();
-if ($discovery->supports($argv)) {
-    exit($discovery->run($argv));
-}
-
-$status = (new AgentMapApplication())->run($argv);
+$status = (new CliApplication())->run($argv);
 $command = $argv[1] ?? null;
 $remainingArguments = array_slice($argv, 2);
 $helpRequested = in_array($command, ['help', '--help', '-h'], true)
@@ -49,12 +37,6 @@ Artifact paths:
   --out, --index, and --database are relative to --root unless an absolute path is given.
 
 TXT;
-}
-if ($temporal->shouldAppendToGeneralHelp($argv)) {
-    echo $temporal->helpOverview();
-}
-if ($discovery->shouldAppendToGeneralHelp($argv)) {
-    echo $discovery->helpOverview();
 }
 
 exit($status);
