@@ -4,6 +4,54 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.8.0 - 2026-08-14
+
+### Added
+
+- Added `MapArtifactPaths` as the single functional owner of the JSON/TOON map,
+  Search database, temporal-history database, structural cache, and PHPStan cache
+  filenames. Embedders choose only the artifact mount point; agent-map owns the
+  complete tree below it.
+- Added `CliApplication` as the public routing boundary shared by standalone and
+  embedded callers. Temporal, Discovery, and general commands now receive the same
+  artifact owner without command-specific argv rewriting.
+- Added bounded `file_body` Search chunks for mapped PHP files with no declarations,
+  with a schema-1.1 migration that preserves existing Search rows and rowids.
+
+### Changed
+
+- Relative `--out`, `--index`, and `--database` values now resolve consistently against
+  `--root`; absolute artifact paths remain unchanged.
+- Standalone generated state remains below `.agent-map/`. The unreleased intermediate
+  `.agent-loop/map/` default is not preserved; embedding applications may instead mount
+  the complete artifact tree wherever their own workspace layout requires.
+- Structural and PHPStan caches now follow the same artifact owner as the map, Search,
+  and temporal-history files.
+- Explicit empty long-option values such as `--out=` are rejected instead of silently
+  suppressing default resolution. This applies consistently to value-taking long options.
+- The shipped Makefile defers the default map filename to the CLI while retaining
+  `AGENT_MAP_INDEX` as an explicit override when a consumer supplies one.
+- Added Renovate configuration for consistent hosted dependency-update processing.
+
+### Fixed
+
+- A literal positional argument named `help` no longer causes normal command output to
+  receive an appended CLI help section.
+- Mapped PHP data/configuration files without declarations are now searchable instead of
+  being deterministically invisible to the derived Search index.
+- Embedded relative artifact roots are resolved against the embedding project root and
+  are not relocated by a later explicit command `--root` source override.
+- Standalone `history observe` derives its default history database from the loaded map's
+  project root, while an injected artifact root remains authoritative for embedded use.
+
+### Validation
+
+- Regression coverage includes root-relative and absolute artifact options, positional
+  help output, symbol-less file-body Search chunks and schema migration, shared embedded
+  routing, cache placement, and embedded-map-root precedence over explicit source roots.
+- Release remains gated on `composer ci` across PHP 8.2, 8.3, 8.4, and 8.5 plus the real
+  temporal self-dogfood job.
+
 ## 0.7.0 - 2026-08-11
 
 ### Added

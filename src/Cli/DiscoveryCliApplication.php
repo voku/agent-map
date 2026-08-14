@@ -17,14 +17,17 @@ use voku\AgentMap\Discovery\GraphRanker;
 use voku\AgentMap\Discovery\RankedNode;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
+use voku\AgentMap\MapArtifactPaths;
 
 final readonly class DiscoveryCliApplication
 {
-    private const DEFAULT_INDEX = '.agent-loop/map/php-symbols.json';
+    private MapArtifactPaths $artifacts;
 
     public function __construct(
         private DiscoveryTextRenderer $textRenderer = new DiscoveryTextRenderer(),
+        ?MapArtifactPaths $artifacts = null,
     ) {
+        $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
     }
 
     /** @param list<string> $argv */
@@ -91,7 +94,7 @@ TEXT;
 
         $limit = $this->positiveInt('limit', $parsed['options']['limit'] ?? '10');
         $format = $this->format($parsed['options']['format'] ?? 'text');
-        $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
+        $map = $this->loadFresh($parsed['options']['index'] ?? $this->artifacts->indexJson());
         $report = (new ArchitectureDiscovery())->discover($map, $limit);
         $architecture = $report->architecture;
         if (!$architecture instanceof ArchitectureMapReport) {
@@ -142,7 +145,7 @@ TEXT;
         $top = $this->positiveInt('top', $parsed['options']['top'] ?? '10');
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $kind = $parsed['options']['kind'] ?? null;
-        $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
+        $map = $this->loadFresh($parsed['options']['index'] ?? $this->artifacts->indexJson());
         $ranked = (new GraphRanker())->rank($map, $metric, $kind, $top);
         $payload = [
             'type' => 'rank',
@@ -170,7 +173,7 @@ TEXT;
         $depth = $this->positiveInt('depth', $parsed['options']['depth'] ?? '2');
         $maximumNodes = $this->positiveInt('max-nodes', $parsed['options']['max-nodes'] ?? '100');
         $format = $this->format($parsed['options']['format'] ?? 'text');
-        $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
+        $map = $this->loadFresh($parsed['options']['index'] ?? $this->artifacts->indexJson());
         $report = (new ArchitectureImpactAnalyzer())->forMethod(
             $map,
             $parsed['arguments'][0],

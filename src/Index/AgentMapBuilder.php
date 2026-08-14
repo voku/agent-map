@@ -10,6 +10,7 @@ use voku\AgentMap\Build\SemanticAnalyzer;
 use voku\AgentMap\Extract\SimplePhpParserSymbolExtractor;
 use voku\AgentMap\Extract\SymbolExtractor;
 use voku\AgentMap\IO\PhpFileFinder;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Reconcile\MapReconciler;
 
 final readonly class AgentMapBuilder
@@ -19,12 +20,16 @@ final readonly class AgentMapBuilder
     /** Raise this whenever the cached structural payload changes shape. */
     private const STRUCTURAL_CACHE_VERSION = 1;
 
+    private SemanticAnalyzer $semanticAnalyzer;
+
     public function __construct(
         private PhpFileFinder $finder = new PhpFileFinder(),
         private SymbolExtractor $extractor = new SimplePhpParserSymbolExtractor(),
-        private SemanticAnalyzer $semanticAnalyzer = new PhpStanSemanticAnalyzer(),
+        ?SemanticAnalyzer $semanticAnalyzer = null,
         private MapReconciler $reconciler = new MapReconciler(),
+        private ?MapArtifactPaths $artifacts = null,
     ) {
+        $this->semanticAnalyzer = $semanticAnalyzer ?? new PhpStanSemanticAnalyzer($artifacts);
     }
 
     /**
@@ -256,7 +261,7 @@ final readonly class AgentMapBuilder
      */
     private function loadStructuralCache(string $root): array
     {
-        $file = $this->structuralCacheFile($root);
+        $file = $this->artifactPaths($root)->structuralCache();
         if (!is_file($file)) {
             return [];
         }
@@ -287,7 +292,7 @@ final readonly class AgentMapBuilder
      */
     private function saveStructuralCache(string $root, array $cache): void
     {
-        $file = $this->structuralCacheFile($root);
+        $file = $this->artifactPaths($root)->structuralCache();
         $directory = dirname($file);
         if (!is_dir($directory) && !mkdir($directory, 0o775, true) && !is_dir($directory)) {
             return;
@@ -307,9 +312,9 @@ final readonly class AgentMapBuilder
         }
     }
 
-    private function structuralCacheFile(string $root): string
+    private function artifactPaths(string $root): MapArtifactPaths
     {
-        return $root . '/.agent-map/structural-cache.json';
+        return $this->artifacts ?? MapArtifactPaths::forProject($root);
     }
 
     private function resolvePhpStanConfiguration(string $root, ?string $configuration): ?string
@@ -331,7 +336,6 @@ final readonly class AgentMapBuilder
 
         return null;
     }
-
 
     private function isAbsolutePath(string $path): bool
     {

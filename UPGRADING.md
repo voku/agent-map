@@ -1,35 +1,24 @@
 # Upgrading
 
-## Generated map state moves below `.agent-loop/`
+## Standalone state remains below `.agent-map/`
 
-This is a breaking default-path change. The project/source root does not move;
-only generated agent-map state gets a new canonical location.
-
-New defaults:
-
-```text
-.agent-loop/map/php-symbols.json
-.agent-loop/map/php-symbols.toon
-.agent-loop/map/search.sqlite
-```
-
-Historical defaults:
+`agent-map` keeps its standalone generated state below the package-owned
+`.agent-map/` directory:
 
 ```text
 .agent-map/php-symbols.json
-.agent-map/map/php-symbols.toon
+.agent-map/php-symbols.toon
 .agent-map/search.sqlite
+.agent-map/history.sqlite
+.agent-map/structural-cache.json
+.agent-map/phpstan-cache/
 ```
 
-Migrate existing generated state explicitly:
+The unreleased experiment that moved some defaults to `.agent-loop/map/` is not
+a public migration contract and has been removed. `agent-map` does not need to
+know the layout policy of an embedding package.
 
-```text
-.agent-map/php-symbols.json      -> .agent-loop/map/php-symbols.json
-.agent-map/map/php-symbols.toon -> .agent-loop/map/php-symbols.toon
-.agent-map/search.sqlite         -> .agent-loop/map/search.sqlite
-```
-
-Because map/search state is derived, rebuilding it is also valid and often
-cleaner than moving it. Explicit `--out`, `--index`, and `--database` options
-remain authoritative. There is no automatic fallback or dual-write to
-`.agent-map/`.
+Embedding applications may instead construct the public CLI application with a
+map artifact root. That mount point changes the defaults for all generated map
+state while explicit `--out`, `--index`, and `--database` options remain
+authoritative.

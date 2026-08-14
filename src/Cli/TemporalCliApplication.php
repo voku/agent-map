@@ -10,6 +10,7 @@ use RuntimeException;
 use Throwable;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Temporal\CoChangeAnalyzer;
 use voku\AgentMap\Temporal\CoChangeReport;
 use voku\AgentMap\Temporal\EntityHistoryReport;
@@ -23,14 +24,12 @@ use voku\AgentMap\Temporal\TemporalHistoryStore;
 
 final readonly class TemporalCliApplication
 {
-    private const DEFAULT_INDEX = '.agent-map/php-symbols.json';
-    private const DEFAULT_DATABASE = '.agent-map/history.sqlite';
-
     /** @var list<string> */
     private const COUPLING_OPTIONS = ['index', 'root', 'commits', 'top', 'min-cochanges', 'max-files-per-commit'];
 
     public function __construct(
         private TemporalTextRenderer $textRenderer = new TemporalTextRenderer(),
+        private ?MapArtifactPaths $artifacts = null,
     ) {
     }
 
@@ -173,10 +172,10 @@ TEXT;
         }
         $this->rejectArguments($parsed['arguments'], 'history observe');
 
-        $map = $this->loadFresh($parsed['options']['index'] ?? self::DEFAULT_INDEX);
+        $map = $this->loadFresh($parsed['options']['index'] ?? $this->indexPath());
         $revision = (new GitRevisionInspector())->current($map->root);
         $observations = (new EntityObservationBuilder())->build($map);
-        $database = $this->absolute($map->root, $parsed['options']['database'] ?? self::DEFAULT_DATABASE);
+        $database = $this->absolute($map->root, $parsed['options']['database'] ?? $this->historyDatabase($map->root));
         $store = new TemporalHistoryStore($database);
         $snapshotId = $store->record($map, $revision, $observations);
         $payload = [
@@ -213,7 +212,8 @@ TEXT;
         }
 
         $entityId = $parsed['arguments'][0];
-        $database = $this->absolute(getcwd() ?: '.', $parsed['options']['database'] ?? self::DEFAULT_DATABASE);
+        $root = getcwd() ?: '.';
+        $database = $this->absolute($root, $parsed['options']['database'] ?? $this->historyDatabase($root));
         if (!is_file($database)) {
             throw new RuntimeException('Temporal history database not found: ' . $database . '. Run agent-map history observe first.');
         }
@@ -231,7 +231,7 @@ TEXT;
     /** @param array<string, string> $options */
     private function coChangeReport(array $options): CoChangeReport
     {
-        $map = $this->loadFresh($options['index'] ?? self::DEFAULT_INDEX);
+        $map = $this->loadFresh($options['index'] ?? $this->indexPath());
         $history = (new GitChangeHistory())->commits(
             $options['root'] ?? $map->root,
             $this->positiveInt('commits', $options['commits'] ?? '100'),
@@ -244,6 +244,16 @@ TEXT;
             $this->positiveInt('top', $options['top'] ?? '20'),
             $this->positiveInt('max-files-per-commit', $options['max-files-per-commit'] ?? '100'),
         );
+    }
+
+    private function indexPath(): string
+    {
+        return ($this->artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.'))->indexJson();
+    }
+
+    private function historyDatabase(string $root): string
+    {
+        return ($this->artifacts ?? MapArtifactPaths::forProject($root))->historyDatabase();
     }
 
     private function loadFresh(string $path): AgentMapIndex
@@ -291,8 +301,8 @@ Temporal evolution:
   agent-map history coupling [--index=MAP] [--root=PATH] [--commits=100] [--min-cochanges=2]
                              [--max-files-per-commit=100] [--top=20] [--format=...]
   agent-map history claims [same coupling options] [--min-ratio=0.6] [--format=...]
-  agent-map history observe [--index=MAP] [--database=.agent-map/history.sqlite] [--format=...]
-  agent-map history show ENTITY [--database=.agent-map/history.sqlite] [--format=...]
+  agent-map history observe [--index=MAP] [--database=PATH] [--format=...]
+  agent-map history show ENTITY [--database=PATH] [--format=...]
 
 `history diff` compares canonical map structure and ignores line-number-only relation movement.
 `history coupling` exposes bounded Git co-change beside current semantic/path coupling.
