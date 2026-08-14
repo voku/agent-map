@@ -6,51 +6,36 @@ namespace voku\AgentMap\Cli;
 
 use voku\AgentMap\MapArtifactPaths;
 
-/**
- * Public agent-map CLI entry point.
- *
- * Temporal, discovery and structural/search commands remain focused
- * implementations. This class owns only the routing decision between them and
- * the optional artifact mount point supplied by an embedding application.
- */
+/** Public routing boundary for standalone and embedded agent-map. */
 final readonly class CliApplication
 {
-    private ?MapArtifactPaths $artifacts;
-
     public function __construct(
         private ?string $projectRoot = null,
-        ?string $mapRoot = null,
+        private ?string $mapRoot = null,
     ) {
-        $this->artifacts = $projectRoot === null && $mapRoot === null
-            ? null
-            : MapArtifactPaths::forProject($projectRoot ?? (getcwd() ?: '.'), $mapRoot);
     }
 
     /** @param list<string> $argv */
     public function run(array $argv): int
     {
-        $temporal = new TemporalCliApplication(artifacts: $this->artifacts);
+        $artifacts = $this->projectRoot === null && $this->mapRoot === null
+            ? null
+            : MapArtifactPaths::forProject($this->projectRoot ?? (getcwd() ?: '.'), $this->mapRoot);
+
+        $temporal = new TemporalCliApplication(artifacts: $artifacts);
         if ($temporal->supports($argv)) {
             return $temporal->run($argv);
         }
 
-        $discovery = new DiscoveryCliApplication(artifacts: $this->artifacts);
+        $discovery = new DiscoveryCliApplication(artifacts: $artifacts);
         if ($discovery->supports($argv)) {
             return $discovery->run($argv);
         }
 
-        $status = (new AgentMapApplication(
-            artifacts: $this->artifacts,
-            defaultRoot: $this->projectRoot,
-        ))->run($argv);
-
-        if ($this->isGeneralHelp($argv)) {
-            echo <<<'TEXT'
-
-Artifact paths:
-  --out, --index, and --database are relative to --root unless an absolute path is given.
-
-TEXT;
+        $status = (new AgentMapApplication(artifacts: $artifacts, defaultRoot: $this->projectRoot))->run($argv);
+        $rest = array_slice($argv, 2);
+        if (in_array($argv[1] ?? null, ['help', '--help', '-h'], true) || in_array('--help', $rest, true) || in_array('-h', $rest, true)) {
+            echo "\nArtifact paths:\n  --out, --index, and --database are relative to --root unless an absolute path is given.\n\n";
         }
         if ($temporal->shouldAppendToGeneralHelp($argv)) {
             echo $temporal->helpOverview();
@@ -60,16 +45,5 @@ TEXT;
         }
 
         return $status;
-    }
-
-    /** @param list<string> $argv */
-    private function isGeneralHelp(array $argv): bool
-    {
-        $command = $argv[1] ?? null;
-        $remaining = array_slice($argv, 2);
-
-        return in_array($command, ['help', '--help', '-h'], true)
-            || in_array('--help', $remaining, true)
-            || in_array('-h', $remaining, true);
     }
 }
