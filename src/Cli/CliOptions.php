@@ -41,7 +41,6 @@ final readonly class CliOptions
         public int $maxCallees,
         public int $maxTests,
         public int $maxTypeDefinitions,
-        public MapArtifactPaths $artifacts,
     ) {
     }
 
@@ -91,9 +90,6 @@ final readonly class CliOptions
         $merge = false;
         $semantic = false;
         $formatProvided = false;
-        $outProvided = false;
-        $indexProvided = false;
-        $databaseProvided = false;
 
         for ($i = 0, $count = count($tokens); $i < $count; ++$i) {
             $token = $tokens[$i];
@@ -129,9 +125,6 @@ final readonly class CliOptions
             }
             $values[$name] = $value;
             $formatProvided = $formatProvided || $name === 'format';
-            $outProvided = $outProvided || $name === 'out';
-            $indexProvided = $indexProvided || $name === 'index';
-            $databaseProvided = $databaseProvided || $name === 'database';
         }
 
         if (in_array($command, ['query', 'file', 'related', 'scope', 'callers', 'callees', 'context', 'search'], true) && !$help && ($argument === null || $argument === '')) {
@@ -140,19 +133,15 @@ final readonly class CliOptions
 
         $artifacts ??= MapArtifactPaths::forProject($values['root']);
         if ($command === 'build' || $command === 'refresh') {
-            if (!$formatProvided && $outProvided && str_ends_with(strtolower($values['out']), '.toon')) {
+            if (!$formatProvided && $values['out'] !== '' && str_ends_with(strtolower($values['out']), '.toon')) {
                 $values['format'] = 'toon';
             }
-            if (!$outProvided) {
+            if ($values['out'] === '') {
                 $values['out'] = $values['format'] === 'toon' ? $artifacts->indexToon() : $artifacts->indexJson();
             }
         }
-        if (!$indexProvided) {
-            $values['index'] = $artifacts->indexJson();
-        }
-        if (!$databaseProvided) {
-            $values['database'] = $artifacts->searchDatabase();
-        }
+        $values['index'] = $values['index'] !== '' ? $values['index'] : $artifacts->indexJson();
+        $values['database'] = $values['database'] !== '' ? $values['database'] : $artifacts->searchDatabase();
 
         $allowedFormats = in_array($command, ['build', 'refresh'], true) ? ['json', 'toon'] : ['text', 'json', 'markdown', 'toon'];
         if (!in_array($values['format'], $allowedFormats, true)) {
@@ -186,7 +175,6 @@ final readonly class CliOptions
             maxCallees: self::positiveInt('max-callees', $values['max-callees'], 0),
             maxTests: self::positiveInt('max-tests', $values['max-tests'], 0),
             maxTypeDefinitions: self::positiveInt('max-type-definitions', $values['max-type-definitions'], 0),
-            artifacts: $artifacts,
         );
     }
 
