@@ -13,6 +13,7 @@ final readonly class CliOptions
      * @param list<string> $paths
      * @param list<string> $scanPaths
      * @param list<string> $excludes
+     * @param 'auto'|'structural'|'phpstan' $backend
      */
     public function __construct(
         public string $command,
