@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Tests;
 
-use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use voku\AgentMap\Cli\AgentMapApplication;
 use voku\AgentMap\Cli\CliOptions;
@@ -75,17 +74,53 @@ final class CliBackendSelectionTest extends TestCase
         self::assertSame('phpstan', $options->backend);
     }
 
-    public function testStructuralBackendRejectsPhpStanSpecificOptions(): void
+    public function testStructuralBackendAcceptsPhpStanSpecificOptionsButKeepsThemInert(): void
     {
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('phpstan-config');
+        $marker = $this->root . '/phpstan-bootstrap-ran';
+        file_put_contents(
+            $this->root . '/phpstan-bootstrap.php',
+            '<?php file_put_contents(' . var_export($marker, true) . ", 'ran');\n",
+        );
+        file_put_contents(
+            $this->root . '/phpstan-security.neon',
+            "parameters:\n    bootstrapFiles:\n        - phpstan-bootstrap.php\n",
+        );
 
-        CliOptions::parse([
+        $options = CliOptions::parse([
             'build',
             '--root=' . $this->root,
             '--backend=structural',
-            '--phpstan-config=phpstan.neon',
+            '--phpstan-config=phpstan-security.neon',
+            '--phpstan-memory-limit=64M',
         ]);
+
+        self::assertSame('structural', $options->backend);
+        self::assertSame('phpstan-security.neon', $options->phpStanConfig);
+        self::assertSame('64M', $options->phpStanMemoryLimit);
+
+        $out = $this->root . '/map-with-inert-phpstan-options.json';
+        ob_start();
+        try {
+            $exit = (new AgentMapApplication())->run([
+                'agent-map',
+                'build',
+                '--root=' . $this->root,
+                '--paths=src',
+                '--out=' . $out,
+                '--backend=structural',
+                '--phpstan-config=phpstan-security.neon',
+                '--phpstan-memory-limit=64M',
+            ]);
+        } finally {
+            ob_end_clean();
+        }
+
+        self::assertSame(0, $exit);
+        self::assertFileDoesNotExist($marker, 'Structural mode must not execute PHPStan bootstrap files.');
+        self::assertFileExists($out);
+        $map = json_decode((string) file_get_contents($out), true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($map);
+        self::assertSame('simple-php-code-parser+structural-only', $map['backend'] ?? null);
     }
 
     private function removeDirectory(string $path): void
