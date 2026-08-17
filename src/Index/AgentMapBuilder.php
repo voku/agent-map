@@ -7,6 +7,7 @@ namespace voku\AgentMap\Index;
 use RuntimeException;
 use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
 use voku\AgentMap\Build\SemanticAnalyzer;
+use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
 use voku\AgentMap\Extract\SimplePhpParserSymbolExtractor;
 use voku\AgentMap\Extract\SymbolExtractor;
 use voku\AgentMap\IO\PhpFileFinder;
@@ -15,7 +16,7 @@ use voku\AgentMap\Reconcile\MapReconciler;
 
 final readonly class AgentMapBuilder
 {
-    private const BACKEND = 'simple-php-code-parser+phpstan';
+    private const STRUCTURAL_BACKEND = 'simple-php-code-parser';
 
     /** Raise this whenever the cached structural payload changes shape. */
     private const STRUCTURAL_CACHE_VERSION = 1;
@@ -29,7 +30,10 @@ final readonly class AgentMapBuilder
         private MapReconciler $reconciler = new MapReconciler(),
         private ?MapArtifactPaths $artifacts = null,
     ) {
-        $this->semanticAnalyzer = $semanticAnalyzer ?? new PhpStanSemanticAnalyzer($artifacts);
+        $this->semanticAnalyzer = $semanticAnalyzer
+            ?? (PhpStanSemanticAnalyzer::isAvailable()
+                ? new PhpStanSemanticAnalyzer($artifacts)
+                : new StructuralOnlySemanticAnalyzer());
     }
 
     /**
@@ -56,6 +60,24 @@ final readonly class AgentMapBuilder
         }
 
         $realRoot = str_replace('\\', '/', $realRoot);
+        $semanticBackend = $this->semanticAnalyzer->backend();
+        if (
+            $semanticBackend === 'structural-only'
+            && ($phpStanConfiguration !== null || $phpStanMemoryLimit !== null || $scanPaths !== [])
+        ) {
+            throw new RuntimeException(
+                'PHPStan semantic capability is unavailable; PHPStan-specific build options require phpstan/phpstan.',
+            );
+        }
+
+        $backend = self::STRUCTURAL_BACKEND . '+' . $semanticBackend;
+        if ($previous !== null && $previous->backend !== $backend) {
+            throw new RuntimeException(
+                'Cannot incrementally merge map backend "' . $previous->backend . '" with "' . $backend
+                . '". Run a full build so every file uses one semantic backend.',
+            );
+        }
+
         $relatives = $this->finder->find($realRoot, $paths, $excludes);
 
         $cache = $this->loadStructuralCache($realRoot);
@@ -125,7 +147,7 @@ final readonly class AgentMapBuilder
         return new AgentMapIndex(
             schemaVersion: '2.0',
             root: $realRoot,
-            backend: self::BACKEND,
+            backend: $backend,
             files: $reconciled['files'],
             relations: $reconciled['relations'],
             diagnostics: $reconciled['diagnostics'],

@@ -95,6 +95,7 @@ PHP);
         $index = (new AgentMapBuilder())->build($this->root, ['src'], [], null, '512M');
         $method = $index->resolveMethod('Demo\UserRepository::find');
 
+        self::assertSame('simple-php-code-parser+phpstan', $index->backend);
         self::assertSame('Demo\User|null', $method->method->phpDocReturnType);
         self::assertSame('Demo\User|null', $method->method->resolvedReturnType);
         self::assertSame('semantic_enrichment', $method->method->reconciliationStatus);
