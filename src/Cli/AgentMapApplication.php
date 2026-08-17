@@ -6,6 +6,8 @@ namespace voku\AgentMap\Cli;
 
 use RuntimeException;
 use Throwable;
+use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
+use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
 use voku\AgentMap\Context\EditContextPlanner;
 use voku\AgentMap\Context\EditContextPolicy;
 use voku\AgentMap\Index\AgentMapBuilder;
@@ -78,14 +80,15 @@ final readonly class AgentMapApplication
             $previous = (new IndexReader())->read($options->out);
         }
 
-        $index = (new AgentMapBuilder(artifacts: $options->artifacts))->build(
+        $structural = $options->backend === 'structural';
+        $index = $this->builder($options)->build(
             $options->root,
             $options->paths,
             $options->excludes,
-            $options->phpStanConfig,
-            $options->phpStanMemoryLimit,
+            $structural ? null : $options->phpStanConfig,
+            $structural ? null : $options->phpStanMemoryLimit,
             $previous,
-            $options->scanPaths,
+            $structural ? [] : $options->scanPaths,
         );
         (new IndexWriter())->write($index, $options->out, $options->format);
         echo 'Wrote ' . count($index->files) . ' file(s), ' . count($index->relations) . ' relation(s), and ' . count($index->diagnostics) . ' diagnostic(s) to ' . $options->out . "\n";
@@ -137,19 +140,34 @@ final readonly class AgentMapApplication
             return 0;
         }
 
-        $rebuilt = (new AgentMapBuilder(artifacts: $options->artifacts))->build(
+        $structural = $options->backend === 'structural';
+        $rebuilt = $this->builder($options)->build(
             $options->root,
             array_keys($changed),
             $options->excludes,
-            $options->phpStanConfig,
-            $options->phpStanMemoryLimit,
+            $structural ? null : $options->phpStanConfig,
+            $structural ? null : $options->phpStanMemoryLimit,
             $index,
-            $options->scanPaths,
+            $structural ? [] : $options->scanPaths,
         );
         (new IndexWriter())->write($rebuilt, $options->out, $options->format);
         echo 'Refreshed ' . count($changed) . ' changed and dropped ' . $removed . ' removed file(s); ' . count($rebuilt->files) . ' file(s) indexed in ' . $options->out . "\n";
 
         return 0;
+    }
+
+    private function builder(CliOptions $options): AgentMapBuilder
+    {
+        $semanticAnalyzer = match ($options->backend) {
+            'auto' => null,
+            'structural' => new StructuralOnlySemanticAnalyzer(),
+            'phpstan' => new PhpStanSemanticAnalyzer($options->artifacts),
+        };
+
+        return new AgentMapBuilder(
+            semanticAnalyzer: $semanticAnalyzer,
+            artifacts: $options->artifacts,
+        );
     }
 
     /**
@@ -896,10 +914,10 @@ final readonly class AgentMapApplication
         if ($command === 'build' || $command === 'refresh') {
             return <<<'TXT'
             Usage:
-              agent-map build [--root=.] [--paths=src,tests] [--scan=vendor/acme] [--out=.agent-map/php-symbols.json] [--format=json|toon] [--phpstan-config=phpstan.neon] [--phpstan-memory-limit=512M] [--exclude=REGEX] [--merge]
-              agent-map refresh [--root=.] [--index=.agent-map/php-symbols.json] [--out=.agent-map/php-symbols.json]
+              agent-map build [--root=.] [--paths=src,tests] [--scan=vendor/acme] [--out=.agent-map/php-symbols.json] [--format=json|toon] [--backend=auto|structural|phpstan] [--phpstan-config=phpstan.neon] [--phpstan-memory-limit=512M] [--exclude=REGEX] [--merge]
+              agent-map refresh [--root=.] [--index=.agent-map/php-symbols.json] [--out=.agent-map/php-symbols.json] [--backend=auto|structural|phpstan]
 
-            Build a PHPStan-enriched repository map. JSON is the default; TOON is optional. --exclude is repeatable.
+            Build a repository map. auto uses PHPStan when available and otherwise structural analysis; structural never executes PHPStan; phpstan explicitly requires the semantic backend. JSON is the default; TOON is optional. --exclude is repeatable.
 
             --scan lists directories that only have to resolve symbols (never indexed): use it when the
             analysed scope references classes living outside it, otherwise their types stay unresolved.
