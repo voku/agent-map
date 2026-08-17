@@ -49,10 +49,11 @@ final class AgentMapBuilderTest extends TestCase
         $index = (new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build($this->root, ['src'], []);
 
         self::assertSame('2.0', $index->schemaVersion);
+        self::assertSame('simple-php-code-parser+structural-only', $index->backend);
         self::assertStringStartsWith('sha256:', $index->files[0]->sha256);
         self::assertSame('no_semantic_records', $index->files[0]->semanticStatus);
         self::assertNotNull($index->fingerprint);
-        self::assertSame('test-none', $index->fingerprint->phpStanVersion);
+        self::assertSame('none', $index->fingerprint->phpStanVersion);
         self::assertStringStartsWith('sha256:', $index->fingerprint->sourceDigest);
     }
 
@@ -79,6 +80,17 @@ final class AgentMapBuilderTest extends TestCase
             $this->fileByPath($previous, 'src/Alpha.php')->sha256,
             $this->fileByPath($merged, 'src/Alpha.php')->sha256,
         );
+    }
+
+    public function testMergeRejectsDifferentSemanticBackend(): void
+    {
+        $previous = (new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build($this->root, ['src'], []);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Cannot incrementally merge map backend');
+
+        (new AgentMapBuilder(semanticAnalyzer: new RecordingSemanticAnalyzer()))
+            ->build($this->root, ['src/Alpha.php'], [], null, null, $previous);
     }
 
     private function fileByPath(AgentMapIndex $index, string $path): FileEntry
@@ -113,7 +125,32 @@ final class AgentMapBuilderTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('PHPStan configuration not found');
 
-        (new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build($this->root, ['src'], [], 'missing.neon');
+        (new AgentMapBuilder(semanticAnalyzer: new RecordingSemanticAnalyzer()))->build($this->root, ['src'], [], 'missing.neon');
+    }
+
+    public function testStructuralOnlyRejectsExplicitPhpStanOptions(): void
+    {
+        file_put_contents($this->root . '/phpstan.neon', "parameters:\n    level: 1\n");
+        $builder = new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer());
+        $cases = [
+            ['phpstan.neon', null, []],
+            [null, '512M', []],
+            [null, null, ['vendor/library']],
+        ];
+
+        foreach ($cases as [$configuration, $memoryLimit, $scanPaths]) {
+            try {
+                $builder->build($this->root, ['src'], [], $configuration, $memoryLimit, null, $scanPaths);
+            } catch (RuntimeException $exception) {
+                self::assertSame(
+                    'PHPStan semantic capability is unavailable; PHPStan-specific build options require phpstan/phpstan.',
+                    $exception->getMessage(),
+                );
+                continue;
+            }
+
+            self::fail('Expected explicit PHPStan build options to require the PHPStan capability.');
+        }
     }
 
     public function testFailureRaisesRuntimeExceptionForFailingFile(): void
@@ -225,6 +262,11 @@ final class RecordingSemanticAnalyzer implements SemanticAnalyzer
 {
     public ?string $configurationFile = null;
     public ?string $memoryLimit = null;
+
+    public function backend(): string
+    {
+        return 'recording';
+    }
 
     public function analyse(
         string $root,

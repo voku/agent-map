@@ -24,6 +24,31 @@ jobs:
       - run: composer install --no-interaction --prefer-dist
       - run: composer ci
 
+  structural-without-phpstan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-dev --no-interaction --prefer-dist
+      - name: Build structural map without PHPStan
+        run: |
+          php bin/agent-map build --root="$GITHUB_WORKSPACE" --paths=src --out=/tmp/agent-map-no-phpstan.json
+          php -r '
+          if (is_file(getcwd() . "/vendor/phpstan/phpstan/phpstan.phar")) {
+              fwrite(STDERR, "PHPStan must not be installed in the no-dev consumer proof.\n");
+              exit(1);
+          }
+          $map = json_decode((string) file_get_contents("/tmp/agent-map-no-phpstan.json"), true, 512, JSON_THROW_ON_ERROR);
+          if (($map["backend"] ?? null) !== "simple-php-code-parser+structural-only") {
+              fwrite(STDERR, "Expected structural-only backend without PHPStan.\n");
+              exit(1);
+          }
+          '
+
   temporal-dogfood:
     runs-on: ubuntu-latest
     steps:

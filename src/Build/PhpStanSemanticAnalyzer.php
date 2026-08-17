@@ -18,6 +18,22 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
     {
     }
 
+    public function backend(): string
+    {
+        return 'phpstan';
+    }
+
+    public static function isAvailable(): bool
+    {
+        if (!InstalledVersions::isInstalled('phpstan/phpstan')) {
+            return false;
+        }
+
+        $installPath = InstalledVersions::getInstallPath('phpstan/phpstan');
+
+        return is_string($installPath) && is_file($installPath . '/phpstan.phar');
+    }
+
     public function analyse(
         string $root,
         array $relativeFiles,
@@ -27,8 +43,8 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         array $scanDirectories = [],
     ): SemanticAnalysisResult
     {
-        if ($relativeFiles === []) {
-            return new SemanticAnalysisResult([], [], $this->phpStanVersion(), $this->configurationHash($configurationFile));
+        if (!InstalledVersions::isInstalled('phpstan/phpstan')) {
+            throw new RuntimeException('PHPStan semantic capability is unavailable: phpstan/phpstan is not installed.');
         }
 
         $phpStanInstallPath = InstalledVersions::getInstallPath('phpstan/phpstan');
@@ -38,6 +54,10 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         $phar = $phpStanInstallPath . '/phpstan.phar';
         if (!is_file($phar)) {
             throw new RuntimeException('PHPStan PHAR not found: ' . $phar);
+        }
+
+        if ($relativeFiles === []) {
+            return new SemanticAnalysisResult([], [], $this->phpStanVersion(), $this->configurationHash($configurationFile));
         }
 
         $autoload = $this->findComposerAutoload();

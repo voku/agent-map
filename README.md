@@ -2,10 +2,10 @@
 
 Deterministic PHP repository maps for coding-agent context selection.
 
-`agent-map` analyses the same source tree with two complementary engines:
+`agent-map` always records structural repository facts and enriches them when the PHPStan capability is installed:
 
 - `voku/simple-php-code-parser` records physical declarations and source ranges;
-- PHPStan 2.2 resolves PHPDoc types, generics, call targets, inheritance, and semantic relationships.
+- optional PHPStan 2.2 resolves PHPDoc types, generics, call targets, inheritance, and semantic relationships.
 
 The results are reconciled into one map that can answer focused questions such as:
 
@@ -43,13 +43,21 @@ Those responsibilities belong to the surrounding `agent-*` packages.
 
 - PHP 8.2 or newer
 - Composer
-- PHPStan 2.2, installed automatically as a runtime dependency of this development tool
+- PHPStan 2.2 only when PHPStan-backed semantic enrichment is required
 
 ## Installation
 
 ```bash
 composer require --dev voku/agent-map
 ```
+
+Install PHPStan explicitly when semantic enrichment is wanted:
+
+```bash
+composer require --dev phpstan/phpstan:^2.2
+```
+
+Without PHPStan, map builds remain available with backend identity `simple-php-code-parser+structural-only`. When PHPStan is installed, the default backend remains `simple-php-code-parser+phpstan`. A selected PHPStan backend never falls back after an execution or configuration failure.
 
 ## Build a map
 
@@ -80,7 +88,7 @@ There is one analysis path and one map model. JSON and TOON are serializers, not
 - `--paths`: comma-separated PHP files or directories, default `.`;
 - `--out`: map file, default `.agent-map/php-symbols.json`;
 - `--format`: `json` or `toon`, default `json`;
-- `--phpstan-config`: explicit PHPStan configuration;
+- `--phpstan-config`: explicit PHPStan configuration when the PHPStan backend is available;
 - `--phpstan-memory-limit`: explicit positive PHPStan memory limit, for example `512M` or `2G`;
 - `--scan`: comma-separated directories that only have to resolve symbols and are never indexed;
 - `--merge`: patch the existing `--out` map instead of replacing it;
@@ -253,6 +261,8 @@ vendor/bin/agent-map refresh --root=. --index=.agent-map/php-symbols.json
 
 It reports `Index is up to date` and skips the analysis entirely when nothing changed. Without an
 explicit `--paths`, new files are looked for in the directories the map already covers.
+
+An incremental build refuses to mix semantic backends. If PHPStan availability changed since the existing map was built, run a full `build` so every carried file and relation has one backend identity.
 
 Relations are keyed by their source file, so edges pointing *into* a refreshed file keep the shape
 they had at their own last analysis. Rebuild fully now and then to make incoming edges exact.
