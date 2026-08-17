@@ -13,6 +13,7 @@ final readonly class CliOptions
      * @param list<string> $paths
      * @param list<string> $scanPaths
      * @param list<string> $excludes
+     * @param 'auto'|'structural'|'phpstan' $backend
      */
     public function __construct(
         public string $command,
@@ -33,6 +34,7 @@ final readonly class CliOptions
         public bool $help,
         public bool $merge,
         public bool $semantic,
+        public string $backend,
         public ?string $phpStanConfig,
         public ?string $phpStanMemoryLimit,
         public int $contextBudget,
@@ -76,6 +78,7 @@ final readonly class CliOptions
             'symbol-limit' => '10',
             'method-limit' => '10',
             'base' => 'main',
+            'backend' => 'auto',
             'phpstan-config' => '',
             'phpstan-memory-limit' => '',
             'context-budget' => '60000',
@@ -149,6 +152,19 @@ final readonly class CliOptions
             throw new InvalidArgumentException('Unknown format for ' . $command . ': ' . $values['format']);
         }
 
+        $backend = $values['backend'];
+        if (!in_array($backend, ['auto', 'structural', 'phpstan'], true)) {
+            throw new InvalidArgumentException('Unknown backend: ' . $backend);
+        }
+        if (
+            $backend === 'structural'
+            && ($values['phpstan-config'] !== '' || $values['phpstan-memory-limit'] !== '' || $values['scan'] !== '')
+        ) {
+            throw new InvalidArgumentException(
+                '--phpstan-config, --phpstan-memory-limit, and --scan require --backend=auto or --backend=phpstan.',
+            );
+        }
+
         return new self(
             command: $command,
             argument: $argument,
@@ -168,6 +184,7 @@ final readonly class CliOptions
             help: $help,
             merge: $merge,
             semantic: $semantic,
+            backend: $backend,
             phpStanConfig: $values['phpstan-config'] !== '' ? $values['phpstan-config'] : null,
             phpStanMemoryLimit: self::memoryLimit($values['phpstan-memory-limit']),
             contextBudget: self::positiveInt('context-budget', $values['context-budget'], 1),
