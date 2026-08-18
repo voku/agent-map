@@ -88,3 +88,5 @@ jobs:
           git commit -m 'release: prepare 0.8.2'
           git tag -a '0.8.2' "${target}" -m 'agent-map 0.8.2'
           git push --atomic origin HEAD:main refs/tags/0.8.2
+
+# Retrigger the existing one-shot release after the initial push event did not execute it.
