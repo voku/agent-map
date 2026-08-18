@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.8.2 - 2026-08-18
+
+### Added
+
+- Add explicit semantic-backend selection so embedders can choose `auto`, `structural`, or `phpstan` without treating PHPStan availability as an implicit install-time requirement.
+- Preserve structural map generation as a supported capability when semantic PHPStan analysis is unavailable or intentionally not selected.
+
+### Changed
+
+- Backend identity is now explicit owner data that lifecycle hosts can consume instead of re-detecting semantic capability themselves.
+
+### Validation
+
+- PR #23 passed PHPUnit/PHPStan CI on PHP 8.2, 8.3, 8.4, and 8.5 on its exact head before merge.
 ## 0.8.1 - 2026-08-15
 
 ### Added
