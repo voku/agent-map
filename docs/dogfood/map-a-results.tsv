@@ -1,0 +1,10 @@
+replay	strategy	files_read	source_bytes	map_output_bytes	candidate_count	commands	correct_edit_site	correct_test	false_candidates	missing_observation_fact
+portable-ascii-62	A			0						
+portable-ascii-62	B									
+portable-ascii-62	C									
+simple-php-code-parser-101	A			0						
+simple-php-code-parser-101	B									
+simple-php-code-parser-101	C									
+simple-php-code-parser-60	A			0						
+simple-php-code-parser-60	B									
+simple-php-code-parser-60	C									
