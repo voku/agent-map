@@ -1,0 +1,6 @@
+{
+  "phase": "execute",
+  "next_replay": "voku/Simple-PHP-Code-Parser#101",
+  "next_strategies": ["A", "B", "C"],
+  "product_change_allowed": false
+}
