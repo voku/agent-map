@@ -1,0 +1,3 @@
+# Current execution limitation
+
+The GitHub connector can inspect and mutate repository state but does not provide an arbitrary shell against historical checkouts. Therefore this checkpoint freezes the experiment without fabricating A/B/C measurements. Fresh numeric rows require an executing host/CI job that can checkout the frozen SHAs and run repository/agent-map commands. Existing historical outputs remain explicitly excluded from the fresh measurement table.
