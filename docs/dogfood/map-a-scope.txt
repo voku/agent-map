@@ -1,0 +1,1 @@
+experiment evidence only; no src/, bin/, or product-test changes before three valid A/B/C replays
