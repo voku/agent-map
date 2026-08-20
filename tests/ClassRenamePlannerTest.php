@@ -11,9 +11,11 @@ use RecursiveIteratorIterator;
 use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
 use voku\AgentMap\Cli\ClassRenameCliApplication;
 use voku\AgentMap\Index\AgentMapBuilder;
+use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Rename\ClassRenamePlan;
 use voku\AgentMap\Rename\ClassRenamePlanner;
+use voku\AgentMap\Rename\RenameBlindSpot;
 use voku\AgentMap\Rename\RenameEdit;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
@@ -62,13 +64,8 @@ final class ClassRenamePlannerTest extends TestCase
         $this->writeClass();
         file_put_contents($this->root . '/src/AliasConsumer.php', <<<'PHP'
 <?php
-
-declare(strict_types=1);
-
 namespace Client;
-
 use Demo\OldClass as Alias;
-
 final class AliasConsumer
 {
     public function make(Alias $input): Alias
@@ -90,18 +87,13 @@ PHP);
         self::assertStringContainsString('new Alias()', $rewritten['src/AliasConsumer.php']);
     }
 
-    public function testGroupedImportIsRenamedWithoutTouchingOtherImports(): void
+    public function testGroupedImportIsRenamedWithoutTouchingSiblingImport(): void
     {
         $this->writeClass();
         file_put_contents($this->root . '/src/GroupedConsumer.php', <<<'PHP'
 <?php
-
-declare(strict_types=1);
-
 namespace Client;
-
 use Demo\{OldClass, Something};
-
 final class GroupedConsumer
 {
     public function make(OldClass $input): OldClass
@@ -119,18 +111,36 @@ PHP);
         self::assertStringContainsString('make(NewClass $input): NewClass', $rewritten['src/GroupedConsumer.php']);
     }
 
+    public function testMixedGroupedImportTreatsUnprefixedItemAsClassImport(): void
+    {
+        $this->writeClass();
+        file_put_contents($this->root . '/src/MixedGroupedConsumer.php', <<<'PHP'
+<?php
+namespace Client;
+use Demo\{OldClass, function helper};
+final class MixedGroupedConsumer
+{
+    public function make(): OldClass
+    {
+        return new OldClass();
+    }
+}
+PHP);
+
+        $plan = (new ClassRenamePlanner())->plan($this->map(), 'Demo\\OldClass', 'NewClass');
+
+        self::assertSame(ClassRenamePlan::STATUS_SAFE, $plan->status, implode("\n", $plan->blockers));
+        $rewritten = $this->applyEdits($plan->edits);
+        self::assertStringContainsString('use Demo\\{NewClass, function helper};', $rewritten['src/MixedGroupedConsumer.php']);
+    }
+
     public function testPhpDocAndClassStringBecomeReviewEvidenceWithoutDroppingExactEdits(): void
     {
         $this->writeClass();
         file_put_contents($this->root . '/src/ReviewConsumer.php', <<<'PHP'
 <?php
-
-declare(strict_types=1);
-
 namespace Client;
-
 use Demo\OldClass;
-
 final class ReviewConsumer
 {
     /** @return OldClass */
@@ -146,7 +156,7 @@ PHP);
 
         self::assertSame(ClassRenamePlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
         self::assertNotSame([], $plan->edits);
-        $kinds = array_map(static fn ($blindSpot): string => $blindSpot->kind, $plan->blindSpots);
+        $kinds = array_map(static fn (RenameBlindSpot $blindSpot): string => $blindSpot->kind, $plan->blindSpots);
         self::assertContains('phpdoc_type_reference', $kinds);
         self::assertContains('class_string_literal', $kinds);
         self::assertSame([], $plan->blockers);
@@ -155,11 +165,7 @@ PHP);
     public function testReplacementTypeCollisionBlocksAndPublishesNoMutationPlan(): void
     {
         $this->writeBaseFixture();
-        file_put_contents($this->root . '/src/NewClass.php', <<<'PHP'
-<?php
-namespace Demo;
-final class NewClass {}
-PHP);
+        file_put_contents($this->root . '/src/NewClass.php', "<?php\nnamespace Demo;\nfinal class NewClass {}\n");
 
         $plan = (new ClassRenamePlanner())->plan($this->map(), 'Demo\\OldClass', 'NewClass');
 
@@ -179,22 +185,43 @@ PHP);
         self::assertSame(ClassRenamePlan::STATUS_BLOCKED, $plan->status);
         self::assertSame([], $plan->edits);
         self::assertSame([], $plan->moves);
-        self::assertStringContainsString('Replacement class file already exists', implode("\n", $plan->blockers));
+        self::assertStringContainsString('Replacement class path already exists', implode("\n", $plan->blockers));
+    }
+
+    public function testExistingDestinationDirectoryAlsoBlocks(): void
+    {
+        $this->writeBaseFixture();
+        $map = $this->map();
+        mkdir($this->root . '/src/NewClass.php');
+
+        $plan = (new ClassRenamePlanner())->plan($map, 'Demo\\OldClass', 'NewClass');
+
+        self::assertSame(ClassRenamePlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertSame([], $plan->moves);
+        self::assertStringContainsString('Replacement class path already exists', implode("\n", $plan->blockers));
+    }
+
+    public function testOtherDeclarationInConventionalClassFileRequiresMoveReview(): void
+    {
+        file_put_contents($this->root . '/src/OldClass.php', <<<'PHP'
+<?php
+namespace Demo;
+final class OldClass {}
+function relatedHelper(): void {}
+PHP);
+
+        $plan = (new ClassRenamePlanner())->plan($this->map(), 'Demo\\OldClass', 'NewClass');
+
+        self::assertSame(ClassRenamePlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
+        self::assertCount(1, $plan->moves);
+        self::assertContains('multi_symbol_file_move', array_map(static fn (RenameBlindSpot $spot): string => $spot->kind, $plan->blindSpots));
     }
 
     public function testUnconventionalClassFilenameRequiresReviewInsteadOfInventingMove(): void
     {
-        file_put_contents($this->root . '/src/Legacy.php', <<<'PHP'
-<?php
-namespace Demo;
-final class OldClass {}
-PHP);
-        file_put_contents($this->root . '/src/Consumer.php', <<<'PHP'
-<?php
-namespace Client;
-use Demo\OldClass;
-final class Consumer { public function make(): OldClass { return new OldClass(); } }
-PHP);
+        file_put_contents($this->root . '/src/Legacy.php', "<?php\nnamespace Demo;\nfinal class OldClass {}\n");
+        file_put_contents($this->root . '/src/Consumer.php', "<?php\nnamespace Client;\nuse Demo\\OldClass;\nfinal class Consumer { public function make(): OldClass { return new OldClass(); } }\n");
 
         $plan = (new ClassRenamePlanner())->plan($this->map(), 'Demo\\OldClass', 'NewClass');
 
@@ -268,13 +295,8 @@ PHP);
         $this->writeClass();
         file_put_contents($this->root . '/src/Consumer.php', <<<'PHP'
 <?php
-
-declare(strict_types=1);
-
 namespace Client;
-
 use Demo\OldClass;
-
 final class Consumer
 {
     public function make(OldClass $input): OldClass
@@ -283,7 +305,6 @@ final class Consumer
         if ($copy instanceof OldClass) {
             return $copy;
         }
-
         return $input;
     }
 
@@ -297,20 +318,10 @@ PHP);
 
     private function writeClass(): void
     {
-        file_put_contents($this->root . '/src/OldClass.php', <<<'PHP'
-<?php
-
-declare(strict_types=1);
-
-namespace Demo;
-
-final class OldClass
-{
-}
-PHP);
+        file_put_contents($this->root . '/src/OldClass.php', "<?php\nnamespace Demo;\nfinal class OldClass {}\n");
     }
 
-    private function map(): \voku\AgentMap\Index\AgentMapIndex
+    private function map(): AgentMapIndex
     {
         return (new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build(
             root: $this->root,
@@ -325,6 +336,7 @@ PHP);
      */
     private function applyEdits(array $edits): array
     {
+        /** @var array<string, list<RenameEdit>> $byPath */
         $byPath = [];
         foreach ($edits as $edit) {
             $byPath[$edit->path][] = $edit;
@@ -334,9 +346,13 @@ PHP);
         foreach ($byPath as $path => $pathEdits) {
             $source = file_get_contents($this->root . '/' . $path);
             self::assertIsString($source);
+            $preEditSha256 = 'sha256:' . hash('sha256', $source);
+            foreach ($pathEdits as $edit) {
+                self::assertSame($preEditSha256, $edit->sourceSha256);
+            }
+
             usort($pathEdits, static fn (RenameEdit $left, RenameEdit $right): int => $right->startFilePos <=> $left->startFilePos);
             foreach ($pathEdits as $edit) {
-                self::assertSame($edit->sourceSha256, 'sha256:' . hash('sha256', $source));
                 self::assertSame($edit->expected, substr($source, $edit->startFilePos, $edit->endFilePos - $edit->startFilePos + 1));
                 $source = substr($source, 0, $edit->startFilePos)
                     . $edit->replacement
