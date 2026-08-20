@@ -28,6 +28,13 @@ final class DogfoodNavigationReplayEvidenceTest extends TestCase
             self::markTestSkipped('The replay harness needs SQLite FTS5 to build its search index.');
         }
 
+        $probe = [];
+        $probeStatus = 0;
+        exec('git --version 2>&1', $probe, $probeStatus);
+        if ($probeStatus !== 0) {
+            self::markTestSkipped('The replay harness needs git to freeze a checkout.');
+        }
+
         $this->workspace = sys_get_temp_dir() . '/agent-map-dogfood-replay-' . bin2hex(random_bytes(8));
         $this->checkout = $this->workspace . '/frozen';
         mkdir($this->checkout . '/src', 0o775, true);
@@ -79,7 +86,7 @@ final class DogfoodNavigationReplayEvidenceTest extends TestCase
                 CODE,
         );
 
-        $this->git('init -q -b main');
+        $this->git('init -q');
         $this->git('add -A');
         $this->git('-c user.email=dogfood@example.com -c user.name=dogfood commit -q -m "frozen"');
     }

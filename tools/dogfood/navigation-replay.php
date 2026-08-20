@@ -692,7 +692,8 @@ function strategyExactNeighbours(array $replay, AgentMapIndex $index, string $re
         ];
     }
 
-    $plan = (new EditContextPlanner())->plan($index, $seed, new EditContextPolicy());
+    $policy = new EditContextPolicy();
+    $plan = (new EditContextPlanner())->plan($index, $seed, $policy);
     $lines = ['agent-map context ' . $seed . ' (owner default policy):'];
     foreach ($plan->slices as $slice) {
         $lines[] = sprintf(
@@ -765,7 +766,7 @@ function strategyExactNeighbours(array $replay, AgentMapIndex $index, string $re
     $measured = measureProjection($replay, 'C_exact_neighbour_surfaces', $projection, [], $contextRanges, [
         'seed' => $seed,
         'seed_reason' => $seedReason,
-        'policy' => ['maximum_files' => 20, 'maximum_source_bytes' => 60000],
+        'policy' => ['maximum_files' => $policy->maximumFiles, 'maximum_source_bytes' => $policy->maximumSourceBytes],
         'callers_and_callees_presented' => count($relationFiles),
         'impact_nodes_presented' => count($impact->impacts),
         'impact_truncated' => $impact->truncated,
@@ -1034,6 +1035,9 @@ try {
 
 $store = new SearchIndexStore($databasePath);
 
+$revision = run('git -C ' . escapeshellarg(__DIR__ . '/../..') . ' rev-parse HEAD');
+$agentMapRevision = $revision['status'] === 0 ? trim($revision['output']) : 'unknown';
+
 $report = [
     'schema_version' => '1.0',
     'replay' => [
@@ -1046,7 +1050,9 @@ $report = [
         'primary_location' => $replay['primary_location'] ?? $replay['verified']['edit_files'][0],
     ],
     'agent_map' => [
-        'version' => trim(run('git -C ' . escapeshellarg(__DIR__ . '/../..') . ' rev-parse HEAD')['output']),
+        // An unchecked `git rev-parse` would write its own error text into the report as if it were
+        // a commit. A replay that cannot see its own checkout says so instead.
+        'version' => $agentMapRevision,
         'backend_requested' => $arguments['backend'],
         'setup_output' => ['build' => $build['output'], 'search_index' => $searchBuild['output']],
     ],
