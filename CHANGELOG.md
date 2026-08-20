@@ -6,8 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.8.3 - 2026-08-20
+
 ### Added
 
+- Record the exact Composer package reference used by PHPStan-backed maps in `AnalysisFingerprint`; structural-only maps record `none`, while historical fingerprints without the field remain explicitly `unknown`.
 - Record owner-level dogfood evidence for bounded Map navigation: three frozen real-issue replays
   compare a grep/read baseline, the projection `agent-loop` builds today, and agent-map's existing
   exact surfaces, under both the structural and PHPStan backends
@@ -29,6 +32,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - No product behaviour changed. The evidence is deliberately separate from any change it may later
   justify, and measurement policy, budgets, ranking and grading are untouched.
+
+### Validation
+
+- PR #27 passed the full PHP 8.2-8.5 CI matrix, temporal dogfood, structural-without-PHPStan validation, and external review before merge.
+- PR #28 passed the same PHP 8.2-8.5 CI matrix, temporal dogfood, the explicit `composer install --no-dev` structural build, and CodeRabbit with no actionable comments.
 
 ## 0.8.2 - 2026-08-18
 
