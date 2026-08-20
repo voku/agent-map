@@ -99,8 +99,7 @@ final readonly class ClassRenameScopeGuard
         }
 
         if ($node instanceof ClassLike && $node->name !== null) {
-            $namespacedName = $node->getAttribute('namespacedName');
-            $fqn = $namespacedName instanceof Name ? ltrim($namespacedName->toString(), '\\') : null;
+            $fqn = $node->namespacedName instanceof Name ? ltrim($node->namespacedName->toString(), '\\') : null;
             if ($fqn === null || strcasecmp($fqn, $targetFqn) !== 0) {
                 $occupied[] = $node->name->toString();
             }
