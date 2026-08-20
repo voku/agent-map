@@ -13,12 +13,11 @@ use voku\AgentMap\Index\ResolvedMethod;
 /** Builds a read-only, fail-closed rename plan for one PHP method family. */
 final readonly class MethodRenamePlanner
 {
-    /**
-     * @var list<string>
-     */
+    /** @var list<string> */
     private const NOT_OBSERVABLE = [
         'String callbacks, reflection and framework configuration outside PHPStan call relations are not automatically rewritten.',
         'Dynamically constructed method names whose receiver type does not resolve to the rename family are outside the observable envelope.',
+        'PHP source outside the indexed map scope is outside the observable envelope.',
     ];
 
     public function plan(AgentMapIndex $map, string $target, string $replacementName): MethodRenamePlan
@@ -28,8 +27,8 @@ final readonly class MethodRenamePlanner
 
         $seed = $map->resolveMethod($target);
         $originalName = $seed->method->name;
-        if ($replacementName === $originalName) {
-            throw new InvalidArgumentException('Replacement method name is identical to the current name: ' . $originalName);
+        if (strcasecmp($replacementName, $originalName) === 0) {
+            throw new InvalidArgumentException('Replacement method name is semantically identical to the current name: ' . $originalName);
         }
 
         $blockers = [];
@@ -68,7 +67,7 @@ final readonly class MethodRenamePlanner
                     $method->file->path,
                     $method->method->lineStart,
                     $method->method->lineEnd,
-                    $originalName,
+                    $method->method->name,
                 );
                 $edits[] = new RenameEdit(
                     path: $method->file->path,
@@ -77,7 +76,7 @@ final readonly class MethodRenamePlanner
                     endFilePos: $position['end_file_pos'],
                     lineStart: $method->method->lineStart,
                     lineEnd: $method->method->lineEnd,
-                    expected: $originalName,
+                    expected: $position['actual'],
                     replacement: $replacementName,
                     role: 'declaration',
                     symbolId: $method->id,
@@ -93,6 +92,7 @@ final readonly class MethodRenamePlanner
             if ($relation->kind !== 'calls') {
                 continue;
             }
+
             $familyTargets = array_values(array_filter(
                 $relation->targetIds,
                 static fn (string $targetId): bool => isset($familyIds[$targetId]),
@@ -142,7 +142,7 @@ final readonly class MethodRenamePlanner
                     endFilePos: $position['end_file_pos'],
                     lineStart: $relation->lineStart,
                     lineEnd: $relation->lineEnd,
-                    expected: $originalName,
+                    expected: $position['actual'],
                     replacement: $replacementName,
                     role: 'call',
                     symbolId: implode(',', $familyTargets),
@@ -204,58 +204,83 @@ final readonly class MethodRenamePlanner
     }
 
     /**
+     * Replacement-name collisions matter only in the type hierarchy that can inherit the renamed
+     * method, plus directly implemented contracts and directly composed traits. An unrelated class
+     * that merely shares some second interface is not part of this rename family.
+     *
      * @param array<string, ResolvedMethod> $family
      * @return list<string>
      */
     private function collisionBlockers(AgentMapIndex $map, array $family, string $replacementName): array
     {
         $familyIds = array_fill_keys(array_keys($family), true);
-        $relatedTypeIds = [];
-        $queue = [];
+        $traversal = [];
         foreach ($family as $method) {
-            $typeId = $method->owner->id();
-            $relatedTypeIds[$typeId] = true;
-            $queue[] = $typeId;
+            $traversal[$method->owner->id()] = true;
         }
 
-        for ($offset = 0; isset($queue[$offset]); ++$offset) {
-            $current = $queue[$offset];
+        $changed = true;
+        while ($changed) {
+            $changed = false;
             foreach ($map->relations as $relation) {
-                if (!in_array($relation->kind, ['extends', 'implements', 'uses_trait'], true)) {
+                if ($relation->kind === 'extends') {
+                    if (isset($traversal[$relation->sourceId])) {
+                        foreach ($relation->targetIds as $targetId) {
+                            $changed = $this->addIndexedType($map, $traversal, $targetId) || $changed;
+                        }
+                    }
+                    foreach ($relation->targetIds as $targetId) {
+                        if (isset($traversal[$targetId])) {
+                            $changed = $this->addIndexedType($map, $traversal, $relation->sourceId) || $changed;
+                            break;
+                        }
+                    }
                     continue;
                 }
-                $candidates = [];
-                if ($relation->sourceId === $current) {
-                    $candidates = $relation->targetIds;
-                } elseif (in_array($current, $relation->targetIds, true)) {
-                    $candidates[] = $relation->sourceId;
+
+                if ($relation->kind !== 'implements') {
+                    continue;
                 }
-                foreach ($candidates as $candidateId) {
-                    if (isset($relatedTypeIds[$candidateId]) || $map->symbolById($candidateId) === null) {
+                foreach ($relation->targetIds as $targetId) {
+                    if (!isset($traversal[$targetId])) {
                         continue;
                     }
-                    $relatedTypeIds[$candidateId] = true;
-                    $queue[] = $candidateId;
+                    $target = $map->symbolById($targetId);
+                    if (($target['symbol']->kind ?? null) !== 'interface') {
+                        continue;
+                    }
+                    $changed = $this->addIndexedType($map, $traversal, $relation->sourceId) || $changed;
+                    break;
                 }
             }
         }
 
+        $scan = $traversal;
+        foreach ($map->relations as $relation) {
+            if (!isset($traversal[$relation->sourceId])) {
+                continue;
+            }
+            if (!in_array($relation->kind, ['implements', 'uses_trait'], true)) {
+                continue;
+            }
+            foreach ($relation->targetIds as $targetId) {
+                $this->addIndexedType($map, $scan, $targetId);
+            }
+        }
+
         $blockers = [];
-        foreach (array_keys($relatedTypeIds) as $typeId) {
+        foreach (array_keys($scan) as $typeId) {
             $resolved = $map->symbolById($typeId);
             if ($resolved === null) {
                 continue;
             }
             foreach ($resolved['symbol']->methods as $method) {
-                if ($method->name !== $replacementName) {
+                if (strcasecmp($method->name, $replacementName) !== 0) {
                     continue;
                 }
                 $methodId = $resolved['symbol']->methodId($method);
                 if (!isset($familyIds[$methodId])) {
-                    $blockers[] = sprintf(
-                        'Replacement name would collide with related method %s.',
-                        $methodId,
-                    );
+                    $blockers[] = sprintf('Replacement name would collide with related method %s.', $methodId);
                 }
             }
         }
@@ -263,6 +288,18 @@ final readonly class MethodRenamePlanner
         sort($blockers, SORT_STRING);
 
         return $blockers;
+    }
+
+    /** @param array<string, true> $types */
+    private function addIndexedType(AgentMapIndex $map, array &$types, string $typeId): bool
+    {
+        if (isset($types[$typeId]) || $map->symbolById($typeId) === null) {
+            return false;
+        }
+
+        $types[$typeId] = true;
+
+        return true;
     }
 
     /**
@@ -275,7 +312,7 @@ final readonly class MethodRenamePlanner
             return;
         }
         foreach ($family as $method) {
-            if (!str_contains($relation->receiverType, $method->owner->fqn)) {
+            if (stripos($relation->receiverType, $method->owner->fqn) === false) {
                 continue;
             }
             $blindSpots[] = new RenameBlindSpot(
