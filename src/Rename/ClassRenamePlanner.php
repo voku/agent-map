@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Rename;
 
 use InvalidArgumentException;
+use ParseError;
 use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
@@ -329,6 +330,12 @@ final readonly class ClassRenamePlanner
     {
         if (preg_match('/^[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*$/D', $name) !== 1) {
             throw new InvalidArgumentException('Invalid PHP class name: ' . $name);
+        }
+
+        try {
+            token_get_all('<?php class ' . $name . ' {}', TOKEN_PARSE);
+        } catch (ParseError) {
+            throw new InvalidArgumentException('Invalid or reserved PHP class name: ' . $name);
         }
     }
 }
