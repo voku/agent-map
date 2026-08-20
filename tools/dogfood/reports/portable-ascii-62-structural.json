@@ -1,0 +1,334 @@
+{
+    "schema_version": "1.0",
+    "replay": {
+        "id": "portable-ascii-62",
+        "shape": "data-config-location",
+        "repository": "https://github.com/voku/portable-ascii",
+        "base_commit": "c5aede519cc55833267bcbb421b222d7aacfaa06",
+        "fix_commit": "4732e5dd78fe2c161e90a238077200f241acdeef",
+        "verified": {
+            "edit_files": [
+                "src/voku/helper/data/ascii_by_languages.php"
+            ],
+            "edit_ranges": [
+                {
+                    "file": "src/voku/helper/data/ascii_by_languages.php",
+                    "start": 2037,
+                    "end": 2046,
+                    "note": "the German replacement block; the fix adds the decomposed umlaut keys here"
+                }
+            ],
+            "test_files": [],
+            "test_note": "no pre-existing validator: the fix added a new tests/AsciiDecomposedUmlautTest.php, so test discovery is not measurable for this replay"
+        },
+        "primary_location": "src/voku/helper/data/ascii_by_languages.php"
+    },
+    "agent_map": {
+        "version": "d09510d0f3bf03cd3cb9abfb896fe4024cd29886",
+        "backend_requested": "structural",
+        "setup_output": {
+            "build": "Wrote 199 file(s), 165 relation(s), and 5 diagnostic(s) to <artifacts>/map.json",
+            "search_index": "Indexed 363 chunk(s) from 199 file(s) into <artifacts>/search.sqlite\n- embedded 0 chunk(s), 363 reused from cache, with corpus/hashed-idf (256d, sqlite-vec v0.1.7-alpha.2)"
+        }
+    },
+    "observation_envelope": {
+        "source_scope": [
+            "src",
+            "tests"
+        ],
+        "indexed_files": 199,
+        "symbol_less_indexed_files": 194,
+        "requested_backend": "structural",
+        "backend": "simple-php-code-parser+structural-only",
+        "call_relations": 0,
+        "relations": 165,
+        "diagnostics": 5,
+        "map_snapshot": "sha256:a8413319feea7484d54a339d6d5d11fd74cdb2bbe3fd71214db86984069f0fcd",
+        "map_stale_entries": [],
+        "search_fts5": true,
+        "search_vector_support": true,
+        "search_vectors": 363,
+        "search_index_snapshot": "sha256:a8413319feea7484d54a339d6d5d11fd74cdb2bbe3fd71214db86984069f0fcd",
+        "search_index_is_current": true,
+        "php_version": "8.4.19",
+        "phpstan_available": true,
+        "not_observable": [
+            "per-file coverage precision beyond indexed/stale/symbol-less counts",
+            "whether an unindexed path contains the answer (out-of-scope silence is not absence)"
+        ]
+    },
+    "strategies": [
+        {
+            "strategy": "A_baseline_grep_read",
+            "commands": 17,
+            "map_output_bytes": 0,
+            "tool_output_bytes": 25802,
+            "candidate_files_presented": 8,
+            "candidate_symbols_presented": 0,
+            "exact_source_ranges_presented": 0,
+            "files_opened_before_correct_location": 5,
+            "source_bytes_read_whole_file_model": 246028,
+            "source_bytes_read_window_model": 15054,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": true,
+            "ranges_read_before_correct_range": 5,
+            "correct_test_file_found": false,
+            "false_candidates_opened": 4,
+            "opened_files": [
+                "tests/AsciiTest.php",
+                "src/voku/helper/ASCII.php",
+                "tests/TransliterateTest.php",
+                "tests/AsciiGlobalTest.php",
+                "src/voku/helper/data/ascii_by_languages.php"
+            ],
+            "terms": [
+                {
+                    "term": "instead of",
+                    "kind": "quoted_code",
+                    "matched_files": 3,
+                    "grep_output_bytes": 456,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "ä",
+                    "kind": "quoted_code",
+                    "matched_files": 6,
+                    "grep_output_bytes": 8080,
+                    "primary_file_rank": 3
+                },
+                {
+                    "term": "ö",
+                    "kind": "quoted_code",
+                    "matched_files": 6,
+                    "grep_output_bytes": 7074,
+                    "primary_file_rank": 2
+                },
+                {
+                    "term": "ü",
+                    "kind": "quoted_code",
+                    "matched_files": 6,
+                    "grep_output_bytes": 7581,
+                    "primary_file_rank": 2
+                },
+                {
+                    "term": "ä/ö/ü",
+                    "kind": "quoted_code",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "str_replace()",
+                    "kind": "quoted_code",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "ä",
+                    "kind": "quoted_code",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "U+61 U+308",
+                    "kind": "quoted_code",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "MacOS",
+                    "kind": "call_reference",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "about",
+                    "kind": "call_reference",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "German",
+                    "kind": "call_reference",
+                    "matched_files": 4,
+                    "grep_output_bytes": 1595,
+                    "primary_file_rank": 2
+                },
+                {
+                    "term": "filename",
+                    "kind": "call_reference",
+                    "matched_files": 2,
+                    "grep_output_bytes": 1016,
+                    "primary_file_rank": null
+                }
+            ]
+        },
+        {
+            "strategy": "B_loop_ranked_map_context",
+            "commands": 3,
+            "map_output_bytes": 1199,
+            "tool_output_bytes": 1199,
+            "candidate_files_presented": 3,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 3,
+            "files_opened_before_correct_location": null,
+            "source_bytes_read_before_correct_location": 10763,
+            "ranges_read_before_correct_range": null,
+            "source_bytes_read_before_correct_range": 10763,
+            "correct_edit_file_found": false,
+            "correct_edit_range_found": false,
+            "correct_test_file_found": false,
+            "correct_test_file_channel": null,
+            "false_candidates_opened": 1,
+            "read_files": [
+                "src/voku/helper/ASCII.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1088-1252\n  rank 2 voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  rank 3 voku\\helper\\ASCII — src/voku/helper/ASCII.php:26-1617\n  rank 4 voku\\helper\\ASCII::to_filename — src/voku/helper/ASCII.php:946-972\n  rank 5 voku\\helper\\ASCII::remove_invisible_characters — src/voku/helper/ASCII.php:701-736\n  rank 6 voku\\tests\\TransliterateTest::it_can_replace_special_characters — tests/TransliterateTest.php:522-525\n  rank 7 voku\\helper\\ASCII::normalize_whitespace — src/voku/helper/ASCII.php:627-683\n  rank 8 voku\\helper\\ASCII::to_ascii_replace — src/voku/helper/ASCII.php:1309-1432\nCandidate structural context (unverified):\n  rank 1 seed voku\\helper\\ASCII::to_transliterate\n    src/voku/helper/ASCII.php:1068-1252 [primary] requested edit target\n  rank 4 seed voku\\helper\\ASCII::to_filename\n    src/voku/helper/ASCII.php:928-972 [primary] requested edit target\n  rank 5 seed voku\\helper\\ASCII::remove_invisible_characters\n    src/voku/helper/ASCII.php:684-736 [primary] requested edit target\n",
+            "query": "[DE] MacOS (Big Sur or M1) uses multi character German umlaute\n\n#### What is this feature about (expected vs actual behaviour)?\n\nMacOS filesystem replaces German (single character) umlaute with a two characters since Big Sur or only on M1 machines.\nThese are replaced with a simple `a` instead of `ae`. Expected behavior would be to replace these combined characters the same way as the single character umlaute are treated.\n\n#### How can I reproduce it?\n\n* create a new file or folder with `ä`, `ö` or `ü` - persist the filename (ENTER)\n* open the filename change dialog and copy the shown `ä/ö/ü` character\n* run it through the ASCII class\n\nThe real-world scenario would be to sanitize an uploaded filename.\n\n#### Does it take minutes, hours or days to fix?\n\nThe local fix took minutes (added a `str_replace()` before running the ASCII conversion) but no idea how much it will take to properly add it to the package.\n\n#### Any additional information?\n\nIn hope that GitHub doesn't replace the characters - here it is `ä` - the codepoints are `U+61 U+308`.\nhttps://www.fileformat.info/info/unicode/char/61/index.htm\nhttps://www.fileformat.info/info/unicode/char/308/index.htm\n\nI'm not sure if this would be the expected behavior of the package or I want it to do something that's not in the scope of that package. We have a working solution right now - so it's in no way urgent.",
+            "deep_rank_of_verified_range": 51,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "MacOS",
+                "Big",
+                "Sur",
+                "M1",
+                "German",
+                "Expected",
+                "ENTER",
+                "ASCII",
+                "Does",
+                "str_replace",
+                "GitHub"
+            ],
+            "candidate_rank_of_verified_file": null,
+            "expanded_seeds": [
+                "voku\\helper\\ASCII::to_transliterate",
+                "voku\\helper\\ASCII::to_filename",
+                "voku\\helper\\ASCII::remove_invisible_characters"
+            ],
+            "policy": {
+                "maximum_files": 6,
+                "maximum_source_bytes": 16000
+            }
+        },
+        {
+            "strategy": "C_exact_neighbour_surfaces",
+            "applicable": false,
+            "seed": null,
+            "seed_reason": "no task term resolves to an indexed method; the existing exact surfaces cannot be seeded from this task text",
+            "commands": 0,
+            "map_output_bytes": 0,
+            "candidate_files_presented": 0,
+            "candidate_symbols_presented": 0,
+            "exact_source_ranges_presented": 0,
+            "files_opened_before_correct_location": null,
+            "source_bytes_read_before_correct_location": 0,
+            "correct_edit_file_found": false,
+            "correct_edit_range_found": false,
+            "correct_test_file_found": false,
+            "false_candidates_opened": 0
+        },
+        {
+            "strategy": "D_probe_code_vocabulary_query",
+            "commands": 3,
+            "map_output_bytes": 1166,
+            "tool_output_bytes": 1166,
+            "candidate_files_presented": 5,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 3,
+            "files_opened_before_correct_location": null,
+            "source_bytes_read_before_correct_location": 5280,
+            "ranges_read_before_correct_range": null,
+            "source_bytes_read_before_correct_range": 5280,
+            "correct_edit_file_found": false,
+            "correct_edit_range_found": false,
+            "correct_test_file_found": false,
+            "correct_test_file_channel": null,
+            "false_candidates_opened": 1,
+            "read_files": [
+                "src/voku/helper/ASCII.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\tests\\AsciiGlobalTest::testFilterFile — tests/AsciiGlobalTest.php:275-315\n  rank 2 voku\\helper\\ASCII::to_filename — src/voku/helper/ASCII.php:946-972\n  rank 3 voku\\tests\\AsciiTest::testGetSupportedLanguages — tests/AsciiTest.php:442-454\n  rank 4 voku\\tests\\TransliterateTest::testCleanRemovesOverlongTwoByteSequences — tests/TransliterateTest.php:50-58\n  rank 5 src/voku/helper/data/x000.php:segment:1 — src/voku/helper/data/x000.php:1-16\n  rank 6 voku\\helper\\ASCII::normalize_whitespace — src/voku/helper/ASCII.php:627-683\n  rank 7 voku\\tests\\AsciiGlobalTest::toAsciiProvider — tests/AsciiGlobalTest.php:408-612\n  rank 8 voku\\helper\\ASCII::getAllLanguages — src/voku/helper/ASCII.php:247-265\nCandidate structural context (unverified):\n  rank 2 seed voku\\helper\\ASCII::to_filename\n    src/voku/helper/ASCII.php:928-972 [primary] requested edit target\n  rank 6 seed voku\\helper\\ASCII::normalize_whitespace\n    src/voku/helper/ASCII.php:608-683 [primary] requested edit target\n  rank 8 seed voku\\helper\\ASCII::getAllLanguages\n    src/voku/helper/ASCII.php:238-265 [primary] requested edit target\n",
+            "query": "instead of ä ö ü ä/ö/ü str_replace() ä U+61 U+308 MacOS about German filename",
+            "deep_rank_of_verified_range": 16,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "str_replace",
+                "MacOS",
+                "German"
+            ],
+            "candidate_rank_of_verified_file": null,
+            "expanded_seeds": [
+                "voku\\helper\\ASCII::to_filename",
+                "voku\\helper\\ASCII::normalize_whitespace",
+                "voku\\helper\\ASCII::getAllLanguages"
+            ],
+            "policy": {
+                "maximum_files": 6,
+                "maximum_source_bytes": 16000
+            }
+        },
+        {
+            "strategy": "E_probe_owner_default_policy",
+            "commands": 3,
+            "map_output_bytes": 1199,
+            "tool_output_bytes": 1199,
+            "candidate_files_presented": 3,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 3,
+            "files_opened_before_correct_location": null,
+            "source_bytes_read_before_correct_location": 10763,
+            "ranges_read_before_correct_range": null,
+            "source_bytes_read_before_correct_range": 10763,
+            "correct_edit_file_found": false,
+            "correct_edit_range_found": false,
+            "correct_test_file_found": false,
+            "correct_test_file_channel": null,
+            "false_candidates_opened": 1,
+            "read_files": [
+                "src/voku/helper/ASCII.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1088-1252\n  rank 2 voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  rank 3 voku\\helper\\ASCII — src/voku/helper/ASCII.php:26-1617\n  rank 4 voku\\helper\\ASCII::to_filename — src/voku/helper/ASCII.php:946-972\n  rank 5 voku\\helper\\ASCII::remove_invisible_characters — src/voku/helper/ASCII.php:701-736\n  rank 6 voku\\tests\\TransliterateTest::it_can_replace_special_characters — tests/TransliterateTest.php:522-525\n  rank 7 voku\\helper\\ASCII::normalize_whitespace — src/voku/helper/ASCII.php:627-683\n  rank 8 voku\\helper\\ASCII::to_ascii_replace — src/voku/helper/ASCII.php:1309-1432\nCandidate structural context (unverified):\n  rank 1 seed voku\\helper\\ASCII::to_transliterate\n    src/voku/helper/ASCII.php:1068-1252 [primary] requested edit target\n  rank 4 seed voku\\helper\\ASCII::to_filename\n    src/voku/helper/ASCII.php:928-972 [primary] requested edit target\n  rank 5 seed voku\\helper\\ASCII::remove_invisible_characters\n    src/voku/helper/ASCII.php:684-736 [primary] requested edit target\n",
+            "query": "[DE] MacOS (Big Sur or M1) uses multi character German umlaute\n\n#### What is this feature about (expected vs actual behaviour)?\n\nMacOS filesystem replaces German (single character) umlaute with a two characters since Big Sur or only on M1 machines.\nThese are replaced with a simple `a` instead of `ae`. Expected behavior would be to replace these combined characters the same way as the single character umlaute are treated.\n\n#### How can I reproduce it?\n\n* create a new file or folder with `ä`, `ö` or `ü` - persist the filename (ENTER)\n* open the filename change dialog and copy the shown `ä/ö/ü` character\n* run it through the ASCII class\n\nThe real-world scenario would be to sanitize an uploaded filename.\n\n#### Does it take minutes, hours or days to fix?\n\nThe local fix took minutes (added a `str_replace()` before running the ASCII conversion) but no idea how much it will take to properly add it to the package.\n\n#### Any additional information?\n\nIn hope that GitHub doesn't replace the characters - here it is `ä` - the codepoints are `U+61 U+308`.\nhttps://www.fileformat.info/info/unicode/char/61/index.htm\nhttps://www.fileformat.info/info/unicode/char/308/index.htm\n\nI'm not sure if this would be the expected behavior of the package or I want it to do something that's not in the scope of that package. We have a working solution right now - so it's in no way urgent.",
+            "deep_rank_of_verified_range": 51,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "MacOS",
+                "Big",
+                "Sur",
+                "M1",
+                "German",
+                "Expected",
+                "ENTER",
+                "ASCII",
+                "Does",
+                "str_replace",
+                "GitHub"
+            ],
+            "candidate_rank_of_verified_file": null,
+            "expanded_seeds": [
+                "voku\\helper\\ASCII::to_transliterate",
+                "voku\\helper\\ASCII::to_filename",
+                "voku\\helper\\ASCII::remove_invisible_characters"
+            ],
+            "policy": {
+                "maximum_files": 20,
+                "maximum_source_bytes": 60000
+            }
+        }
+    ]
+}

@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- Record owner-level dogfood evidence for bounded Map navigation: three frozen real-issue replays
+  compare a grep/read baseline, the projection `agent-loop` builds today, and agent-map's existing
+  exact surfaces, under both the structural and PHPStan backends
+  (`docs/dogfood/map-navigation-evidence.md`, harness and raw reports in `tools/dogfood/`).
+- Classify the Map surface by measured role - product path, expert/diagnostic, unproven - and record
+  which capabilities currently pay rent, which need their own replay before anyone claims they do,
+  and which are subtraction candidates.
+
+### Changed
+
+- No product behaviour changed. The evidence is deliberately separate from any change it may later
+  justify.
+
 ## 0.8.2 - 2026-08-18
 
 ### Added

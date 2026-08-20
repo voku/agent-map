@@ -1,0 +1,330 @@
+{
+    "schema_version": "1.0",
+    "replay": {
+        "id": "simple-php-code-parser-101",
+        "shape": "cross-file-neighbour",
+        "repository": "https://github.com/voku/Simple-PHP-Code-Parser",
+        "base_commit": "53f1b5085ee883560afa9326ee914f6b23acd6ae",
+        "fix_commit": "7577948c1858c918abf646c27476abe216fdbfdc",
+        "verified": {
+            "edit_files": [
+                "src/voku/SimplePhpParser/Model/PHPClass.php",
+                "src/voku/SimplePhpParser/Parsers/PhpCodeParser.php"
+            ],
+            "edit_ranges": [
+                {
+                    "file": "src/voku/SimplePhpParser/Model/PHPClass.php",
+                    "start": 38,
+                    "end": 130,
+                    "note": "PHPClass::readObjectFromPhpNode - AST/reflection merge loop for properties and methods (the location the issue text does not name)"
+                },
+                {
+                    "file": "src/voku/SimplePhpParser/Parsers/PhpCodeParser.php",
+                    "start": 457,
+                    "end": 543,
+                    "note": "PhpCodeParser::mergeInheritdocData - null parent lookup at base line 529, named verbatim in the issue text"
+                }
+            ],
+            "test_files": [
+                "tests/ReflectionTypeFormattingRegressionTest.php"
+            ],
+            "test_note": "the failing test exists at the base commit; the fix also added tests/InheritdocWithoutParentRegressionTest.php"
+        },
+        "primary_location": "src/voku/SimplePhpParser/Model/PHPClass.php"
+    },
+    "agent_map": {
+        "version": "d09510d0f3bf03cd3cb9abfb896fe4024cd29886",
+        "backend_requested": "phpstan",
+        "setup_output": {
+            "build": "Wrote 71 file(s), 3663 relation(s), and 372 diagnostic(s) to <artifacts>/map.json",
+            "search_index": "Indexed 631 chunk(s) from 71 file(s) into <artifacts>/search.sqlite\n- embedded 0 chunk(s), 631 reused from cache, with corpus/hashed-idf (256d, sqlite-vec v0.1.7-alpha.2)\n- 307 chunk(s) skipped: their canonical symbol id is declared more than once in this repository"
+        }
+    },
+    "observation_envelope": {
+        "source_scope": [
+            "src",
+            "tests"
+        ],
+        "indexed_files": 71,
+        "symbol_less_indexed_files": 1,
+        "requested_backend": "phpstan",
+        "backend": "simple-php-code-parser+phpstan",
+        "call_relations": 2277,
+        "relations": 3663,
+        "diagnostics": 372,
+        "map_snapshot": "sha256:a9d6b97fa39ccdc7776b8ec26a5a948276646357c5ed1e5dff6f051ea935a74d",
+        "map_stale_entries": [],
+        "search_fts5": true,
+        "search_vector_support": true,
+        "search_vectors": 631,
+        "search_index_snapshot": "sha256:a9d6b97fa39ccdc7776b8ec26a5a948276646357c5ed1e5dff6f051ea935a74d",
+        "search_index_is_current": true,
+        "php_version": "8.4.19",
+        "phpstan_available": true,
+        "not_observable": [
+            "per-file coverage precision beyond indexed/stale/symbol-less counts",
+            "whether an unindexed path contains the answer (out-of-scope silence is not absence)"
+        ]
+    },
+    "strategies": [
+        {
+            "strategy": "A_baseline_grep_read",
+            "commands": 17,
+            "map_output_bytes": 0,
+            "tool_output_bytes": 57179,
+            "candidate_files_presented": 38,
+            "candidate_symbols_presented": 0,
+            "exact_source_ranges_presented": 0,
+            "files_opened_before_correct_location": 10,
+            "source_bytes_read_whole_file_model": 251474,
+            "source_bytes_read_window_model": 43868,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": true,
+            "ranges_read_before_correct_range": 10,
+            "correct_test_file_found": true,
+            "false_candidates_opened": 9,
+            "opened_files": [
+                "src/voku/SimplePhpParser/Parsers/PhpCodeParser.php",
+                "tests/ParserTest.php",
+                "src/voku/SimplePhpParser/Parsers/Helper/Utils.php",
+                "src/voku/SimplePhpParser/Model/PHPProperty.php",
+                "tests/Dummy3.php",
+                "src/voku/SimplePhpParser/Model/BasePHPClass.php",
+                "src/voku/SimplePhpParser/Model/PHPFileInfo.php",
+                "tests/ModelInvariantsRegressionTest.php",
+                "tests/ReflectionTypeFormattingRegressionTest.php",
+                "src/voku/SimplePhpParser/Model/PHPClass.php"
+            ],
+            "terms": [
+                {
+                    "term": "src/voku/SimplePhpParser/Parsers/PhpCodeParser.php",
+                    "kind": "file_reference",
+                    "matched_files": 1,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "self",
+                    "kind": "quoted_code",
+                    "matched_files": 26,
+                    "grep_output_bytes": 23472,
+                    "primary_file_rank": 10
+                },
+                {
+                    "term": "ReflectionTypeFormattingRegressionTest",
+                    "kind": "identifier_word",
+                    "matched_files": 1,
+                    "grep_output_bytes": 120,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "selfType",
+                    "kind": "identifier_word",
+                    "matched_files": 2,
+                    "grep_output_bytes": 668,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "ReflectionTypeFixture",
+                    "kind": "identifier_word",
+                    "matched_files": 4,
+                    "grep_output_bytes": 2422,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "SimplePhpParser",
+                    "kind": "identifier_word",
+                    "matched_files": 31,
+                    "grep_output_bytes": 18723,
+                    "primary_file_rank": 9
+                },
+                {
+                    "term": "PhpCodeParser",
+                    "kind": "identifier_word",
+                    "matched_files": 8,
+                    "grep_output_bytes": 11774,
+                    "primary_file_rank": null
+                }
+            ]
+        },
+        {
+            "strategy": "B_loop_ranked_map_context",
+            "commands": 3,
+            "map_output_bytes": 4166,
+            "tool_output_bytes": 4166,
+            "candidate_files_presented": 7,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 20,
+            "files_opened_before_correct_location": 1,
+            "source_bytes_read_before_correct_location": 3140,
+            "ranges_read_before_correct_range": 15,
+            "source_bytes_read_before_correct_range": 27641,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": true,
+            "correct_test_file_found": true,
+            "correct_test_file_channel": "ranked_lead",
+            "false_candidates_opened": 0,
+            "read_files": [
+                "src/voku/SimplePhpParser/Model/PHPClass.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\tests\\ReflectionTypeFormattingRegressionTest — tests/ReflectionTypeFormattingRegressionTest.php:20-249\n  rank 2 voku\\tests\\ParserTest::testGetMethodsInfoFromExtendedClass — tests/ParserTest.php:1341-1639\n  rank 3 voku\\tests\\ReflectionTypeFixture — tests/ReflectionTypeFixture.php:15-64\n  rank 4 voku\\tests\\ParserTest::testGetMethodsInfo — tests/ParserTest.php:1641-1970\n  rank 5 voku\\SimplePhpParser\\Parsers\\PhpCodeParser — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:24-582\n  rank 6 voku\\tests\\ModelInvariantsRegressionTest::testEveryFixtureParsesWithoutErrors — tests/ModelInvariantsRegressionTest.php:72-101\n  rank 7 voku\\SimplePhpParser\\Parsers\\Helper\\Utils — src/voku/SimplePhpParser/Parsers/Helper/Utils.php:14-677\n  rank 8 voku\\SimplePhpParser\\Model\\PHPProperty::readObjectFromPhpNode — src/voku/SimplePhpParser/Model/PHPProperty.php:87-166\nCandidate structural context (unverified):\n  rank 2 test evidence calls voku\\SimplePhpParser\\Model\\PHPClass::getMethodsInfo — src/voku/SimplePhpParser/Model/PHPClass.php:335-402\n  rank 2 test evidence calls voku\\SimplePhpParser\\Parsers\\Helper\\ParserContainer::getClasses — src/voku/SimplePhpParser/Parsers/Helper/ParserContainer.php:207-210\n  rank 2 test evidence calls voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:152-270\n  rank 4 test evidence calls voku\\SimplePhpParser\\Model\\PHPClass::getPropertiesInfo — src/voku/SimplePhpParser/Model/PHPClass.php:267-295\n  rank 4 test evidence calls voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:152-270\n  rank 4 test evidence calls voku\\SimplePhpParser\\Model\\PHPClass::getMethodsInfo — src/voku/SimplePhpParser/Model/PHPClass.php:335-402\n  rank 4 test evidence calls voku\\SimplePhpParser\\Parsers\\Helper\\ParserContainer::getClasses — src/voku/SimplePhpParser/Parsers/Helper/ParserContainer.php:207-210\n  rank 6 test evidence calls voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:152-270\n  rank 6 test evidence calls voku\\SimplePhpParser\\Parsers\\Helper\\ParserContainer::getParseErrors — src/voku/SimplePhpParser/Parsers/Helper/ParserContainer.php:74-77\n  rank 8 seed voku\\SimplePhpParser\\Model\\PHPProperty::readObjectFromPhpNode\n    src/voku/SimplePhpParser/Model/BasePHPClass.php:74-74 [contract] overridden or implemented contract\n    src/voku/SimplePhpParser/Model/BasePHPClass.php:76-90 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/BasePHPClass.php:122-140 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/BasePHPClass.php:154-159 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/BasePHPClass.php:184-199 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/PHPClass.php:31-139 [change_candidate] direct caller that may need adaptation\n    src/voku/SimplePhpParser/Model/PHPProperty.php:77-166 [primary] requested edit target\n    src/voku/SimplePhpParser/Model/PHPProperty.php:313-362 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/PHPProperty.php:400-419 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/PHPTrait.php:19-105 [change_candidate] direct caller that may need adaptation\n    src/voku/SimplePhpParser/Parsers/Helper/Utils.php:198-246 [dependency] direct callee used by the target\n    omitted method:voku\\SimplePhpParser\\Model\\PHPProperty::readPhpDoc [dependency]: source byte budget exhausted\n    omitted method:voku\\SimplePhpParser\\Parsers\\Helper\\Utils::getPhpParserValueFromNode [dependency]: source byte budget exhausted\n    omitted method:voku\\SimplePhpParser\\Parsers\\Helper\\Utils::typeNodeToString [dependency]: source byte budget exhausted\n    omitted method:voku\\SimplePhpParser\\Parsers\\Helper\\Utils::extractAttributesFromAstNode [dependency]: source byte budget exhausted\n    omitted class:voku\\SimplePhpParser\\Model\\PHPProperty [type_definition]: source byte budget exhausted\n",
+            "query": "PHP 8.5: reflection `self` formatting diverges and null array-key deprecations surface\n\nThe normal CI matrix exposed a current PHP 8.5-only failure while running the isolated agent-loop replay in #100. #100 does not modify production PHP or parser tests, so this is a separate product/runtime compatibility issue rather than part of that dogfood harness. On PHP 8.5.9, both parser-v4 and parser-v5 jobs fail while corresponding PHP 8.1-8.4 jobs pass. ReflectionTypeFormattingRegressionTest expects selfType to be 'self', but pure reflection and the full parse produce '\\voku\\tests\\ReflectionTypeFixture'. PHP 8.5 also reports 'Using null as an array offset is deprecated, use an empty string instead' at src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:529. Treat the observations independently unless evidence proves one root cause. Preserve the intended cross-version public type model, AST/reflection consistency, parser-v4/v5 compatibility, existing PHP 8.1-8.4 behavior, PHPUnit and PHPStan.",
+            "deep_rank_of_verified_range": 20,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "PHP",
+                "CI",
+                "ReflectionTypeFormattingRegressionTest",
+                "selfType",
+                "\\voku\\tests\\ReflectionTypeFixture",
+                "Using",
+                "SimplePhpParser",
+                "Parsers",
+                "PhpCodeParser",
+                "Treat",
+                "Preserve",
+                "AST",
+                "PHPUnit",
+                "PHPStan"
+            ],
+            "candidate_rank_of_verified_file": null,
+            "expanded_seeds": [
+                "voku\\SimplePhpParser\\Model\\PHPProperty::readObjectFromPhpNode"
+            ],
+            "policy": {
+                "maximum_files": 6,
+                "maximum_source_bytes": 16000
+            }
+        },
+        {
+            "strategy": "C_exact_neighbour_surfaces",
+            "commands": 4,
+            "map_output_bytes": 15281,
+            "tool_output_bytes": 15281,
+            "candidate_files_presented": 0,
+            "candidate_symbols_presented": 0,
+            "exact_source_ranges_presented": 20,
+            "files_opened_before_correct_location": 1,
+            "source_bytes_read_before_correct_location": 423,
+            "ranges_read_before_correct_range": null,
+            "source_bytes_read_before_correct_range": 27189,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": false,
+            "correct_test_file_found": false,
+            "correct_test_file_channel": null,
+            "false_candidates_opened": 0,
+            "read_files": [
+                "src/voku/SimplePhpParser/Model/PHPClass.php"
+            ],
+            "projection": "agent-map context voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeInheritdocData (owner default policy):\n  src/voku/SimplePhpParser/Model/PHPClass.php:12-37 [type_definition] type referenced by the target signature\n  src/voku/SimplePhpParser/Model/PHPClass.php:140-250 [dependency] direct callee used by the target\n  src/voku/SimplePhpParser/Model/PHPInterface.php:10-30 [type_definition] type referenced by the target signature\n  src/voku/SimplePhpParser/Model/PHPInterface.php:85-162 [dependency] direct callee used by the target\n  src/voku/SimplePhpParser/Parsers/Helper/ParserContainer.php:13-44 [type_definition] type referenced by the target signature\n  src/voku/SimplePhpParser/Parsers/Helper/Utils.php:438-456 [dependency] direct callee used by the target\n  src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:143-270 [change_candidate] direct caller that may need adaptation\n  src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:450-542 [primary] requested edit target\n  src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:543-555 [dependency] direct callee used by the target\n  src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:556-581 [dependency] direct callee used by the target\n  tests/AutoloadSafetyRegressionTest.php:143-169 [verification] test covering a direct caller of the target\n  tests/ModelInvariantsRegressionTest.php:71-101 [verification] test covering a direct caller of the target\n  tests/ModelInvariantsRegressionTest.php:102-137 [verification] test covering a direct caller of the target\n  tests/ModelInvariantsRegressionTest.php:151-159 [verification] test covering a direct caller of the target\n  tests/PHPEnumRegressionTest.php:17-31 [verification] test covering a direct caller of the target\n  tests/PHPEnumRegressionTest.php:96-106 [verification] test covering a direct caller of the target\n  tests/PHPEnumRegressionTest.php:107-119 [verification] test covering a direct caller of the target\n  tests/PHPEnumRegressionTest.php:182-194 [verification] test covering a direct caller of the target\n  tests/PHPEnumRegressionTest.php:226-268 [verification] test covering a direct caller of the target\n  tests/ParserEntryPointsTest.php:26-49 [verification] test covering a direct caller of the target\n  omitted method:voku\\tests\\ParserEntryPointsTest::testMethodsAndPropertiesInfoAreStillShaped [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserEntryPointsTest::testUnreadableFileIsReportedInsteadOfThrown [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testSimpleOneClass [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testExposesSourceRangesTraitUsesAndResolvedAst [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testExtractsEveryPropertyFromGroupedDeclarations [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testPropagatesFileToAstOnlyMembers [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testUsesTheSemicolonLineForMultilineBodylessMethods [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testExposesFileMetadataAndResolvesPhpDocImports [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testExposesCompactDeclarationAndEnumCaseMetadata [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testSimpleOneClassV2 [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testSimpleOneClassV3 [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testSimpleOneClassV4 [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testUnionTypes [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testConstructorPropertyPromotion [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testReadonlyClass [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testInheritDocFromInterface [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testSimpleOneClassWithTrait [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testBrokenParamPhpDocRawIsPreserved [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testSimpleOneTrait [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testSimpleDirectory [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testCurrentPhpFeaturesAreAvailableViaSimpleApi [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testGetFunctionsInfo [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testGetMethodsInfoFromExtendedClass [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testGetMethodsInfo [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testEnumString [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testEnumUnit [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testEnumInt [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testIntersectionTypes [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testNeverReturnType [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testStandaloneTypes [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testDnfTypes [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testTypedClassConstants [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testTraitConstants [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testEnumDirectoryParsing [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testAttributesOnClass [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testAttributesOnProperty [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testAttributesOnMethod [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testAttributesOnParameter [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testOverrideAttribute [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testModernSyntaxParsing [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testCombinedMetadataSources [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testPropertyHooksFromFileInput [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testPromotedPropertyFallbackFromFileInput [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testPromotedPropertyDefaultsFromAutoloadedFileInput [verification]: maximum test count reached\n  omitted method:voku\\tests\\ParserTest::testParameterDefaultReferencingPrivateConstantDoesNotCrashAstParsing [verification]: maximum test count reached\n  omitted method:voku\\tests\\ReflectionTypeFormattingRegressionTest::testTypesFromFullParseMatchPureReflection [verification]: maximum test count reached\nagent-map callers voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeInheritdocData:\n  voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:152-270\nagent-map callees voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeInheritdocData:\n  voku\\SimplePhpParser\\Model\\PHPClass::readObjectFromReflection — src/voku/SimplePhpParser/Model/PHPClass.php:146-250\n  voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeMissingTypeFields — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:544-555\n  voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeMissingParameterTypeFields — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:563-581\n  function:interface_exists (unresolved)\n  voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeMissingTypeFields — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:544-555\n  voku\\SimplePhpParser\\Model\\PHPInterface::readObjectFromReflection — src/voku/SimplePhpParser/Model/PHPInterface.php:91-162\n  function:class_exists (unresolved)\n  voku\\SimplePhpParser\\Parsers\\Helper\\Utils::createClassReflectionInstance — src/voku/SimplePhpParser/Parsers/Helper/Utils.php:444-456\n  voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeMissingParameterTypeFields — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:563-581\n  voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeMissingTypeFields — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:544-555\n  voku\\SimplePhpParser\\Parsers\\Helper\\Utils::createClassReflectionInstance — src/voku/SimplePhpParser/Parsers/Helper/Utils.php:444-456\nagent-map impact voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeInheritdocData:\n  depth 1 method:voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php\n  depth 2 method:voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getFromClassName — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php\n  depth 2 method:voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getFromString — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php\n  depth 2 method:voku\\tests\\AutoloadSafetyRegressionTest::testReflectionTypeFormattingDoesNotTriggerAutoload — tests/AutoloadSafetyRegressionTest.php\n  depth 2 method:voku\\tests\\ModelInvariantsRegressionTest::ownSource — tests/ModelInvariantsRegressionTest.php\n  depth 2 method:voku\\tests\\ModelInvariantsRegressionTest::testEveryClassLikeTypeIsFullyQualified — tests/ModelInvariantsRegressionTest.php\n  depth 2 method:voku\\tests\\ModelInvariantsRegressionTest::testEveryFixtureParsesWithoutErrors — tests/ModelInvariantsRegressionTest.php\n  depth 2 method:voku\\tests\\PHPEnumRegressionTest::assertEnumIsIdenticalAcrossAllReadPaths — tests/PHPEnumRegressionTest.php\n  depth 2 method:voku\\tests\\PHPEnumRegressionTest::testEnumCaseDetailsCarrySourcePositions — tests/PHPEnumRegressionTest.php\n  depth 2 method:voku\\tests\\PHPEnumRegressionTest::testEnumCasesDoNotLeakIntoConstantsDuringReflectionAugmentation — tests/PHPEnumRegressionTest.php\n  depth 2 method:voku\\tests\\PHPEnumRegressionTest::testLoadedEnumsExposeTheirImplicitInterfaces — tests/PHPEnumRegressionTest.php\n  depth 2 method:voku\\tests\\PHPEnumRegressionTest::testLoadedEnumsKeepTheirOwnMethods — tests/PHPEnumRegressionTest.php\n  depth 2 method:voku\\tests\\ParserEntryPointsTest::testGetFromStringAndGetPhpFilesAgreeOnTheSameSource — tests/ParserEntryPointsTest.php\n  depth 2 method:voku\\tests\\ParserEntryPointsTest::testMethodsAndPropertiesInfoAreStillShaped — tests/ParserEntryPointsTest.php\n  depth 2 method:voku\\tests\\ParserEntryPointsTest::testUnreadableFileIsReportedInsteadOfThrown — tests/ParserEntryPointsTest.php\n  depth 2 method:voku\\tests\\ParserTest::testAttributesOnClass — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testAttributesOnMethod — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testAttributesOnParameter — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testAttributesOnProperty — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testBrokenParamPhpDocRawIsPreserved — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testCombinedMetadataSources — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testConstructorPropertyPromotion — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testCurrentPhpFeaturesAreAvailableViaSimpleApi — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testDnfTypes — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testEnumDirectoryParsing — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testEnumInt — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testEnumString — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testEnumUnit — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testExposesCompactDeclarationAndEnumCaseMetadata — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testExposesFileMetadataAndResolvesPhpDocImports — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testExposesSourceRangesTraitUsesAndResolvedAst — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testExtractsEveryPropertyFromGroupedDeclarations — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testGetFunctionsInfo — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testGetMethodsInfo — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testGetMethodsInfoFromExtendedClass — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testInheritDocFromInterface — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testIntersectionTypes — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testModernSyntaxParsing — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testNeverReturnType — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testOverrideAttribute — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testParameterDefaultReferencingPrivateConstantDoesNotCrashAstParsing — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testPromotedPropertyDefaultsFromAutoloadedFileInput — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testPromotedPropertyFallbackFromFileInput — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testPropagatesFileToAstOnlyMembers — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testPropertyHooksFromFileInput — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testReadonlyClass — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testSimpleDirectory — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testSimpleOneClass — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testSimpleOneClassV2 — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testSimpleOneClassV3 — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testSimpleOneClassV4 — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testSimpleOneClassWithTrait — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testSimpleOneTrait — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testStandaloneTypes — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testTraitConstants — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testTypedClassConstants — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testUnionTypes — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ParserTest::testUsesTheSemicolonLineForMultilineBodylessMethods — tests/ParserTest.php\n  depth 2 method:voku\\tests\\ReflectionTypeFormattingRegressionTest::testTypesFromFullParseMatchPureReflection — tests/ReflectionTypeFormattingRegressionTest.php\n",
+            "seed": "voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeInheritdocData",
+            "seed_reason": "task text names src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:529, which is inside voku\\SimplePhpParser\\Parsers\\PhpCodeParser::mergeInheritdocData",
+            "policy": {
+                "maximum_files": 20,
+                "maximum_source_bytes": 60000
+            },
+            "callers_and_callees_presented": 69,
+            "impact_nodes_presented": 59,
+            "impact_truncated": false,
+            "applicable": true
+        },
+        {
+            "strategy": "D_probe_code_vocabulary_query",
+            "commands": 3,
+            "map_output_bytes": 1988,
+            "tool_output_bytes": 1988,
+            "candidate_files_presented": 4,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 6,
+            "files_opened_before_correct_location": null,
+            "source_bytes_read_before_correct_location": 14540,
+            "ranges_read_before_correct_range": null,
+            "source_bytes_read_before_correct_range": 14540,
+            "correct_edit_file_found": false,
+            "correct_edit_range_found": false,
+            "correct_test_file_found": true,
+            "correct_test_file_channel": "ranked_lead",
+            "false_candidates_opened": 1,
+            "read_files": [
+                "src/voku/SimplePhpParser/Parsers/PhpCodeParser.php",
+                "src/voku/SimplePhpParser/Parsers/Helper/ParserContainer.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\tests\\ReflectionTypeFormattingRegressionTest — tests/ReflectionTypeFormattingRegressionTest.php:20-249\n  rank 2 voku\\tests\\ReflectionTypeFixture — tests/ReflectionTypeFixture.php:15-64\n  rank 3 voku\\SimplePhpParser\\Parsers\\PhpCodeParser — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:24-582\n  rank 4 voku\\tests\\ReflectionTypeFormattingRegressionTest::testTypesFromFullParseMatchPureReflection — tests/ReflectionTypeFormattingRegressionTest.php:83-99\n  rank 5 voku\\tests\\ReflectionTypeFixture::method — tests/ReflectionTypeFixture.php:47-63\n  rank 6 voku\\tests\\ModelInvariantsRegressionTest::ownSource — tests/ModelInvariantsRegressionTest.php:152-159\n  rank 7 voku\\tests\\ModelInvariantsRegressionTest::testEveryClassLikeTypeIsFullyQualified — tests/ModelInvariantsRegressionTest.php:108-137\n  rank 8 voku\\tests\\ReflectionTypeFormattingRegressionTest::testAstOnlyPathRendersTheSameTypes — tests/ReflectionTypeFormattingRegressionTest.php:105-191\nCandidate structural context (unverified):\n  rank 4 test evidence calls voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:152-270\n  rank 4 test evidence calls voku\\SimplePhpParser\\Parsers\\Helper\\ParserContainer::getClasses — src/voku/SimplePhpParser/Parsers/Helper/ParserContainer.php:207-210\n  rank 6 test evidence calls voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:152-270\n  rank 7 test evidence calls voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:152-270\n  rank 8 test evidence calls voku\\SimplePhpParser\\Parsers\\Helper\\ParserContainer::getClasses — src/voku/SimplePhpParser/Parsers/Helper/ParserContainer.php:207-210\n  rank 8 test evidence calls voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getFromString — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:37-45\n",
+            "query": "src/voku/SimplePhpParser/Parsers/PhpCodeParser.php self ReflectionTypeFormattingRegressionTest selfType ReflectionTypeFixture SimplePhpParser PhpCodeParser",
+            "deep_rank_of_verified_range": 124,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "SimplePhpParser",
+                "Parsers",
+                "PhpCodeParser",
+                "ReflectionTypeFormattingRegressionTest",
+                "selfType",
+                "ReflectionTypeFixture"
+            ],
+            "candidate_rank_of_verified_file": null,
+            "expanded_seeds": [],
+            "policy": {
+                "maximum_files": 6,
+                "maximum_source_bytes": 16000
+            }
+        },
+        {
+            "strategy": "E_probe_owner_default_policy",
+            "commands": 3,
+            "map_output_bytes": 4130,
+            "tool_output_bytes": 4130,
+            "candidate_files_presented": 7,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 24,
+            "files_opened_before_correct_location": 1,
+            "source_bytes_read_before_correct_location": 3140,
+            "ranges_read_before_correct_range": 15,
+            "source_bytes_read_before_correct_range": 27641,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": true,
+            "correct_test_file_found": true,
+            "correct_test_file_channel": "ranked_lead",
+            "false_candidates_opened": 0,
+            "read_files": [
+                "src/voku/SimplePhpParser/Model/PHPClass.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\tests\\ReflectionTypeFormattingRegressionTest — tests/ReflectionTypeFormattingRegressionTest.php:20-249\n  rank 2 voku\\tests\\ParserTest::testGetMethodsInfoFromExtendedClass — tests/ParserTest.php:1341-1639\n  rank 3 voku\\tests\\ReflectionTypeFixture — tests/ReflectionTypeFixture.php:15-64\n  rank 4 voku\\tests\\ParserTest::testGetMethodsInfo — tests/ParserTest.php:1641-1970\n  rank 5 voku\\SimplePhpParser\\Parsers\\PhpCodeParser — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:24-582\n  rank 6 voku\\tests\\ModelInvariantsRegressionTest::testEveryFixtureParsesWithoutErrors — tests/ModelInvariantsRegressionTest.php:72-101\n  rank 7 voku\\SimplePhpParser\\Parsers\\Helper\\Utils — src/voku/SimplePhpParser/Parsers/Helper/Utils.php:14-677\n  rank 8 voku\\SimplePhpParser\\Model\\PHPProperty::readObjectFromPhpNode — src/voku/SimplePhpParser/Model/PHPProperty.php:87-166\nCandidate structural context (unverified):\n  rank 2 test evidence calls voku\\SimplePhpParser\\Model\\PHPClass::getMethodsInfo — src/voku/SimplePhpParser/Model/PHPClass.php:335-402\n  rank 2 test evidence calls voku\\SimplePhpParser\\Parsers\\Helper\\ParserContainer::getClasses — src/voku/SimplePhpParser/Parsers/Helper/ParserContainer.php:207-210\n  rank 2 test evidence calls voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:152-270\n  rank 4 test evidence calls voku\\SimplePhpParser\\Model\\PHPClass::getPropertiesInfo — src/voku/SimplePhpParser/Model/PHPClass.php:267-295\n  rank 4 test evidence calls voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:152-270\n  rank 4 test evidence calls voku\\SimplePhpParser\\Model\\PHPClass::getMethodsInfo — src/voku/SimplePhpParser/Model/PHPClass.php:335-402\n  rank 4 test evidence calls voku\\SimplePhpParser\\Parsers\\Helper\\ParserContainer::getClasses — src/voku/SimplePhpParser/Parsers/Helper/ParserContainer.php:207-210\n  rank 6 test evidence calls voku\\SimplePhpParser\\Parsers\\PhpCodeParser::getPhpFiles — src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:152-270\n  rank 6 test evidence calls voku\\SimplePhpParser\\Parsers\\Helper\\ParserContainer::getParseErrors — src/voku/SimplePhpParser/Parsers/Helper/ParserContainer.php:74-77\n  rank 8 seed voku\\SimplePhpParser\\Model\\PHPProperty::readObjectFromPhpNode\n    src/voku/SimplePhpParser/Model/BasePHPClass.php:74-74 [contract] overridden or implemented contract\n    src/voku/SimplePhpParser/Model/BasePHPClass.php:76-90 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/BasePHPClass.php:122-140 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/BasePHPClass.php:154-159 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/BasePHPClass.php:184-199 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/PHPClass.php:31-139 [change_candidate] direct caller that may need adaptation\n    src/voku/SimplePhpParser/Model/PHPProperty.php:13-44 [type_definition] type referenced by the target signature\n    src/voku/SimplePhpParser/Model/PHPProperty.php:77-166 [primary] requested edit target\n    src/voku/SimplePhpParser/Model/PHPProperty.php:313-362 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/PHPProperty.php:400-419 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/PHPProperty.php:440-525 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Model/PHPTrait.php:19-105 [change_candidate] direct caller that may need adaptation\n    src/voku/SimplePhpParser/Parsers/Helper/Utils.php:64-197 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Parsers/Helper/Utils.php:198-246 [dependency] direct callee used by the target\n    src/voku/SimplePhpParser/Parsers/Helper/Utils.php:247-324 [dependency] direct callee used by the target\n    omitted method:voku\\SimplePhpParser\\Parsers\\Helper\\Utils::extractAttributesFromAstNode [dependency]: maximum callee count reached\n",
+            "query": "PHP 8.5: reflection `self` formatting diverges and null array-key deprecations surface\n\nThe normal CI matrix exposed a current PHP 8.5-only failure while running the isolated agent-loop replay in #100. #100 does not modify production PHP or parser tests, so this is a separate product/runtime compatibility issue rather than part of that dogfood harness. On PHP 8.5.9, both parser-v4 and parser-v5 jobs fail while corresponding PHP 8.1-8.4 jobs pass. ReflectionTypeFormattingRegressionTest expects selfType to be 'self', but pure reflection and the full parse produce '\\voku\\tests\\ReflectionTypeFixture'. PHP 8.5 also reports 'Using null as an array offset is deprecated, use an empty string instead' at src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:529. Treat the observations independently unless evidence proves one root cause. Preserve the intended cross-version public type model, AST/reflection consistency, parser-v4/v5 compatibility, existing PHP 8.1-8.4 behavior, PHPUnit and PHPStan.",
+            "deep_rank_of_verified_range": 20,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "PHP",
+                "CI",
+                "ReflectionTypeFormattingRegressionTest",
+                "selfType",
+                "\\voku\\tests\\ReflectionTypeFixture",
+                "Using",
+                "SimplePhpParser",
+                "Parsers",
+                "PhpCodeParser",
+                "Treat",
+                "Preserve",
+                "AST",
+                "PHPUnit",
+                "PHPStan"
+            ],
+            "candidate_rank_of_verified_file": null,
+            "expanded_seeds": [
+                "voku\\SimplePhpParser\\Model\\PHPProperty::readObjectFromPhpNode"
+            ],
+            "policy": {
+                "maximum_files": 20,
+                "maximum_source_bytes": 60000
+            }
+        }
+    ]
+}

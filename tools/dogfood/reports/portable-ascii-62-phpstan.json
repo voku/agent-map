@@ -1,0 +1,342 @@
+{
+    "schema_version": "1.0",
+    "replay": {
+        "id": "portable-ascii-62",
+        "shape": "data-config-location",
+        "repository": "https://github.com/voku/portable-ascii",
+        "base_commit": "c5aede519cc55833267bcbb421b222d7aacfaa06",
+        "fix_commit": "4732e5dd78fe2c161e90a238077200f241acdeef",
+        "verified": {
+            "edit_files": [
+                "src/voku/helper/data/ascii_by_languages.php"
+            ],
+            "edit_ranges": [
+                {
+                    "file": "src/voku/helper/data/ascii_by_languages.php",
+                    "start": 2037,
+                    "end": 2046,
+                    "note": "the German replacement block; the fix adds the decomposed umlaut keys here"
+                }
+            ],
+            "test_files": [],
+            "test_note": "no pre-existing validator: the fix added a new tests/AsciiDecomposedUmlautTest.php, so test discovery is not measurable for this replay"
+        },
+        "primary_location": "src/voku/helper/data/ascii_by_languages.php"
+    },
+    "agent_map": {
+        "version": "d09510d0f3bf03cd3cb9abfb896fe4024cd29886",
+        "backend_requested": "phpstan",
+        "setup_output": {
+            "build": "Wrote 199 file(s), 1272 relation(s), and 101 diagnostic(s) to <artifacts>/map.json",
+            "search_index": "Indexed 363 chunk(s) from 199 file(s) into <artifacts>/search.sqlite\n- embedded 0 chunk(s), 363 reused from cache, with corpus/hashed-idf (256d, sqlite-vec v0.1.7-alpha.2)"
+        }
+    },
+    "observation_envelope": {
+        "source_scope": [
+            "src",
+            "tests"
+        ],
+        "indexed_files": 199,
+        "symbol_less_indexed_files": 194,
+        "requested_backend": "phpstan",
+        "backend": "simple-php-code-parser+phpstan",
+        "call_relations": 1086,
+        "relations": 1272,
+        "diagnostics": 101,
+        "map_snapshot": "sha256:a8413319feea7484d54a339d6d5d11fd74cdb2bbe3fd71214db86984069f0fcd",
+        "map_stale_entries": [],
+        "search_fts5": true,
+        "search_vector_support": true,
+        "search_vectors": 363,
+        "search_index_snapshot": "sha256:a8413319feea7484d54a339d6d5d11fd74cdb2bbe3fd71214db86984069f0fcd",
+        "search_index_is_current": true,
+        "php_version": "8.4.19",
+        "phpstan_available": true,
+        "not_observable": [
+            "per-file coverage precision beyond indexed/stale/symbol-less counts",
+            "whether an unindexed path contains the answer (out-of-scope silence is not absence)"
+        ]
+    },
+    "strategies": [
+        {
+            "strategy": "A_baseline_grep_read",
+            "commands": 17,
+            "map_output_bytes": 0,
+            "tool_output_bytes": 25802,
+            "candidate_files_presented": 8,
+            "candidate_symbols_presented": 0,
+            "exact_source_ranges_presented": 0,
+            "files_opened_before_correct_location": 5,
+            "source_bytes_read_whole_file_model": 246028,
+            "source_bytes_read_window_model": 15054,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": true,
+            "ranges_read_before_correct_range": 5,
+            "correct_test_file_found": false,
+            "false_candidates_opened": 4,
+            "opened_files": [
+                "tests/AsciiTest.php",
+                "src/voku/helper/ASCII.php",
+                "tests/TransliterateTest.php",
+                "tests/AsciiGlobalTest.php",
+                "src/voku/helper/data/ascii_by_languages.php"
+            ],
+            "terms": [
+                {
+                    "term": "instead of",
+                    "kind": "quoted_code",
+                    "matched_files": 3,
+                    "grep_output_bytes": 456,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "ä",
+                    "kind": "quoted_code",
+                    "matched_files": 6,
+                    "grep_output_bytes": 8080,
+                    "primary_file_rank": 3
+                },
+                {
+                    "term": "ö",
+                    "kind": "quoted_code",
+                    "matched_files": 6,
+                    "grep_output_bytes": 7074,
+                    "primary_file_rank": 2
+                },
+                {
+                    "term": "ü",
+                    "kind": "quoted_code",
+                    "matched_files": 6,
+                    "grep_output_bytes": 7581,
+                    "primary_file_rank": 2
+                },
+                {
+                    "term": "ä/ö/ü",
+                    "kind": "quoted_code",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "str_replace()",
+                    "kind": "quoted_code",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "ä",
+                    "kind": "quoted_code",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "U+61 U+308",
+                    "kind": "quoted_code",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "MacOS",
+                    "kind": "call_reference",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "about",
+                    "kind": "call_reference",
+                    "matched_files": 0,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "German",
+                    "kind": "call_reference",
+                    "matched_files": 4,
+                    "grep_output_bytes": 1595,
+                    "primary_file_rank": 2
+                },
+                {
+                    "term": "filename",
+                    "kind": "call_reference",
+                    "matched_files": 2,
+                    "grep_output_bytes": 1016,
+                    "primary_file_rank": null
+                }
+            ]
+        },
+        {
+            "strategy": "B_loop_ranked_map_context",
+            "commands": 3,
+            "map_output_bytes": 11700,
+            "tool_output_bytes": 11700,
+            "candidate_files_presented": 3,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 21,
+            "files_opened_before_correct_location": null,
+            "source_bytes_read_before_correct_location": 60927,
+            "ranges_read_before_correct_range": null,
+            "source_bytes_read_before_correct_range": 60927,
+            "correct_edit_file_found": false,
+            "correct_edit_range_found": false,
+            "correct_test_file_found": false,
+            "correct_test_file_channel": null,
+            "false_candidates_opened": 4,
+            "read_files": [
+                "src/voku/helper/ASCII.php",
+                "tests/AsciiTest.php",
+                "tests/AsciiGlobalTest.php",
+                "tests/TransliterateTest.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1088-1252\n  rank 2 voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  rank 3 voku\\helper\\ASCII::to_filename — src/voku/helper/ASCII.php:946-972\n  rank 4 voku\\helper\\ASCII::remove_invisible_characters — src/voku/helper/ASCII.php:701-736\n  rank 5 voku\\helper\\ASCII::normalize_whitespace — src/voku/helper/ASCII.php:627-683\n  rank 6 voku\\tests\\TransliterateTest::it_can_replace_special_characters — tests/TransliterateTest.php:522-525\n  rank 7 voku\\helper\\ASCII — src/voku/helper/ASCII.php:26-1617\n  rank 8 voku\\helper\\ASCII::to_ascii_replace — src/voku/helper/ASCII.php:1309-1432\nCandidate structural context (unverified):\n  rank 1 seed voku\\helper\\ASCII::to_transliterate\n    src/voku/helper/ASCII.php:761-927 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:928-972 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:1068-1252 [primary] requested edit target\n    tests/AsciiTest.php:64-69 [verification] test covering a direct caller of the target\n    omitted method:voku\\tests\\AsciiGlobalTest::testFilterFile [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiGlobalTest::testToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testAsciiToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiEmptyLanguage [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiHandlesMixedAsciiAndNonAsciiMapKeysAcrossLengthBuckets [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiHandlesAdditionalMixedAsciiAndNonAsciiMapKeysAtLengthBoundary [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiLongSevenBitOnlyPathStaysCorrectAcrossRepeatedCalls [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiLongDefaultPathDropsDegreeSymbolAcrossRepeatedCalls [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiLongEnglishTransliterationShortcutStaysCorrectAcrossRepeatedCalls [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiLongTransliterationExpandsDegreeSymbolAcrossRepeatedCalls [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiLongRetentionPathKeepsDegreeSymbolAcrossRepeatedCalls [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiUsesLanguageSpecificMultiCharacterMappings [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiUsesFiveCodepointLanguageSpecificMappings [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testInvalidCharToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testInvalidCharToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testMalformedUtf8ToAsciiViaTransliteration [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testOverlongAndSurrogateSequencesAreNotDecodedToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testEmptyStrToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testNulAndNon7Bit [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testNul [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testNewLineToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testNewLineToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testTabToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testTabToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiSingleCharOnlyUsesExpectedMappings [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbols [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndCleanup [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndSingleCharsOnly [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToTransliterateWithStrict [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToTransliterateWithUnknownNull [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithMalformedUtf8 [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiExactly64ByteBoundaryStaysCorrect [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToTransliterateWithEmptyUnknown [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToTransliteratePrefixesUnknownWarmMapCacheKeys [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithUnsupportedChars [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithLongStringAndFilteredMap [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithLanguageSpecificExtraSymbols [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testUtf8 [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testInvalidChar [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testMalformedUtf8SequencesAreDiscarded [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testInvalidUtf8SequencesAreDiscardedRegardlessOfUnknown [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testLeadingMalformedUtf8IsDroppedWhileTrailingAsciiIsPreserved [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testBasicControlCharactersArePreservedDuringTransliteration [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testNonBasicControlCharactersAreStillRemovedDuringTransliteration [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testWarmUnknownFallbackDoesNotSkipControlByteCleanup [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testTransliteratePrintableAsciiBoundaryAndFourByteCodepoints [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testUnknownWithPregSpecialCharsIsLiteral [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testInvalidUtf8SequencesAreDiscardedWhenUnknownNull [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testUnknownFallbackWarmCacheRespectsUnknown [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testUnknownFallbackWarmCacheStoresUnmappedCharacters [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testRepeatedNonAsciiInputStaysCorrect [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testNullUnknownAndNullByteUnknownUseDifferentWarmMaps [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testEmptyStr [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testNulAndNon7Bit [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testNul [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testToTransliterate [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testCurrency [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testKeepInvalidCharsStrict [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testKeepInvalidChars [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::it_can_replace_special_characters [verification]: source byte budget exhausted\n    omitted method:voku\\helper\\ASCII::clean [dependency]: source byte budget exhausted\n    omitted method:voku\\helper\\ASCII::getData [dependency]: source byte budget exhausted\n    omitted method:voku\\helper\\ASCII::getDataIfExists [dependency]: source byte budget exhausted\n    omitted method:voku\\helper\\ASCII::pre_clean_transliteration_input [dependency]: source byte budget exhausted\n  rank 2 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:791-927\n  rank 2 test evidence calls voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1088-1252\n  rank 2 test evidence calls voku\\helper\\ASCII::to_slugify — src/voku/helper/ASCII.php:999-1067\n  rank 3 seed voku\\helper\\ASCII::to_filename\n    src/voku/helper/ASCII.php:928-972 [primary] requested edit target\n    src/voku/helper/ASCII.php:1068-1252 [dependency] direct callee used by the target\n    tests/AsciiGlobalTest.php:274-315 [verification] direct test caller\n  rank 4 seed voku\\helper\\ASCII::remove_invisible_characters\n    src/voku/helper/ASCII.php:477-543 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:684-736 [primary] requested edit target\n    src/voku/helper/ASCII.php:1564-1580 [change_candidate] direct caller that may need adaptation\n    tests/AsciiGlobalTest.php:613-638 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:361-389 [verification] direct test caller\n    tests/AsciiTest.php:390-419 [verification] direct test caller\n    tests/AsciiTest.php:679-698 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:850-858 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:859-865 [verification] test covering a direct caller of the target\n    tests/TransliterateTest.php:49-58 [verification] test covering a direct caller of the target\n    omitted method:voku\\helper\\ASCII::normalize_whitespace [dependency]: source byte budget exhausted\n  rank 6 test evidence calls voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1088-1252\n",
+            "query": "[DE] MacOS (Big Sur or M1) uses multi character German umlaute\n\n#### What is this feature about (expected vs actual behaviour)?\n\nMacOS filesystem replaces German (single character) umlaute with a two characters since Big Sur or only on M1 machines.\nThese are replaced with a simple `a` instead of `ae`. Expected behavior would be to replace these combined characters the same way as the single character umlaute are treated.\n\n#### How can I reproduce it?\n\n* create a new file or folder with `ä`, `ö` or `ü` - persist the filename (ENTER)\n* open the filename change dialog and copy the shown `ä/ö/ü` character\n* run it through the ASCII class\n\nThe real-world scenario would be to sanitize an uploaded filename.\n\n#### Does it take minutes, hours or days to fix?\n\nThe local fix took minutes (added a `str_replace()` before running the ASCII conversion) but no idea how much it will take to properly add it to the package.\n\n#### Any additional information?\n\nIn hope that GitHub doesn't replace the characters - here it is `ä` - the codepoints are `U+61 U+308`.\nhttps://www.fileformat.info/info/unicode/char/61/index.htm\nhttps://www.fileformat.info/info/unicode/char/308/index.htm\n\nI'm not sure if this would be the expected behavior of the package or I want it to do something that's not in the scope of that package. We have a working solution right now - so it's in no way urgent.",
+            "deep_rank_of_verified_range": 51,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "MacOS",
+                "Big",
+                "Sur",
+                "M1",
+                "German",
+                "Expected",
+                "ENTER",
+                "ASCII",
+                "Does",
+                "str_replace",
+                "GitHub"
+            ],
+            "candidate_rank_of_verified_file": null,
+            "expanded_seeds": [
+                "voku\\helper\\ASCII::to_transliterate",
+                "voku\\helper\\ASCII::to_filename",
+                "voku\\helper\\ASCII::remove_invisible_characters"
+            ],
+            "policy": {
+                "maximum_files": 6,
+                "maximum_source_bytes": 16000
+            }
+        },
+        {
+            "strategy": "C_exact_neighbour_surfaces",
+            "applicable": false,
+            "seed": null,
+            "seed_reason": "no task term resolves to an indexed method; the existing exact surfaces cannot be seeded from this task text",
+            "commands": 0,
+            "map_output_bytes": 0,
+            "candidate_files_presented": 0,
+            "candidate_symbols_presented": 0,
+            "exact_source_ranges_presented": 0,
+            "files_opened_before_correct_location": null,
+            "source_bytes_read_before_correct_location": 0,
+            "correct_edit_file_found": false,
+            "correct_edit_range_found": false,
+            "correct_test_file_found": false,
+            "false_candidates_opened": 0
+        },
+        {
+            "strategy": "D_probe_code_vocabulary_query",
+            "commands": 3,
+            "map_output_bytes": 3096,
+            "tool_output_bytes": 3096,
+            "candidate_files_presented": 5,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 16,
+            "files_opened_before_correct_location": null,
+            "source_bytes_read_before_correct_location": 31964,
+            "ranges_read_before_correct_range": null,
+            "source_bytes_read_before_correct_range": 31964,
+            "correct_edit_file_found": false,
+            "correct_edit_range_found": false,
+            "correct_test_file_found": false,
+            "correct_test_file_channel": null,
+            "false_candidates_opened": 3,
+            "read_files": [
+                "src/voku/helper/ASCII.php",
+                "tests/AsciiGlobalTest.php",
+                "tests/AsciiTest.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\tests\\AsciiGlobalTest::testFilterFile — tests/AsciiGlobalTest.php:275-315\n  rank 2 voku\\helper\\ASCII::to_filename — src/voku/helper/ASCII.php:946-972\n  rank 3 voku\\tests\\AsciiTest::testGetSupportedLanguages — tests/AsciiTest.php:442-454\n  rank 4 src/voku/helper/data/x000.php:segment:1 — src/voku/helper/data/x000.php:1-16\n  rank 5 voku\\tests\\TransliterateTest::testCleanRemovesOverlongTwoByteSequences — tests/TransliterateTest.php:50-58\n  rank 6 voku\\helper\\ASCII::normalize_whitespace — src/voku/helper/ASCII.php:627-683\n  rank 7 voku\\tests\\AsciiGlobalTest::toAsciiProvider — tests/AsciiGlobalTest.php:408-612\n  rank 8 voku\\helper\\ASCII::getAllLanguages — src/voku/helper/ASCII.php:247-265\nCandidate structural context (unverified):\n  rank 1 test evidence calls voku\\helper\\ASCII::to_filename — src/voku/helper/ASCII.php:946-972\n  rank 2 seed voku\\helper\\ASCII::to_filename\n    src/voku/helper/ASCII.php:928-972 [primary] requested edit target\n    src/voku/helper/ASCII.php:1068-1252 [dependency] direct callee used by the target\n    tests/AsciiGlobalTest.php:274-315 [verification] direct test caller\n  rank 3 test evidence calls voku\\helper\\ASCII::getAllLanguages — src/voku/helper/ASCII.php:247-265\n  rank 5 test evidence calls voku\\helper\\ASCII::clean — src/voku/helper/ASCII.php:500-543\n  rank 6 seed voku\\helper\\ASCII::normalize_whitespace\n    src/voku/helper/ASCII.php:477-543 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:608-683 [primary] requested edit target\n    src/voku/helper/ASCII.php:684-736 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:1564-1580 [change_candidate] direct caller that may need adaptation\n    tests/AsciiGlobalTest.php:613-638 [verification] test covering a direct caller of the target\n    tests/AsciiGlobalTest.php:679-708 [verification] direct test caller\n    tests/AsciiTest.php:361-389 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:850-858 [verification] test covering a direct caller of the target\n    omitted method:voku\\tests\\AsciiTest::assertRemoveInvisibleCharactersSame [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testCleanRemovesInvalidUtf8Sequences [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testCleanRemovesInvisibleCharsByDefault [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testCleanRemovesOverlongTwoByteSequences [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\TransliterateTest::testAdditionalWhitespaceLeadingBytesStayOutsideTransliterationPreCleanGate [verification]: source byte budget exhausted\n    omitted method:voku\\helper\\ASCII::prepareAsciiMaps [dependency]: source byte budget exhausted\n  rank 8 seed voku\\helper\\ASCII::getAllLanguages\n    src/voku/helper/ASCII.php:238-265 [primary] requested edit target\n    tests/AsciiTest.php:441-454 [verification] direct test caller\n",
+            "query": "instead of ä ö ü ä/ö/ü str_replace() ä U+61 U+308 MacOS about German filename",
+            "deep_rank_of_verified_range": 15,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "str_replace",
+                "MacOS",
+                "German"
+            ],
+            "candidate_rank_of_verified_file": null,
+            "expanded_seeds": [
+                "voku\\helper\\ASCII::to_filename",
+                "voku\\helper\\ASCII::normalize_whitespace",
+                "voku\\helper\\ASCII::getAllLanguages"
+            ],
+            "policy": {
+                "maximum_files": 6,
+                "maximum_source_bytes": 16000
+            }
+        },
+        {
+            "strategy": "E_probe_owner_default_policy",
+            "commands": 3,
+            "map_output_bytes": 11220,
+            "tool_output_bytes": 11220,
+            "candidate_files_presented": 3,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 35,
+            "files_opened_before_correct_location": null,
+            "source_bytes_read_before_correct_location": 82090,
+            "ranges_read_before_correct_range": null,
+            "source_bytes_read_before_correct_range": 82090,
+            "correct_edit_file_found": false,
+            "correct_edit_range_found": false,
+            "correct_test_file_found": false,
+            "correct_test_file_channel": null,
+            "false_candidates_opened": 4,
+            "read_files": [
+                "src/voku/helper/ASCII.php",
+                "tests/AsciiGlobalTest.php",
+                "tests/AsciiTest.php",
+                "tests/TransliterateTest.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1088-1252\n  rank 2 voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  rank 3 voku\\helper\\ASCII::to_filename — src/voku/helper/ASCII.php:946-972\n  rank 4 voku\\helper\\ASCII::remove_invisible_characters — src/voku/helper/ASCII.php:701-736\n  rank 5 voku\\helper\\ASCII::normalize_whitespace — src/voku/helper/ASCII.php:627-683\n  rank 6 voku\\tests\\TransliterateTest::it_can_replace_special_characters — tests/TransliterateTest.php:522-525\n  rank 7 voku\\helper\\ASCII — src/voku/helper/ASCII.php:26-1617\n  rank 8 voku\\helper\\ASCII::to_ascii_replace — src/voku/helper/ASCII.php:1309-1432\nCandidate structural context (unverified):\n  rank 1 seed voku\\helper\\ASCII::to_transliterate\n    src/voku/helper/ASCII.php:477-543 [dependency] direct callee used by the target\n    src/voku/helper/ASCII.php:761-927 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:928-972 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:1068-1252 [primary] requested edit target\n    src/voku/helper/ASCII.php:1513-1522 [dependency] direct callee used by the target\n    src/voku/helper/ASCII.php:1523-1537 [dependency] direct callee used by the target\n    src/voku/helper/ASCII.php:1564-1580 [dependency] direct callee used by the target\n    tests/AsciiGlobalTest.php:274-315 [verification] test covering a direct caller of the target\n    tests/AsciiGlobalTest.php:349-379 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:64-69 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:70-75 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:76-128 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:129-181 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:182-190 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:191-222 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:267-277 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:278-295 [verification] test covering a direct caller of the target\n    omitted method:voku\\tests\\AsciiTest::testToAsciiLongEnglishTransliterationShortcutStaysCorrectAcrossRepeatedCalls [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiLongTransliterationExpandsDegreeSymbolAcrossRepeatedCalls [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiLongRetentionPathKeepsDegreeSymbolAcrossRepeatedCalls [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiUsesLanguageSpecificMultiCharacterMappings [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiUsesFiveCodepointLanguageSpecificMappings [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testInvalidCharToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testInvalidCharToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testMalformedUtf8ToAsciiViaTransliteration [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testOverlongAndSurrogateSequencesAreNotDecodedToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testEmptyStrToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNulAndNon7Bit [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNul [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNewLineToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNewLineToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testTabToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testTabToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiSingleCharOnlyUsesExpectedMappings [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndCleanup [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndSingleCharsOnly [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToTransliterateWithStrict [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToTransliterateWithUnknownNull [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithMalformedUtf8 [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiExactly64ByteBoundaryStaysCorrect [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToTransliterateWithEmptyUnknown [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToTransliteratePrefixesUnknownWarmMapCacheKeys [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithUnsupportedChars [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithLongStringAndFilteredMap [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithLanguageSpecificExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: maximum test count reached\n    omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testUtf8 [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testInvalidChar [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testMalformedUtf8SequencesAreDiscarded [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testInvalidUtf8SequencesAreDiscardedRegardlessOfUnknown [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testLeadingMalformedUtf8IsDroppedWhileTrailingAsciiIsPreserved [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testBasicControlCharactersArePreservedDuringTransliteration [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testNonBasicControlCharactersAreStillRemovedDuringTransliteration [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testWarmUnknownFallbackDoesNotSkipControlByteCleanup [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testTransliteratePrintableAsciiBoundaryAndFourByteCodepoints [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testUnknownWithPregSpecialCharsIsLiteral [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testInvalidUtf8SequencesAreDiscardedWhenUnknownNull [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testUnknownFallbackWarmCacheRespectsUnknown [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testUnknownFallbackWarmCacheStoresUnmappedCharacters [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testRepeatedNonAsciiInputStaysCorrect [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testNullUnknownAndNullByteUnknownUseDifferentWarmMaps [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testEmptyStr [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testNulAndNon7Bit [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testNul [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testToTransliterate [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testCurrency [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testKeepInvalidCharsStrict [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::testKeepInvalidChars [verification]: maximum test count reached\n    omitted method:voku\\tests\\TransliterateTest::it_can_replace_special_characters [verification]: maximum test count reached\n  rank 2 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:791-927\n  rank 2 test evidence calls voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1088-1252\n  rank 2 test evidence calls voku\\helper\\ASCII::to_slugify — src/voku/helper/ASCII.php:999-1067\n  rank 3 seed voku\\helper\\ASCII::to_filename\n    src/voku/helper/ASCII.php:928-972 [primary] requested edit target\n    src/voku/helper/ASCII.php:1068-1252 [dependency] direct callee used by the target\n    tests/AsciiGlobalTest.php:274-315 [verification] direct test caller\n  rank 4 seed voku\\helper\\ASCII::remove_invisible_characters\n    src/voku/helper/ASCII.php:477-543 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:608-683 [dependency] direct callee used by the target\n    src/voku/helper/ASCII.php:684-736 [primary] requested edit target\n    src/voku/helper/ASCII.php:1564-1580 [change_candidate] direct caller that may need adaptation\n    tests/AsciiGlobalTest.php:613-638 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:361-389 [verification] direct test caller\n    tests/AsciiTest.php:390-419 [verification] direct test caller\n    tests/AsciiTest.php:679-698 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:850-858 [verification] test covering a direct caller of the target\n    tests/AsciiTest.php:859-865 [verification] test covering a direct caller of the target\n    tests/TransliterateTest.php:49-58 [verification] test covering a direct caller of the target\n  rank 6 test evidence calls voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1088-1252\n",
+            "query": "[DE] MacOS (Big Sur or M1) uses multi character German umlaute\n\n#### What is this feature about (expected vs actual behaviour)?\n\nMacOS filesystem replaces German (single character) umlaute with a two characters since Big Sur or only on M1 machines.\nThese are replaced with a simple `a` instead of `ae`. Expected behavior would be to replace these combined characters the same way as the single character umlaute are treated.\n\n#### How can I reproduce it?\n\n* create a new file or folder with `ä`, `ö` or `ü` - persist the filename (ENTER)\n* open the filename change dialog and copy the shown `ä/ö/ü` character\n* run it through the ASCII class\n\nThe real-world scenario would be to sanitize an uploaded filename.\n\n#### Does it take minutes, hours or days to fix?\n\nThe local fix took minutes (added a `str_replace()` before running the ASCII conversion) but no idea how much it will take to properly add it to the package.\n\n#### Any additional information?\n\nIn hope that GitHub doesn't replace the characters - here it is `ä` - the codepoints are `U+61 U+308`.\nhttps://www.fileformat.info/info/unicode/char/61/index.htm\nhttps://www.fileformat.info/info/unicode/char/308/index.htm\n\nI'm not sure if this would be the expected behavior of the package or I want it to do something that's not in the scope of that package. We have a working solution right now - so it's in no way urgent.",
+            "deep_rank_of_verified_range": 51,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "MacOS",
+                "Big",
+                "Sur",
+                "M1",
+                "German",
+                "Expected",
+                "ENTER",
+                "ASCII",
+                "Does",
+                "str_replace",
+                "GitHub"
+            ],
+            "candidate_rank_of_verified_file": null,
+            "expanded_seeds": [
+                "voku\\helper\\ASCII::to_transliterate",
+                "voku\\helper\\ASCII::to_filename",
+                "voku\\helper\\ASCII::remove_invisible_characters"
+            ],
+            "policy": {
+                "maximum_files": 20,
+                "maximum_source_bytes": 60000
+            }
+        }
+    ]
+}

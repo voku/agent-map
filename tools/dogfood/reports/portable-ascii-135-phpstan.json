@@ -1,0 +1,316 @@
+{
+    "schema_version": "1.0",
+    "replay": {
+        "id": "portable-ascii-135",
+        "shape": "local-method",
+        "repository": "https://github.com/voku/portable-ascii",
+        "base_commit": "88f94f89fe03bed03eb8fbcfb84178a8a5eb1d5b",
+        "fix_commit": "acad28ab1b1b50480276edb89310ff2ecad3dee4",
+        "verified": {
+            "edit_files": [
+                "src/voku/helper/ASCII.php"
+            ],
+            "edit_ranges": [
+                {
+                    "file": "src/voku/helper/ASCII.php",
+                    "start": 795,
+                    "end": 947,
+                    "note": "ASCII::to_ascii - both fix hunks (base lines 828 and 893) are inside this one method"
+                }
+            ],
+            "test_files": [
+                "tests/AsciiTest.php"
+            ],
+            "test_note": "the reproduction test already exists at the base commit (testToAsciiLongCorrectAcrossRepeatedCalls)"
+        },
+        "primary_location": "src/voku/helper/ASCII.php"
+    },
+    "agent_map": {
+        "version": "d09510d0f3bf03cd3cb9abfb896fe4024cd29886",
+        "backend_requested": "phpstan",
+        "setup_output": {
+            "build": "Wrote 199 file(s), 897 relation(s), and 101 diagnostic(s) to <artifacts>/map.json",
+            "search_index": "Indexed 329 chunk(s) from 199 file(s) into <artifacts>/search.sqlite\n- embedded 0 chunk(s), 329 reused from cache, with corpus/hashed-idf (256d, sqlite-vec v0.1.7-alpha.2)"
+        }
+    },
+    "observation_envelope": {
+        "source_scope": [
+            "src",
+            "tests"
+        ],
+        "indexed_files": 199,
+        "symbol_less_indexed_files": 194,
+        "requested_backend": "phpstan",
+        "backend": "simple-php-code-parser+phpstan",
+        "call_relations": 763,
+        "relations": 897,
+        "diagnostics": 101,
+        "map_snapshot": "sha256:18671dacf325f37750c917f3f8543e7fb4a0bdd1baacd27f919ac6e3e6fa92cd",
+        "map_stale_entries": [],
+        "search_fts5": true,
+        "search_vector_support": true,
+        "search_vectors": 329,
+        "search_index_snapshot": "sha256:18671dacf325f37750c917f3f8543e7fb4a0bdd1baacd27f919ac6e3e6fa92cd",
+        "search_index_is_current": true,
+        "php_version": "8.4.19",
+        "phpstan_available": true,
+        "not_observable": [
+            "per-file coverage precision beyond indexed/stale/symbol-less counts",
+            "whether an unindexed path contains the answer (out-of-scope silence is not absence)"
+        ]
+    },
+    "strategies": [
+        {
+            "strategy": "A_baseline_grep_read",
+            "commands": 11,
+            "map_output_bytes": 0,
+            "tool_output_bytes": 65697,
+            "candidate_files_presented": 5,
+            "candidate_symbols_presented": 0,
+            "exact_source_ranges_presented": 0,
+            "files_opened_before_correct_location": 3,
+            "source_bytes_read_whole_file_model": 114086,
+            "source_bytes_read_window_model": 43953,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": true,
+            "ranges_read_before_correct_range": 3,
+            "correct_test_file_found": true,
+            "false_candidates_opened": 2,
+            "opened_files": [
+                "tests/AsciiTest.php",
+                "tests/PerformanceRegressionTest.php",
+                "src/voku/helper/ASCII.php"
+            ],
+            "terms": [
+                {
+                    "term": "tests/AsciiTest.php",
+                    "kind": "file_reference",
+                    "matched_files": 1,
+                    "grep_output_bytes": 0,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "to_ascii",
+                    "kind": "quoted_code",
+                    "matched_files": 4,
+                    "grep_output_bytes": 12268,
+                    "primary_file_rank": 3
+                },
+                {
+                    "term": "static::assertSame",
+                    "kind": "member_reference",
+                    "matched_files": 4,
+                    "grep_output_bytes": 23147,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "ASCII::to_ascii",
+                    "kind": "member_reference",
+                    "matched_files": 4,
+                    "grep_output_bytes": 6590,
+                    "primary_file_rank": 3
+                },
+                {
+                    "term": "calls",
+                    "kind": "call_reference",
+                    "matched_files": 2,
+                    "grep_output_bytes": 308,
+                    "primary_file_rank": 1
+                },
+                {
+                    "term": "testToAsciiLongCorrectAcrossRepeatedCalls",
+                    "kind": "call_reference",
+                    "matched_files": 1,
+                    "grep_output_bytes": 88,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "assertSame",
+                    "kind": "call_reference",
+                    "matched_files": 4,
+                    "grep_output_bytes": 23147,
+                    "primary_file_rank": null
+                },
+                {
+                    "term": "AsciiTest",
+                    "kind": "identifier_word",
+                    "matched_files": 2,
+                    "grep_output_bytes": 149,
+                    "primary_file_rank": null
+                }
+            ]
+        },
+        {
+            "strategy": "B_loop_ranked_map_context",
+            "commands": 3,
+            "map_output_bytes": 5387,
+            "tool_output_bytes": 5387,
+            "candidate_files_presented": 2,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 19,
+            "files_opened_before_correct_location": 1,
+            "source_bytes_read_before_correct_location": 4812,
+            "ranges_read_before_correct_range": 1,
+            "source_bytes_read_before_correct_range": 4812,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": true,
+            "correct_test_file_found": true,
+            "correct_test_file_channel": "ranked_lead",
+            "false_candidates_opened": 0,
+            "read_files": [
+                "src/voku/helper/ASCII.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\tests\\AsciiTest::testToAsciiLongCorrectAcrossRepeatedCalls — tests/AsciiTest.php:237-244\n  rank 2 voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 3 voku\\tests\\AsciiTest — tests/AsciiTest.php:12-790\n  rank 4 voku\\tests\\AsciiTest::testToAsciiLongSevenBitOnlyPathStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:226-235\n  rank 5 voku\\tests\\AsciiTest::testToAsciiLongEnglishTransliterationShortcutStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:246-253\n  rank 6 voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndCleanup — tests/AsciiTest.php:640-645\n  rank 7 voku\\tests\\AsciiTest::testToAsciiWithExtraSymbols — tests/AsciiTest.php:631-638\n  rank 8 voku\\tests\\AsciiTest::testToAsciiShortcutBranchesStayCorrectAcrossRepeatedCalls — tests/AsciiTest.php:182-224\nCandidate structural context (unverified):\n  rank 1 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 2 seed voku\\helper\\ASCII::to_ascii\n    src/voku/helper/ASCII.php:765-929 [primary] requested edit target\n    src/voku/helper/ASCII.php:975-1069 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:1507-1542 [dependency] direct callee used by the target\n    src/voku/helper/ASCII.php:1657-1666 [dependency] direct callee used by the target\n    tests/AsciiGlobalTest.php:307-339 [verification] test covering a direct caller of the target\n    tests/AsciiGlobalTest.php:340-370 [verification] direct test caller\n    tests/AsciiTest.php:54-59 [verification] direct test caller\n    tests/AsciiTest.php:60-65 [verification] direct test caller\n    tests/AsciiTest.php:172-180 [verification] direct test caller\n    tests/AsciiTest.php:225-235 [verification] direct test caller\n    tests/AsciiTest.php:236-244 [verification] direct test caller\n    tests/AsciiTest.php:245-253 [verification] direct test caller\n    tests/AsciiTest.php:292-302 [verification] direct test caller\n    tests/AsciiTest.php:303-308 [verification] direct test caller\n    omitted method:voku\\tests\\AsciiTest::testToAsciiEmptyLanguage [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testEmptyStrToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNulAndNon7Bit [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNul [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNewLineToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testTabToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiSingleCharOnlyUsesExpectedMappings [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyWithCustomSeparator [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyWithSpecialCharsInSeparator [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyEnglishDefaultDoesNotStartTransliteratingDroppedUnicode [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndCleanup [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndSingleCharsOnly [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyWithExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithMalformedUtf8 [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithUnsupportedChars [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithLongStringAndFilteredMap [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithLanguageSpecificExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: maximum test count reached\n    omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: maximum test count reached\n    omitted method:voku\\helper\\ASCII::to_transliterate [dependency]: source byte budget exhausted\n    omitted method:voku\\helper\\ASCII::to_ascii_replace [dependency]: source byte budget exhausted\n  rank 4 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 5 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 6 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 7 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n",
+            "query": "Inconsistence between `to_ascii` calls (since 2.10.0)\n\nCf. the failing test PR for more informations: #134\n\nThe failing test merged from #134 (tests/AsciiTest.php):\n\n    public function testToAsciiLongCorrectAcrossRepeatedCalls()\n    {\n        $input = 'Webinaire des transitions n°34 - Agir et mobiliser pour la biodiversité dans son entreprise';\n        $output = 'Webinaire des transitions ndeg34 - Agir et mobiliser pour la biodiversite dans son entreprise';\n\n        static::assertSame($output, ASCII::to_ascii($input, 'en'), 'with cleanup');\n        static::assertSame($output, ASCII::to_ascii($input, 'en'), 'with cleanup warm');\n    }\n",
+            "deep_rank_of_verified_range": 2,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "Inconsistence",
+                "to_ascii",
+                "Cf",
+                "PR",
+                "AsciiTest",
+                "testToAsciiLongCorrectAcrossRepeatedCalls",
+                "Webinaire",
+                "Agir",
+                "static::assertSame",
+                "ASCII::to_ascii"
+            ],
+            "candidate_rank_of_verified_file": 2,
+            "expanded_seeds": [
+                "voku\\helper\\ASCII::to_ascii"
+            ],
+            "policy": {
+                "maximum_files": 6,
+                "maximum_source_bytes": 16000
+            }
+        },
+        {
+            "strategy": "C_exact_neighbour_surfaces",
+            "commands": 4,
+            "map_output_bytes": 14515,
+            "tool_output_bytes": 14515,
+            "candidate_files_presented": 0,
+            "candidate_symbols_presented": 0,
+            "exact_source_ranges_presented": 16,
+            "files_opened_before_correct_location": 1,
+            "source_bytes_read_before_correct_location": 6640,
+            "ranges_read_before_correct_range": 1,
+            "source_bytes_read_before_correct_range": 6640,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": true,
+            "correct_test_file_found": false,
+            "correct_test_file_channel": null,
+            "false_candidates_opened": 0,
+            "read_files": [
+                "src/voku/helper/ASCII.php"
+            ],
+            "projection": "agent-map context voku\\helper\\ASCII::to_ascii (owner default policy):\n  src/voku/helper/ASCII.php:765-929 [primary] requested edit target\n  src/voku/helper/ASCII.php:975-1069 [change_candidate] direct caller that may need adaptation\n  src/voku/helper/ASCII.php:1070-1311 [dependency] direct callee used by the target\n  src/voku/helper/ASCII.php:1356-1506 [dependency] direct callee used by the target\n  src/voku/helper/ASCII.php:1507-1542 [dependency] direct callee used by the target\n  src/voku/helper/ASCII.php:1657-1666 [dependency] direct callee used by the target\n  tests/AsciiGlobalTest.php:307-339 [verification] test covering a direct caller of the target\n  tests/AsciiGlobalTest.php:340-370 [verification] direct test caller\n  tests/AsciiTest.php:54-59 [verification] direct test caller\n  tests/AsciiTest.php:60-65 [verification] direct test caller\n  tests/AsciiTest.php:66-118 [verification] direct test caller\n  tests/AsciiTest.php:119-171 [verification] direct test caller\n  tests/AsciiTest.php:172-180 [verification] direct test caller\n  tests/AsciiTest.php:225-235 [verification] direct test caller\n  tests/AsciiTest.php:236-244 [verification] direct test caller\n  tests/AsciiTest.php:245-253 [verification] direct test caller\n  omitted method:voku\\tests\\AsciiTest::testInvalidCharToAscii [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testMalformedUtf8ToAsciiViaTransliteration [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testEmptyStrToAscii [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testNulAndNon7Bit [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testNul [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testNewLineToAscii [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testTabToAscii [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToAsciiSingleCharOnlyUsesExpectedMappings [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToSlugifyWithCustomSeparator [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToSlugifyWithSpecialCharsInSeparator [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToSlugifyEnglishDefaultDoesNotStartTransliteratingDroppedUnicode [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbols [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndCleanup [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndSingleCharsOnly [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToSlugifyWithExtraSymbols [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToAsciiWithMalformedUtf8 [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToAsciiWithUnsupportedChars [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToAsciiWithLongStringAndFilteredMap [verification]: maximum test count reached\n  omitted method:voku\\tests\\AsciiTest::testToAsciiWithLanguageSpecificExtraSymbols [verification]: maximum test count reached\n  omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: maximum test count reached\n  omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: maximum test count reached\nagent-map callers voku\\helper\\ASCII::to_ascii:\n  voku\\tests\\AsciiTest::testMalformedUtf8ToAsciiViaTransliteration — tests/AsciiTest.php:304-308\n  voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  voku\\tests\\AsciiTest::testToAsciiWithLanguageSpecificExtraSymbols — tests/AsciiTest.php:782-789\n  voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength — tests/AsciiTest.php:431-470\n  voku\\tests\\AsciiTest::testToAsciiWithUnsupportedChars — tests/AsciiTest.php:710-724\n  voku\\tests\\AsciiTest::testInvalidCharToAscii — tests/AsciiTest.php:293-302\n  voku\\tests\\AsciiTest::testNewLineToAscii — tests/AsciiTest.php:370-394\n  voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength — tests/AsciiTest.php:431-470\n  voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  voku\\tests\\AsciiTest::testToAsciiWithExtraSymbols — tests/AsciiTest.php:631-638\n  voku\\tests\\AsciiTest::testMalformedUtf8ToAsciiViaTransliteration — tests/AsciiTest.php:304-308\n  voku\\tests\\AsciiTest::testToAsciiLongSevenBitOnlyPathStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:226-235\n  voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced — tests/AsciiTest.php:485-515\n  voku\\tests\\AsciiTest::testNul — tests/AsciiTest.php:364-368\n  voku\\tests\\AsciiTest::testNulAndNon7Bit — tests/AsciiTest.php:358-362\n  voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  voku\\tests\\AsciiTest::testToAsciiWithLongStringAndFilteredMap — tests/AsciiTest.php:726-732\n  voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  voku\\tests\\AsciiTest::testToAsciiSingleCharOnlyUsesExpectedMappings — tests/AsciiTest.php:412-416\n  voku\\tests\\AsciiTest::testToAscii — tests/AsciiTest.php:120-171\n  voku\\tests\\AsciiTest::testToAsciiSingleCharOnlyUsesExpectedMappings — tests/AsciiTest.php:412-416\n  voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced — tests/AsciiTest.php:485-515\n  voku\\tests\\AsciiTest::testToAsciiLongSevenBitOnlyPathStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:226-235\n  voku\\tests\\AsciiTest::testAsciiToAscii — tests/AsciiTest.php:61-65\n  voku\\helper\\ASCII::to_slugify — src/voku/helper/ASCII.php:1001-1069\n  voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  voku\\tests\\AsciiTest::testToAsciiEmptyLanguage — tests/AsciiTest.php:67-118\n  voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  voku\\tests\\AsciiTest::testToAsciiWithUnsupportedChars — tests/AsciiTest.php:710-724\n  voku\\tests\\AsciiTest::testNewLineToAscii — tests/AsciiTest.php:370-394\n  voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndSingleCharsOnly — tests/AsciiTest.php:647-651\n  voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength — tests/AsciiTest.php:431-470\n  voku\\tests\\AsciiTest::testToAsciiLongEnglishTransliterationShortcutStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:246-253\n  voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength — tests/AsciiTest.php:431-470\n  voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced — tests/AsciiTest.php:485-515\n  voku\\tests\\AsciiTest::testToAsciiLongSevenBitOnlyPathStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:226-235\n  voku\\tests\\AsciiTest::testToAsciiLongSevenBitOnlyPathStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:226-235\n  voku\\tests\\AsciiTest::testToAsciiHandlesMixedAsciiAndNonAsciiMapKeysAcrossLengthBuckets — tests/AsciiTest.php:173-180\n  voku\\tests\\AsciiTest::testUtf8ToAscii — tests/AsciiTest.php:55-59\n  voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced — tests/AsciiTest.php:485-515\n  voku\\tests\\AsciiTest::testNewLineToAscii — tests/AsciiTest.php:370-394\n  voku\\tests\\AsciiTest::testToAsciiLongCorrectAcrossRepeatedCalls — tests/AsciiTest.php:237-244\n  voku\\tests\\AsciiTest::testEmptyStrToAscii — tests/AsciiTest.php:352-356\n  voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced — tests/AsciiTest.php:485-515\n  voku\\tests\\AsciiGlobalTest::testToAscii — tests/AsciiGlobalTest.php:351-370\n  voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength — tests/AsciiTest.php:431-470\n  voku\\tests\\AsciiTest::testToAsciiWithUnsupportedChars — tests/AsciiTest.php:710-724\n  voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndCleanup — tests/AsciiTest.php:640-645\n  voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength — tests/AsciiTest.php:431-470\n  voku\\tests\\AsciiTest::testToAsciiWithLanguageSpecificExtraSymbols — tests/AsciiTest.php:782-789\n  voku\\tests\\AsciiTest::testTabToAscii — tests/AsciiTest.php:396-410\n  voku\\tests\\AsciiTest::testToAsciiWithMalformedUtf8 — tests/AsciiTest.php:695-702\n  voku\\tests\\AsciiTest::testTabToAscii — tests/AsciiTest.php:396-410\n  voku\\tests\\AsciiTest::testToAsciiLongCorrectAcrossRepeatedCalls — tests/AsciiTest.php:237-244\n  voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\n  voku\\tests\\AsciiTest::testToAsciiLongEnglishTransliterationShortcutStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:246-253\n  voku\\tests\\AsciiTest::testToAsciiHandlesMixedAsciiAndNonAsciiMapKeysAcrossLengthBuckets — tests/AsciiTest.php:173-180\n  voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php:37-294\nagent-map callees voku\\helper\\ASCII::to_ascii:\n  function:strlen (unresolved)\n  function:str_replace (unresolved)\n  function:str_replace (unresolved)\n  function:preg_match (unresolved)\n  voku\\helper\\ASCII::to_ascii_replace — src/voku/helper/ASCII.php:1368-1506\n  voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1090-1311\n  function:preg_replace (unresolved)\n  function:preg_match (unresolved)\n  function:preg_replace (unresolved)\n  voku\\helper\\ASCII::get_language — src/voku/helper/ASCII.php:1518-1542\n  function:preg_replace (unresolved)\n  function:preg_match (unresolved)\n  voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1090-1311\n  voku\\helper\\ASCII::prepareAsciiMaps — src/voku/helper/ASCII.php:1661-1666\n  function:preg_match (unresolved)\n  voku\\helper\\ASCII::to_ascii_replace — src/voku/helper/ASCII.php:1368-1506\n  function:str_replace (unresolved)\n  function:preg_match (unresolved)\n  function:preg_replace (unresolved)\n  voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1090-1311\n  function:str_replace (unresolved)\n  function:preg_match (unresolved)\n  voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1090-1311\nagent-map impact voku\\helper\\ASCII::to_ascii:\n  depth 1 method:voku\\helper\\ASCII::to_slugify — src/voku/helper/ASCII.php\n  depth 1 method:voku\\tests\\AsciiGlobalTest::testToAscii — tests/AsciiGlobalTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testAsciiToAscii — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testEmptyStrToAscii — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testInvalidCharToAscii — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testMalformedUtf8ToAsciiViaTransliteration — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testNewLineToAscii — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testNul — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testNulAndNon7Bit — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testTabToAscii — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAscii — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiEmptyLanguage — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiHandlesMixedAsciiAndNonAsciiMapKeysAcrossLengthBuckets — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiLongCorrectAcrossRepeatedCalls — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiLongEnglishTransliterationShortcutStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiLongSevenBitOnlyPathStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiSingleCharOnlyUsesExpectedMappings — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbols — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndCleanup — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndSingleCharsOnly — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiWithLanguageSpecificExtraSymbols — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiWithLongStringAndFilteredMap — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiWithMalformedUtf8 — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testToAsciiWithUnsupportedChars — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\AsciiTest::testUtf8ToAscii — tests/AsciiTest.php\n  depth 1 method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs — tests/PerformanceRegressionTest.php\n  depth 2 method:voku\\tests\\AsciiGlobalTest::testSlugify — tests/AsciiGlobalTest.php\n  depth 2 method:voku\\tests\\AsciiTest::testToSlugifyEnglishDefaultDoesNotStartTransliteratingDroppedUnicode — tests/AsciiTest.php\n  depth 2 method:voku\\tests\\AsciiTest::testToSlugifyWithCustomSeparator — tests/AsciiTest.php\n  depth 2 method:voku\\tests\\AsciiTest::testToSlugifyWithExtraSymbols — tests/AsciiTest.php\n  depth 2 method:voku\\tests\\AsciiTest::testToSlugifyWithSpecialCharsInSeparator — tests/AsciiTest.php\n",
+            "seed": "voku\\helper\\ASCII::to_ascii",
+            "seed_reason": "first task term resolving to exactly one indexed method: to_ascii",
+            "policy": {
+                "maximum_files": 20,
+                "maximum_source_bytes": 60000
+            },
+            "callers_and_callees_presented": 101,
+            "impact_nodes_presented": 33,
+            "impact_truncated": false,
+            "applicable": true
+        },
+        {
+            "strategy": "D_probe_code_vocabulary_query",
+            "commands": 3,
+            "map_output_bytes": 5522,
+            "tool_output_bytes": 5522,
+            "candidate_files_presented": 2,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 21,
+            "files_opened_before_correct_location": 1,
+            "source_bytes_read_before_correct_location": 4812,
+            "ranges_read_before_correct_range": 1,
+            "source_bytes_read_before_correct_range": 4812,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": true,
+            "correct_test_file_found": true,
+            "correct_test_file_channel": "ranked_lead",
+            "false_candidates_opened": 0,
+            "read_files": [
+                "src/voku/helper/ASCII.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\tests\\AsciiTest::testToAsciiLongCorrectAcrossRepeatedCalls — tests/AsciiTest.php:237-244\n  rank 2 voku\\tests\\AsciiTest — tests/AsciiTest.php:12-790\n  rank 3 voku\\tests\\AsciiTest::testToAsciiLongSevenBitOnlyPathStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:226-235\n  rank 4 voku\\tests\\AsciiTest::testToAsciiLongEnglishTransliterationShortcutStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:246-253\n  rank 5 voku\\tests\\AsciiTest::testTabToAscii — tests/AsciiTest.php:396-410\n  rank 6 voku\\tests\\AsciiTest::testAsciiToAscii — tests/AsciiTest.php:61-65\n  rank 7 voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 8 voku\\tests\\AsciiTest::testToAsciiWithMalformedUtf8 — tests/AsciiTest.php:695-702\nCandidate structural context (unverified):\n  rank 1 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 3 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 4 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 5 test evidence calls voku\\helper\\ASCII::to_transliterate — src/voku/helper/ASCII.php:1090-1311\n  rank 5 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 6 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 7 seed voku\\helper\\ASCII::to_ascii\n    src/voku/helper/ASCII.php:765-929 [primary] requested edit target\n    src/voku/helper/ASCII.php:975-1069 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:1507-1542 [dependency] direct callee used by the target\n    src/voku/helper/ASCII.php:1657-1666 [dependency] direct callee used by the target\n    tests/AsciiGlobalTest.php:307-339 [verification] test covering a direct caller of the target\n    tests/AsciiGlobalTest.php:340-370 [verification] direct test caller\n    tests/AsciiTest.php:54-59 [verification] direct test caller\n    tests/AsciiTest.php:60-65 [verification] direct test caller\n    tests/AsciiTest.php:172-180 [verification] direct test caller\n    tests/AsciiTest.php:225-235 [verification] direct test caller\n    tests/AsciiTest.php:236-244 [verification] direct test caller\n    tests/AsciiTest.php:245-253 [verification] direct test caller\n    tests/AsciiTest.php:292-302 [verification] direct test caller\n    tests/AsciiTest.php:303-308 [verification] direct test caller\n    omitted method:voku\\tests\\AsciiTest::testToAsciiEmptyLanguage [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testToAscii [verification]: source byte budget exhausted\n    omitted method:voku\\tests\\AsciiTest::testEmptyStrToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNulAndNon7Bit [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNul [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNewLineToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testTabToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiSingleCharOnlyUsesExpectedMappings [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyWithCustomSeparator [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyWithSpecialCharsInSeparator [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyEnglishDefaultDoesNotStartTransliteratingDroppedUnicode [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndCleanup [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndSingleCharsOnly [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyWithExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithMalformedUtf8 [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithUnsupportedChars [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithLongStringAndFilteredMap [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithLanguageSpecificExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: maximum test count reached\n    omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: maximum test count reached\n    omitted method:voku\\helper\\ASCII::to_transliterate [dependency]: source byte budget exhausted\n    omitted method:voku\\helper\\ASCII::to_ascii_replace [dependency]: source byte budget exhausted\n  rank 8 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n",
+            "query": "tests/AsciiTest.php to_ascii static::assertSame ASCII::to_ascii calls testToAsciiLongCorrectAcrossRepeatedCalls assertSame AsciiTest",
+            "deep_rank_of_verified_range": 4,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "AsciiTest",
+                "to_ascii",
+                "static::assertSame",
+                "ASCII::to_ascii",
+                "testToAsciiLongCorrectAcrossRepeatedCalls",
+                "assertSame"
+            ],
+            "candidate_rank_of_verified_file": 7,
+            "expanded_seeds": [
+                "voku\\helper\\ASCII::to_ascii"
+            ],
+            "policy": {
+                "maximum_files": 6,
+                "maximum_source_bytes": 16000
+            }
+        },
+        {
+            "strategy": "E_probe_owner_default_policy",
+            "commands": 3,
+            "map_output_bytes": 5387,
+            "tool_output_bytes": 5387,
+            "candidate_files_presented": 2,
+            "candidate_symbols_presented": 8,
+            "exact_source_ranges_presented": 21,
+            "files_opened_before_correct_location": 1,
+            "source_bytes_read_before_correct_location": 4812,
+            "ranges_read_before_correct_range": 1,
+            "source_bytes_read_before_correct_range": 4812,
+            "correct_edit_file_found": true,
+            "correct_edit_range_found": true,
+            "correct_test_file_found": true,
+            "correct_test_file_channel": "ranked_lead",
+            "false_candidates_opened": 0,
+            "read_files": [
+                "src/voku/helper/ASCII.php"
+            ],
+            "projection": "Candidate map leads (ranked, unverified):\n  rank 1 voku\\tests\\AsciiTest::testToAsciiLongCorrectAcrossRepeatedCalls — tests/AsciiTest.php:237-244\n  rank 2 voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 3 voku\\tests\\AsciiTest — tests/AsciiTest.php:12-790\n  rank 4 voku\\tests\\AsciiTest::testToAsciiLongSevenBitOnlyPathStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:226-235\n  rank 5 voku\\tests\\AsciiTest::testToAsciiLongEnglishTransliterationShortcutStaysCorrectAcrossRepeatedCalls — tests/AsciiTest.php:246-253\n  rank 6 voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndCleanup — tests/AsciiTest.php:640-645\n  rank 7 voku\\tests\\AsciiTest::testToAsciiWithExtraSymbols — tests/AsciiTest.php:631-638\n  rank 8 voku\\tests\\AsciiTest::testToAsciiShortcutBranchesStayCorrectAcrossRepeatedCalls — tests/AsciiTest.php:182-224\nCandidate structural context (unverified):\n  rank 1 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 2 seed voku\\helper\\ASCII::to_ascii\n    src/voku/helper/ASCII.php:765-929 [primary] requested edit target\n    src/voku/helper/ASCII.php:975-1069 [change_candidate] direct caller that may need adaptation\n    src/voku/helper/ASCII.php:1070-1311 [dependency] direct callee used by the target\n    src/voku/helper/ASCII.php:1356-1506 [dependency] direct callee used by the target\n    src/voku/helper/ASCII.php:1507-1542 [dependency] direct callee used by the target\n    src/voku/helper/ASCII.php:1657-1666 [dependency] direct callee used by the target\n    tests/AsciiGlobalTest.php:307-339 [verification] test covering a direct caller of the target\n    tests/AsciiGlobalTest.php:340-370 [verification] direct test caller\n    tests/AsciiTest.php:54-59 [verification] direct test caller\n    tests/AsciiTest.php:60-65 [verification] direct test caller\n    tests/AsciiTest.php:66-118 [verification] direct test caller\n    tests/AsciiTest.php:119-171 [verification] direct test caller\n    tests/AsciiTest.php:172-180 [verification] direct test caller\n    tests/AsciiTest.php:225-235 [verification] direct test caller\n    tests/AsciiTest.php:236-244 [verification] direct test caller\n    tests/AsciiTest.php:245-253 [verification] direct test caller\n    omitted method:voku\\tests\\AsciiTest::testInvalidCharToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testMalformedUtf8ToAsciiViaTransliteration [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testEmptyStrToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNulAndNon7Bit [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNul [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testNewLineToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testTabToAscii [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiSingleCharOnlyUsesExpectedMappings [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testMergedLanguageMapUsesCorrectMaxKeyLength [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testExtraSymbolsThreeCharKeysAreReplaced [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyWithCustomSeparator [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyWithSpecialCharsInSeparator [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyEnglishDefaultDoesNotStartTransliteratingDroppedUnicode [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndCleanup [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithExtraSymbolsAndSingleCharsOnly [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToSlugifyWithExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithMalformedUtf8 [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithUnsupportedChars [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithLongStringAndFilteredMap [verification]: maximum test count reached\n    omitted method:voku\\tests\\AsciiTest::testToAsciiWithLanguageSpecificExtraSymbols [verification]: maximum test count reached\n    omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: maximum test count reached\n    omitted method:voku\\tests\\PerformanceRegressionTest::testPerformanceRatiosForRepresentativeInputs [verification]: maximum test count reached\n  rank 4 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 5 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 6 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n  rank 7 test evidence calls voku\\helper\\ASCII::to_ascii — src/voku/helper/ASCII.php:795-929\n",
+            "query": "Inconsistence between `to_ascii` calls (since 2.10.0)\n\nCf. the failing test PR for more informations: #134\n\nThe failing test merged from #134 (tests/AsciiTest.php):\n\n    public function testToAsciiLongCorrectAcrossRepeatedCalls()\n    {\n        $input = 'Webinaire des transitions n°34 - Agir et mobiliser pour la biodiversité dans son entreprise';\n        $output = 'Webinaire des transitions ndeg34 - Agir et mobiliser pour la biodiversite dans son entreprise';\n\n        static::assertSame($output, ASCII::to_ascii($input, 'en'), 'with cleanup');\n        static::assertSame($output, ASCII::to_ascii($input, 'en'), 'with cleanup warm');\n    }\n",
+            "deep_rank_of_verified_range": 2,
+            "deep_rank_limit": 200,
+            "search_effective_mode": "structural+lexical+semantic",
+            "search_degraded": false,
+            "search_degraded_reason": null,
+            "structural_terms": [
+                "Inconsistence",
+                "to_ascii",
+                "Cf",
+                "PR",
+                "AsciiTest",
+                "testToAsciiLongCorrectAcrossRepeatedCalls",
+                "Webinaire",
+                "Agir",
+                "static::assertSame",
+                "ASCII::to_ascii"
+            ],
+            "candidate_rank_of_verified_file": 2,
+            "expanded_seeds": [
+                "voku\\helper\\ASCII::to_ascii"
+            ],
+            "policy": {
+                "maximum_files": 20,
+                "maximum_source_bytes": 60000
+            }
+        }
+    ]
+}
