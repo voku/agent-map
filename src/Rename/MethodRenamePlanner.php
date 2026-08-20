@@ -312,7 +312,7 @@ final readonly class MethodRenamePlanner
             return;
         }
         foreach ($family as $method) {
-            if (stripos($relation->receiverType, $method->owner->fqn) === false) {
+            if (!$this->receiverTypeContainsOwner($relation->receiverType, $method->owner->fqn)) {
                 continue;
             }
             $blindSpots[] = new RenameBlindSpot(
@@ -324,6 +324,16 @@ final readonly class MethodRenamePlanner
             );
             return;
         }
+    }
+
+    private function receiverTypeContainsOwner(string $receiverType, string $ownerFqn): bool
+    {
+        $ownerPattern = preg_quote(ltrim($ownerFqn, '\\'), '/');
+
+        return preg_match(
+            '/(?<![A-Za-z0-9_\\\\])\\\\?' . $ownerPattern . '(?![A-Za-z0-9_\\\\])/i',
+            $receiverType,
+        ) === 1;
     }
 
     /**
