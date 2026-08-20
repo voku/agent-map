@@ -22,6 +22,12 @@ final class DogfoodNavigationReplayEvidenceTest extends TestCase
 
     private string $checkout;
 
+    /**
+     * Build a throwaway frozen checkout: two PHP files, one commit, no remote.
+     *
+     * The replay harness only requires a git HEAD it can pin and PHP sources it can index, so a
+     * local repository is enough to exercise the whole publication path without a network clone.
+     */
     protected function setUp(): void
     {
         if (!SearchIndexStore::supportsFts5()) {
@@ -91,6 +97,7 @@ final class DogfoodNavigationReplayEvidenceTest extends TestCase
         $this->git('-c user.email=dogfood@example.com -c user.name=dogfood commit -q -m "frozen"');
     }
 
+    /** Remove the checkout, the artifacts and every report the run published. */
     protected function tearDown(): void
     {
         $this->removeDirectory($this->workspace);
@@ -172,6 +179,12 @@ final class DogfoodNavigationReplayEvidenceTest extends TestCase
         self::assertStringContainsString('--backend must be structural or phpstan', $result['output']);
     }
 
+    /**
+     * A replay fixture for the throwaway checkout, pinned to its real HEAD by default.
+     *
+     * Passing a `$baseCommit` that does not exist is how the tests reach the harness's early
+     * failure paths without corrupting the checkout itself.
+     */
     private function writeFixture(?string $baseCommit = null): string
     {
         $fixture = [
@@ -235,6 +248,7 @@ final class DogfoodNavigationReplayEvidenceTest extends TestCase
         return ['status' => $status, 'output' => implode("\n", $output)];
     }
 
+    /** The commit a fixture must name for the harness to accept this checkout. */
     private function head(): string
     {
         $output = [];
@@ -243,6 +257,12 @@ final class DogfoodNavigationReplayEvidenceTest extends TestCase
         return trim(implode('', $output));
     }
 
+    /**
+     * Run a git command in the checkout and fail the test with git's own output if it did not work.
+     *
+     * Availability is probed in setUp, so a failure here is a real problem rather than a missing
+     * tool on the host.
+     */
     private function git(string $arguments): void
     {
         $output = [];
@@ -251,6 +271,7 @@ final class DogfoodNavigationReplayEvidenceTest extends TestCase
         self::assertSame(0, $status, implode("\n", $output));
     }
 
+    /** Recursive cleanup limited to the test's own workspace. */
     private function removeDirectory(string $directory): void
     {
         if (!is_dir($directory)) {

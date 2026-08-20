@@ -13,12 +13,14 @@ final class DogfoodSummarizeReplaysTest extends TestCase
 {
     private string $reports;
 
+    /** An empty reports directory, so each case controls exactly what the summary can see. */
     protected function setUp(): void
     {
         $this->reports = sys_get_temp_dir() . '/agent-map-dogfood-summary-' . bin2hex(random_bytes(8));
         mkdir($this->reports, 0o775, true);
     }
 
+    /** Remove the reports directory and everything the case wrote into it. */
     protected function tearDown(): void
     {
         foreach (glob($this->reports . '/*') ?: [] as $file) {
@@ -62,6 +64,12 @@ final class DogfoodSummarizeReplaysTest extends TestCase
         self::assertStringContainsString('| demo | structural |', $result['output']);
     }
 
+    /**
+     * Write the smallest report shape the summary accepts, with both backends stated explicitly.
+     *
+     * `$requested` and `$effective` are separate parameters because the interesting case is the one
+     * where they disagree - a report that a filename would present as PHPStan evidence.
+     */
     private function writeReport(string $name, string $requested, string $effective): void
     {
         $report = [
