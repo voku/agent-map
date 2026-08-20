@@ -1,0 +1,96 @@
+name: Prepare 0.8.3 release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prepare-0.8.3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Prepare exact release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='dbbe666ae92182eed8a6ebbfb453ac804399c75e'
+          git merge-base --is-ancestor "${target}" HEAD
+
+          php <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          $path = 'CHANGELOG.md';
+          $text = file_get_contents($path);
+          if ($text === false) {
+              throw new RuntimeException('Cannot read CHANGELOG.md');
+          }
+          if (str_contains($text, '## 0.8.3 - 2026-08-20')) {
+              throw new RuntimeException('0.8.3 section already exists');
+          }
+
+          $unreleased = "## Unreleased\n\n";
+          if (substr_count($text, $unreleased) !== 1) {
+              throw new RuntimeException('Unreleased changelog anchor is not unique');
+          }
+          $text = str_replace(
+              $unreleased,
+              "## Unreleased\n\n## 0.8.3 - 2026-08-20\n\n",
+              $text,
+              $count,
+          );
+          if ($count !== 1) {
+              throw new RuntimeException('Failed to create 0.8.3 changelog section');
+          }
+
+          $added = "## 0.8.3 - 2026-08-20\n\n### Added\n\n";
+          $replacement = $added
+              . "- Record the exact Composer package reference used by PHPStan-backed maps in `AnalysisFingerprint`; structural-only maps record `none`, while historical fingerprints without the field remain explicitly `unknown`.\n";
+          $text = str_replace($added, $replacement, $text, $count);
+          if ($count !== 1) {
+              throw new RuntimeException('Failed to extend 0.8.3 Added section');
+          }
+
+          $next = "## 0.8.2 - 2026-08-18\n";
+          $validation = "### Validation\n\n"
+              . "- PR #27 passed the full PHP 8.2-8.5 CI matrix, temporal dogfood, structural-without-PHPStan validation, and external review before merge.\n"
+              . "- PR #28 passed the same PHP 8.2-8.5 CI matrix, temporal dogfood, the explicit `composer install --no-dev` structural build, and CodeRabbit with no actionable comments.\n\n";
+          if (substr_count($text, $next) !== 1) {
+              throw new RuntimeException('0.8.2 changelog anchor is not unique');
+          }
+          $text = str_replace($next, $validation . $next, $text, $count);
+          if ($count !== 1) {
+              throw new RuntimeException('Failed to append 0.8.3 validation');
+          }
+
+          if (file_put_contents($path, $text) === false) {
+              throw new RuntimeException('Cannot write CHANGELOG.md');
+          }
+          PHP
+
+          mkdir -p .release
+          cat > .release/0.8.3.json <<'JSON'
+          {
+            "version": "0.8.3",
+            "target_sha": "dbbe666ae92182eed8a6ebbfb453ac804399c75e"
+          }
+          JSON
+
+          rm .github/workflows/prepare-0.8.3.yml
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CHANGELOG.md .release/0.8.3.json .github/workflows/prepare-0.8.3.yml
+          git diff --cached --check
+          git commit -m 'release: prepare 0.8.3'
+          git push origin HEAD:main
