@@ -113,34 +113,40 @@ final class SourceClassNameLocator
         array &$blindSpots,
     ): void {
         if ($node instanceof Use_) {
-            if ($node->type === Use_::TYPE_NORMAL) {
-                foreach ($node->uses as $use) {
-                    if ($use instanceof UseItem && $use->type === Use_::TYPE_NORMAL) {
-                        $this->collectImport($use->name, $use->name->toString(), $path, $sourceSha256, $targetFqn, $replacementShort, $symbolId, $edits);
-                    }
+            foreach ($node->uses as $use) {
+                if (!$use instanceof UseItem || !$this->isClassUse($use, $node->type)) {
+                    continue;
                 }
+                $this->collectImport(
+                    $use->name,
+                    $use->name->toString(),
+                    $path,
+                    $sourceSha256,
+                    $targetFqn,
+                    $replacementShort,
+                    $symbolId,
+                    $edits,
+                );
             }
             return;
         }
 
         if ($node instanceof GroupUse) {
-            if ($node->type === Use_::TYPE_NORMAL) {
-                $prefix = $node->prefix->toString();
-                foreach ($node->uses as $use) {
-                    if (!$use instanceof UseItem || $use->type !== Use_::TYPE_NORMAL) {
-                        continue;
-                    }
-                    $this->collectImport(
-                        $use->name,
-                        $prefix . '\\' . $use->name->toString(),
-                        $path,
-                        $sourceSha256,
-                        $targetFqn,
-                        $replacementShort,
-                        $symbolId,
-                        $edits,
-                    );
+            $prefix = $node->prefix->toString();
+            foreach ($node->uses as $use) {
+                if (!$use instanceof UseItem || !$this->isClassUse($use, $node->type)) {
+                    continue;
                 }
+                $this->collectImport(
+                    $use->name,
+                    $prefix . '\\' . $use->name->toString(),
+                    $path,
+                    $sourceSha256,
+                    $targetFqn,
+                    $replacementShort,
+                    $symbolId,
+                    $edits,
+                );
             }
             return;
         }
@@ -158,22 +164,25 @@ final class SourceClassNameLocator
             }
         }
 
-        if ($node instanceof Name && $this->resolvedFqn($node) !== null && strcasecmp((string) $this->resolvedFqn($node), $targetFqn) === 0) {
-            $token = $this->token($path, $node);
-            if (strcasecmp($this->lastSegment($token['expected']), $expectedShort) === 0) {
-                $edits[] = new RenameEdit(
-                    path: $path,
-                    sourceSha256: $sourceSha256,
-                    startFilePos: $token['start_file_pos'],
-                    endFilePos: $token['end_file_pos'],
-                    lineStart: $node->getStartLine(),
-                    lineEnd: $node->getEndLine(),
-                    expected: $token['expected'],
-                    replacement: $this->replaceLastSegment($token['expected'], $replacementShort),
-                    role: 'class_reference',
-                    symbolId: $symbolId,
-                    resolution: 'parser_resolved',
-                );
+        if ($node instanceof Name) {
+            $resolvedFqn = $this->resolvedFqn($node);
+            if ($resolvedFqn !== null && strcasecmp($resolvedFqn, $targetFqn) === 0) {
+                $token = $this->token($path, $node);
+                if (strcasecmp($this->lastSegment($token['expected']), $expectedShort) === 0) {
+                    $edits[] = new RenameEdit(
+                        path: $path,
+                        sourceSha256: $sourceSha256,
+                        startFilePos: $token['start_file_pos'],
+                        endFilePos: $token['end_file_pos'],
+                        lineStart: $node->getStartLine(),
+                        lineEnd: $node->getEndLine(),
+                        expected: $token['expected'],
+                        replacement: $this->replaceLastSegment($token['expected'], $replacementShort),
+                        role: 'class_reference',
+                        symbolId: $symbolId,
+                        resolution: 'parser_resolved',
+                    );
+                }
             }
         }
 
@@ -192,6 +201,13 @@ final class SourceClassNameLocator
                 }
             }
         }
+    }
+
+    private function isClassUse(UseItem $use, int $containerType): bool
+    {
+        $effectiveType = $use->type === Use_::TYPE_UNKNOWN ? $containerType : $use->type;
+
+        return $effectiveType === Use_::TYPE_NORMAL;
     }
 
     /** @param list<RenameEdit> $edits */
