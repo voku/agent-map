@@ -239,7 +239,7 @@ PHP);
      * Builds the smallest faithful map: structural declarations come from the real parser, while
      * semantic override/call relations are supplied exactly as the PHPStan backend would publish them.
      *
-     * @param list<string>|null $callTargets
+     * @param non-empty-list<string>|null $callTargets
      * @param list<RelationEntry>|null $relations
      */
     private function map(
@@ -267,7 +267,7 @@ PHP);
     /**
      * Returns the semantic and type-family edges needed by the rename planner.
      *
-     * @param list<string>|null $callTargets
+     * @param non-empty-list<string>|null $callTargets
      * @return list<RelationEntry>
      */
     private function relations(?array $callTargets = null, string $callResolution = 'phpstan_resolved'): array
@@ -359,7 +359,10 @@ PHP);
         return $rewritten;
     }
 
-    /** @param list<RenameEdit> $edits @return list<string> */
+    /**
+     * @param list<RenameEdit> $edits
+     * @return list<string>
+     */
     private function sortedRoles(array $edits): array
     {
         $roles = array_map(static fn (RenameEdit $edit): string => $edit->role, $edits);
