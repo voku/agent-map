@@ -15,11 +15,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Classify the Map surface by measured role - product path, expert/diagnostic, unproven - and record
   which capabilities currently pay rent, which need their own replay before anyone claims they do,
   and which are subtraction candidates.
+- Fail closed on dogfood replay backend mismatch: a replay publishes evidence only when the built
+  map's own effective backend proves the backend that was requested, and every report records
+  agent-map's `AnalysisFingerprint` so PHPStan provenance no longer has to be reconstructed later.
+- Reject contradictory replay reports at the summary boundary instead of rendering them as rows.
+
+### Fixed
+
+- Restore the replay harness's strategy, projection and reporting half, which was lost when #26 was
+  merged; the committed measurements regenerate byte-identically again.
 
 ### Changed
 
 - No product behaviour changed. The evidence is deliberately separate from any change it may later
-  justify.
+  justify, and measurement policy, budgets, ranking and grading are untouched.
 
 ## 0.8.2 - 2026-08-18
 
