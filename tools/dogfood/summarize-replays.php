@@ -30,19 +30,27 @@ sort($files, SORT_STRING);
 $rows = [];
 foreach ($files as $file) {
     $report = json_decode((string) file_get_contents($file), true);
-    if (!is_array($report)) {
+    if (
+        !is_array($report)
+        || !is_array($report['replay'] ?? null)
+        || !is_array($report['strategies'] ?? null)
+        || !is_array($report['observation_envelope'] ?? null)
+    ) {
         continue;
     }
     $envelope = $report['observation_envelope'];
     foreach ($report['strategies'] as $strategy) {
+        if (!is_array($strategy)) {
+            continue;
+        }
         $readBytes = $strategy['source_bytes_read_window_model']
             ?? $strategy['source_bytes_read_before_correct_range']
             ?? 0;
         $rows[] = [
-            'replay' => $report['replay']['id'],
-            'shape' => $report['replay']['shape'],
-            'backend' => $envelope['requested_backend'] ?? $envelope['backend'],
-            'strategy' => $strategy['strategy'],
+            'replay' => $report['replay']['id'] ?? 'unknown',
+            'shape' => $report['replay']['shape'] ?? 'unknown',
+            'backend' => $envelope['requested_backend'] ?? $envelope['backend'] ?? 'unknown',
+            'strategy' => $strategy['strategy'] ?? 'unknown',
             'file_hit' => ($strategy['correct_edit_file_found'] ?? false) ? 'yes' : 'no',
             'range_hit' => ($strategy['correct_edit_range_found'] ?? false) ? 'yes' : 'no',
             'files' => $strategy['files_opened_before_correct_location'] ?? null,
@@ -57,7 +65,7 @@ foreach ($files as $file) {
             'test' => ($strategy['correct_test_file_found'] ?? false) ? 'yes' : 'no',
             'commands' => $strategy['commands'] ?? 0,
             'deep_rank' => array_key_exists('deep_rank_of_verified_range', $strategy)
-                ? ($strategy['deep_rank_of_verified_range'] ?? 'below ' . $strategy['deep_rank_limit'])
+                ? ($strategy['deep_rank_of_verified_range'] ?? 'below ' . ($strategy['deep_rank_limit'] ?? 'unknown'))
                 : 'n/a',
         ];
     }
