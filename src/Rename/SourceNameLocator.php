@@ -16,7 +16,7 @@ use voku\SimplePhpParser\Parsers\PhpCodeParser;
 /** Resolves semantic map evidence to one exact identifier token in current source. */
 final class SourceNameLocator
 {
-    /** @var array<string, list<Node>> */
+    /** @var array<string, array<int, Node>> */
     private array $astByPath = [];
 
     /** @var array<string, string> */
