@@ -27,6 +27,11 @@ final readonly class CliApplication
             return $temporal->run($argv);
         }
 
+        $classRename = new ClassRenameCliApplication(artifacts: $artifacts);
+        if ($classRename->supports($argv)) {
+            return $classRename->run($argv);
+        }
+
         $rename = new RenameCliApplication(artifacts: $artifacts);
         if ($rename->supports($argv)) {
             return $rename->run($argv);
@@ -47,6 +52,9 @@ final readonly class CliApplication
         }
         if ($rename->shouldAppendToGeneralHelp($argv)) {
             echo $rename->helpOverview();
+        }
+        if ($classRename->shouldAppendToGeneralHelp($argv)) {
+            echo $classRename->helpOverview();
         }
         if ($discovery->shouldAppendToGeneralHelp($argv)) {
             echo $discovery->helpOverview();
