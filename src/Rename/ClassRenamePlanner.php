@@ -119,6 +119,7 @@ final readonly class ClassRenamePlanner
         }
 
         $qualified = str_contains($target, '\\');
+        /** @var list<array{file: FileEntry, symbol: SymbolEntry}> $matches */
         $matches = [];
         foreach ($map->files as $file) {
             foreach ($file->symbols as $symbol) {
@@ -197,18 +198,14 @@ final readonly class ClassRenamePlanner
         $directory = dirname($file->path);
         $toPath = ($directory === '.' ? '' : $directory . '/') . $replacementShort . '.php';
         $absoluteTarget = rtrim($map->root, '/\\') . '/' . $toPath;
-        if (is_file($absoluteTarget)) {
-            return [null, null, 'Replacement class file already exists: ' . $toPath];
+        if (file_exists($absoluteTarget) || is_link($absoluteTarget)) {
+            return [null, null, 'Replacement class path already exists: ' . $toPath];
         }
 
-        $typeSymbols = array_values(array_filter(
-            $file->symbols,
-            static fn (SymbolEntry $candidate): bool => in_array($candidate->kind, ['class', 'interface', 'trait', 'enum'], true),
-        ));
-        $blindSpot = count($typeSymbols) > 1
+        $blindSpot = count($file->symbols) > 1
             ? new RenameBlindSpot(
                 kind: 'multi_symbol_file_move',
-                message: 'Renamed class shares its file with other type declarations; moving the file may affect their autoload contract.',
+                message: 'Renamed class shares its file with other declarations; moving the file may affect their loading or autoload contract.',
                 path: $file->path,
                 lineStart: $symbol->lineStart,
                 lineEnd: $symbol->lineEnd,
