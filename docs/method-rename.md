@@ -6,7 +6,7 @@ It does **not** modify source code. The map owns semantic identity and evidence;
 
 ```bash
 vendor/bin/agent-map rename-plan \
-  'App\\Service\\UserService::save' \
+  'App\Service\UserService::save' \
   persist \
   --format=json
 ```
