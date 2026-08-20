@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   compare a grep/read baseline, the projection `agent-loop` builds today, and agent-map's existing
   exact surfaces, under both the structural and PHPStan backends
   (`docs/dogfood/map-navigation-evidence.md`, harness and raw reports in `tools/dogfood/`).
+- Classify the Map surface by measured role - product path, expert/diagnostic, unproven - and record
+  which capabilities currently pay rent, which need their own replay before anyone claims they do,
+  and which are subtraction candidates.
 
 ### Changed
 

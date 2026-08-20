@@ -16,8 +16,8 @@ evidence-backed decisions per capability, including the ones that say *do not ch
 | component | pinned at |
 | --- | --- |
 | agent-map | `d09510d` (0.8.2) |
-| agent-loop (consumer, read-only census) | `3b7190d` |
-| agent-recall-compiler (consumer, read-only census) | `54ccf16` |
+| agent-loop (consumer, read-only census) | `3b7190d`, re-checked against main `f8fc8ff` - see *Since the freeze* |
+| agent-recall-compiler (consumer, read-only census) | `54ccf16`, which is current main |
 | PHP | 8.4.19, SQLite FTS5 available, sqlite-vec loadable |
 | phpstan/phpstan | 2.2.x-dev, installed for the `phpstan` rows only |
 
@@ -26,10 +26,13 @@ That is not a detail. See the first finding.
 
 ## M0 - capability-consumption census
 
-What the ordinary workflow actually consumes, as opposed to what exists. "Consumer" means the code
-that reads the result; "activation" is what has to be true for it to run at all. Output sizes are
-measured on the frozen Simple-PHP-Code-Parser checkout (71 files, phpstan backend) with the format
-each consumer uses.
+What the ordinary workflow consumed **at the pinned consumer revisions above**, as opposed to what
+exists. "Consumer" means the code that reads the result; "activation" is what has to be true for it
+to run at all. Output sizes are measured on the frozen Simple-PHP-Code-Parser checkout (71 files,
+phpstan backend) with the format each consumer uses.
+
+This is a census of one frozen day, and consumers move. Read every "consumes" below as "consumed at
+`3b7190d` / `54ccf16`", not as a standing claim about agent-loop main.
 
 | capability | producer | consumer | activation | host-visible | measured output | verdict |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -56,6 +59,25 @@ Two census facts matter more than the rest:
 2. **The owner default policy is not the Loop policy.** `EditContextPolicy` defaults to 20 files /
    60 KB; the Loop passes 6 files / 16 KB. The tighter budget is a Loop consumption decision, and it
    is measurable independently - see probe E.
+
+### Since the freeze
+
+agent-loop main has moved past the pinned revision. Checked against `f8fc8ff`:
+
+- **The measured path is unchanged.** `WorkflowRankedMapContextExpander` and `EditMapPreparer` are
+  byte-identical to `3b7190d`, so the expansion this experiment replays is still today's expansion.
+- **The preparation choreography changed.** [#243](https://github.com/voku/agent-loop/pull/243) moved
+  Map discovery out of a host precondition and into `enter`, which now reconciles through
+  `AgentMapBuilder` itself (`WorkflowRunPreparer`, +70/-6). Nothing about the projection changed.
+- **The ranked Search index is still not a precondition.** #243 declines to build it on purpose, so
+  strategy B's activation stays conditional in practice: a run can have a current map and no search
+  index at all.
+- **agent-recall-compiler `54ccf16` is current main**, so the recall-side census needs no caveat.
+
+One consequence sharpens finding 1 rather than weakening it. `AgentMapBuilder` picks its backend in
+its constructor, from `PhpStanSemanticAnalyzer::isAvailable()`. Now that `enter` builds the map, the
+structural-vs-phpstan capability difference is decided inside the lifecycle by whatever happens to
+be installed in the consumer project - with no human choice and no consumer reading the result.
 
 ## M1 - three frozen replays
 
@@ -166,10 +188,13 @@ return empty, and the Loop's test-seed callee expansion never fires. That is exa
 both map strategies on the cross-file replay: with phpstan, B reaches the un-named location; without
 it, B and C both miss while the baseline still finds it in 10 files.
 
-The fact is already mechanically exposed - `AgentMapIndex::backend` reads
-`simple-php-code-parser+structural-only`, and readiness hands the index to its consumers. Nothing
-consumes it. This is the one place where the evidence points at a real gap, and the gap is in
-consumption, not in agent-map's data.
+The fact is already mechanically exposed twice over: `AgentMapIndex::backend` reads
+`simple-php-code-parser+structural-only`, readiness hands the index to its consumers, and recall's
+`map.snapshot` fact already carries `backend` into the prompt as `navigation_metadata`. What nobody
+draws is the *consequence* - structural means the graph questions are unanswerable, not that the
+answer is "none". The gap is in consumption, not in agent-map's data, which is a pattern worth
+naming: the owner already knows, the projection already carries it, the consumer ignores the
+semantic consequence, and the next instinct is to add another API.
 
 ### 2. On a local-method task, Map is a large, cheap win
 
@@ -239,32 +264,84 @@ measures the deep rank instead of reading silence as "not there".
 | ranked Search is useful only after a narrower structural seed exists | **not supported**: on `portable-ascii-135` the raw description ranks the answer 2nd-3rd with no seed at all |
 | current 6-file / 16 KB expansion is too broad or too narrow | **neither**: probe E changes no outcome and only adds bytes |
 | an observation-scope fact is missing and causes unsafe absence inference | **no missing fact, one unconsumed one**: backend identity and the absence of `calls` relations are already in the index; no consumer reads them, so a structural-map miss looks like a code fact |
-| no product change is justified | **for agent-map, correct** - see below |
+| no product change is justified | **for agent-map, correct.** The changes this evidence does support are consumption changes and subtractions - see the follow-up list |
+
+## What the product actually is
+
+The clearest structural result is not about Search at all. On the cross-file replay the verified
+range sits at rank 20, outside any limit the Loop would sanely use, and the Loop finds it anyway -
+because a rank-8 neighbour expands through `EditContextPlanner` to a direct caller. On the
+local-method replay under phpstan the same thing happens one step earlier: the rank-1 lead is a
+*test*, and its non-test callee is the fix location.
+
+That is a different mental model from "Search is a location oracle":
+
+```text
+task text        -> HybridSearch          = seed generator, not an answer
+seed             -> EditContextPlanner    = evidence refiner, exact and bounded
+named range      -> real source read      = the only authority
+```
+
+Read that way, two of this experiment's negative results stop being surprising. Optimising Search
+for final placement (probe D) attacks the wrong stage and cost one replay its hit. Widening the
+projection budget (probe E) buys nothing because the answer was never being cut off - it was being
+reached by expansion, and expansion was already in the budget.
+
+It also suggests the product path is smaller than the CLI surface:
+
+```text
+PRODUCT PATH        Search -> Planner -> bounded reads
+EXPERT / DIAGNOSTIC callers, callees, scope, impact, temporal
+UNPROVEN            rank, and the automatic breadth of discover
+OTHER CHANNEL       literal / data / config questions -> native text search
+```
+
+The last line is not a gap to close. `portable-ascii-62` is a task where the correct observation
+channel is grep, and the existing agent-loop investigate skill already says to use `rg` when the map
+cannot answer a literal/string/config/template question. That boundary held up; agent-map does not
+need to become a general repository search engine to cover it.
 
 ## Per-capability decision
 
 | capability | decision |
 | --- | --- |
 | `EditContextPlanner` (Loop policy) | **consume, unchanged.** It produced every map range hit in the experiment, including the cross-file one that ranking put at position 20. |
-| ranked hybrid Search | **consume, unchanged.** Useful as a seed supplier and, on two of three replays, as the channel that names the right validator; do not tune ranking from these three tasks, and do not switch its query formulation (probe D). |
-| `MapReadinessInspector` | **consume, extend consumption (agent-loop side).** It already hands the index over; the Loop should read `backend` and say so when a structural-only map cannot answer a neighbour question. |
+| ranked hybrid Search | **consume, unchanged, and treat it as a seed generator.** Useful for reaching a structural entry point and, on two of three replays, for naming the right validator; do not tune ranking from these three tasks, and do not switch its query formulation (probe D). |
+| `MapReadinessInspector` | **consume, extend consumption (agent-loop side).** It already hands the index over, and recall already projects `backend`; what is missing is the consequence when the backend cannot answer graph questions. |
 | exact `callers` / `callees` | **retain as model-invoked.** No replay justified an automatic consumer; their value in B came through the planner, which already uses them. |
-| `impact` | **retain as model-invoked, diagnostic.** 15.6 KB text / 53 KB json, no replay needed it. |
-| `discover` | **retain, but unproven.** Measured cost 9.7-54 KB depending on format; no replay in this experiment activates it (all three tasks name files or symbols). It needs its own frozen replay before anyone claims it pays for itself. |
-| `rank` | **do not use on these task shapes.** No consumer, no skill, no measured benefit; nothing in three replays wanted a repository-wide importance ranking. |
-| `scope` | **retain as CLI, unconsumed.** Also unused and unmentioned in any skill, but it is the cheapest exact call listing agent-map has (1.3 KB for one method against 34 KB for `context` text). If a future task shape needs callees without a projection, this is the surface to consume - not a new command. |
-| `query` / `related` / `file` / `changed` | **no decision - not measured.** These are the commands the agent-loop skills actually put in front of a model, and no strategy here stands in for them: A is grep, B and C are automatic. Measuring model-invoked map navigation needs a different experiment, and this one should not be read as evidence about it. |
+| `impact` | **retain as model-invoked, and validate on one real task.** 15.6 KB text / 53 KB json, and no replay needed it - but no replay tested a change-risk question either. Next genuine shared-method change: run it once and record whether it produced a relevant location the planner and callers had not already supplied. Repeated "no" moves it out of the standard skill path. |
+| `discover` | **retain, unproven, and the next rent question.** Measured cost 9.7-54 KB depending on format, and it is not merely a CLI: recall emits it automatically for tasks that name no files and no targets. No replay here activates it. The experiment it needs is one under-specified real task: did architecture discovery change the first useful read set? |
+| `rank` | **subtraction candidate.** No automatic consumer, no skill mention, no replay that wanted a repository-wide importance ranking, ~4.7 KB for a top-10. That is API, CLI, documentation and maintenance surface with no demonstrated workflow effect in this stack. Not a deletion today - external consumers are not ruled out - but it should stop being retained by default. |
+| `scope` | **retain as a cheap primitive.** Also unconsumed and unmentioned in any skill, but 1.3 KB for one method's exact call listing against 34 KB for `context` text. Unused plus duplicative plus expensive is a deletion candidate; unused plus substantially cheaper plus unique bounded evidence is not the same thing. If a future task needs callees without a projection, consume this rather than adding a command. |
+| `query` / `related` / `file` / `changed` | **no decision - not measured.** These are the commands the agent-loop skills actually put in front of a model, and no strategy here stands in for them: A is grep, B and C are automatic. |
 | temporal history / claims | **out of scope here**; none of the three tasks is a change-risk question. |
 | a new `neighbours` command or a new observation fact | **not justified.** Nothing in the table needed a query the existing surfaces cannot express. |
 
-The smallest change this evidence supports is not in agent-map at all: it is one consumption change
-in agent-loop, gated on a fact agent-map already publishes. Recommended, not implemented here, and
-deliberately not bundled with the measurement:
+Two asymmetries are worth carrying forward from that table. Unused is not one verdict: `rank` and
+`scope` are both unconsumed, and only one of them is a subtraction candidate. And the surface this
+experiment can speak about is narrower than the surface the skills teach - the automatic path is now
+better understood than the path we explicitly hand to models, which is the wrong way round.
 
-> When `WorkflowRankedMapContextExpander` expands a seed and `$index->backend` reports a
-> structural-only map, say so in the same `skip`/blind-spot channel it already uses. A model that
-> reads "no callers" from a map with zero call relations is inferring absence from a channel that
-> cannot observe presence.
+### Follow-ups this evidence supports
+
+Ordered, each gated on what was actually measured. None of them is implemented here; keeping the
+measurement separate from the changes it may justify is the point.
+
+1. **agent-loop correctness (small, safe).** When the expander runs against a structural-only map,
+   say so in the `skip`/blind-spot channel it already uses. A model that reads "no callers" from a
+   map with zero call relations is inferring absence from a channel that cannot observe presence.
+2. **Rent check on `discover`.** At the next genuinely under-specified real task, record whether the
+   automatic architecture-discovery fact changed the first useful read set. If it did not, a large
+   automatic projection can be reduced or removed - a bigger win than any ranking work.
+3. **Skill-surface reduction, by observation not by benchmark.** On the next real investigation
+   tasks, log `command used -> unique useful location gained? yes/no` for `query`, `related`, `file`,
+   `changed`, `impact` and the history commands, and drop from the standard guidance whatever keeps
+   answering no. Do not build a second benchmark for this.
+4. **Freeze or retire `rank`** once external use is checked.
+5. **Leave Search and `EditContextPlanner` alone.** No query tuning, no budget widening; both were
+   tested and both made things worse or made no difference.
+6. **Keep native text search as a first-class channel** for literal/data/config work instead of
+   growing agent-map to cover it.
 
 ## Threats to validity
 
