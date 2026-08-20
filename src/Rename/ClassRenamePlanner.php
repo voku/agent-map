@@ -55,6 +55,7 @@ final readonly class ClassRenamePlanner
         }
 
         $locator = new SourceClassNameLocator($map->root);
+        $scopeGuard = new ClassRenameScopeGuard($map->root);
         $edits = [];
         try {
             $declaration = $locator->declaration($file->path, $symbol->lineStart, $symbol->lineEnd, $symbol->name);
@@ -77,6 +78,12 @@ final readonly class ClassRenamePlanner
 
         foreach ($map->files as $candidateFile) {
             try {
+                $scopeGuard->assertReplacementAvailable(
+                    $candidateFile->path,
+                    ltrim($symbol->fqn, '\\'),
+                    $symbol->name,
+                    $replacementShort,
+                );
                 $references = $locator->references(
                     $candidateFile->path,
                     $candidateFile->sha256,
