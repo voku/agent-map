@@ -318,6 +318,13 @@ Recommended `.gitignore` entry:
 
 Commit a map only when a repository explicitly wants a versioned snapshot.
 
+## Evidence
+
+[Does bounded Map navigation reduce LLM reading?](docs/dogfood/map-navigation-evidence.md) replays
+three already-solved PHP issues against a grep/read baseline, the projection `agent-loop` builds
+today, and agent-map's existing exact surfaces, and records where each one helps, where it costs
+more than it returns, and which capabilities nothing consumes. The harness is in `tools/dogfood/`.
+
 ## Development
 
 ```bash

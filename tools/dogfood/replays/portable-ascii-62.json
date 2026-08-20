@@ -1,0 +1,34 @@
+{
+    "schema_version": "1.0",
+    "id": "portable-ascii-62",
+    "shape": "data-config-location",
+    "repository": "https://github.com/voku/portable-ascii",
+    "base_commit": "c5aede519cc55833267bcbb421b222d7aacfaa06",
+    "fix_commit": "4732e5dd78fe2c161e90a238077200f241acdeef",
+    "fix_reference": "https://github.com/voku/portable-ascii/pull/156",
+    "task": {
+        "source": "https://github.com/voku/portable-ascii/issues/62, frozen verbatim in that repository as tools/agent-loop/dogfood/issue-62.json (commit e3d1c46)",
+        "title": "[DE] MacOS (Big Sur or M1) uses multi character German umlaute",
+        "text": "[DE] MacOS (Big Sur or M1) uses multi character German umlaute\n\n#### What is this feature about (expected vs actual behaviour)?\n\nMacOS filesystem replaces German (single character) umlaute with a two characters since Big Sur or only on M1 machines.\nThese are replaced with a simple `a` instead of `ae`. Expected behavior would be to replace these combined characters the same way as the single character umlaute are treated.\n\n#### How can I reproduce it?\n\n* create a new file or folder with `ä`, `ö` or `ü` - persist the filename (ENTER)\n* open the filename change dialog and copy the shown `ä/ö/ü` character\n* run it through the ASCII class\n\nThe real-world scenario would be to sanitize an uploaded filename.\n\n#### Does it take minutes, hours or days to fix?\n\nThe local fix took minutes (added a `str_replace()` before running the ASCII conversion) but no idea how much it will take to properly add it to the package.\n\n#### Any additional information?\n\nIn hope that GitHub doesn't replace the characters - here it is `ä` - the codepoints are `U+61 U+308`.\nhttps://www.fileformat.info/info/unicode/char/61/index.htm\nhttps://www.fileformat.info/info/unicode/char/308/index.htm\n\nI'm not sure if this would be the expected behavior of the package or I want it to do something that's not in the scope of that package. We have a working solution right now - so it's in no way urgent."
+    },
+    "source_paths": [
+        "src",
+        "tests"
+    ],
+    "verified": {
+        "edit_files": [
+            "src/voku/helper/data/ascii_by_languages.php"
+        ],
+        "edit_ranges": [
+            {
+                "file": "src/voku/helper/data/ascii_by_languages.php",
+                "start": 2037,
+                "end": 2046,
+                "note": "the German replacement block; the fix adds the decomposed umlaut keys here"
+            }
+        ],
+        "test_files": [],
+        "test_note": "no pre-existing validator: the fix added a new tests/AsciiDecomposedUmlautTest.php, so test discovery is not measurable for this replay"
+    },
+    "grading_note": "The production edit is a symbol-less PHP data file. No class, method or function declaration exists at the edit location."
+}

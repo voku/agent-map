@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "id": "portable-ascii-135",
+  "shape": "local-method",
+  "repository": "https://github.com/voku/portable-ascii",
+  "base_commit": "88f94f89fe03bed03eb8fbcfb84178a8a5eb1d5b",
+  "fix_commit": "acad28ab1b1b50480276edb89310ff2ecad3dee4",
+  "fix_reference": "https://github.com/voku/portable-ascii/pull/136",
+  "task": {
+    "source": "https://github.com/voku/portable-ascii/issues/135 plus the failing test merged as https://github.com/voku/portable-ascii/pull/134",
+    "title": "Inconsistence between `to_ascii` calls (since 2.10.0)",
+    "text": "Inconsistence between `to_ascii` calls (since 2.10.0)\n\nCf. the failing test PR for more informations: #134\n\nThe failing test merged from #134 (tests/AsciiTest.php):\n\n    public function testToAsciiLongCorrectAcrossRepeatedCalls()\n    {\n        $input = 'Webinaire des transitions n°34 - Agir et mobiliser pour la biodiversité dans son entreprise';\n        $output = 'Webinaire des transitions ndeg34 - Agir et mobiliser pour la biodiversite dans son entreprise';\n\n        static::assertSame($output, ASCII::to_ascii($input, 'en'), 'with cleanup');\n        static::assertSame($output, ASCII::to_ascii($input, 'en'), 'with cleanup warm');\n    }\n"
+  },
+  "source_paths": ["src", "tests"],
+  "verified": {
+    "edit_files": ["src/voku/helper/ASCII.php"],
+    "edit_ranges": [
+      {"file": "src/voku/helper/ASCII.php", "start": 795, "end": 947, "note": "ASCII::to_ascii - both fix hunks (base lines 828 and 893) are inside this one method"}
+    ],
+    "test_files": ["tests/AsciiTest.php"],
+    "test_note": "the reproduction test already exists at the base commit (testToAsciiLongCorrectAcrossRepeatedCalls)"
+  },
+  "grading_note": "The eventual fix inserts self::prepareAsciiMaps() before two use_transliterate decisions inside ASCII::to_ascii. Both are in one file and one method; nothing outside it changed."
+}

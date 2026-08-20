@@ -1,0 +1,44 @@
+{
+    "schema_version": "1.0",
+    "id": "simple-php-code-parser-101",
+    "shape": "cross-file-neighbour",
+    "repository": "https://github.com/voku/Simple-PHP-Code-Parser",
+    "base_commit": "53f1b5085ee883560afa9326ee914f6b23acd6ae",
+    "fix_commit": "7577948c1858c918abf646c27476abe216fdbfdc",
+    "fix_reference": "https://github.com/voku/Simple-PHP-Code-Parser/pull/102",
+    "task": {
+        "source": "https://github.com/voku/Simple-PHP-Code-Parser/issues/101, frozen verbatim in that repository as tools/agent-loop/dogfood/issue-101.json",
+        "title": "PHP 8.5: reflection `self` formatting diverges and null array-key deprecations surface",
+        "text": "PHP 8.5: reflection `self` formatting diverges and null array-key deprecations surface\n\nThe normal CI matrix exposed a current PHP 8.5-only failure while running the isolated agent-loop replay in #100. #100 does not modify production PHP or parser tests, so this is a separate product/runtime compatibility issue rather than part of that dogfood harness. On PHP 8.5.9, both parser-v4 and parser-v5 jobs fail while corresponding PHP 8.1-8.4 jobs pass. ReflectionTypeFormattingRegressionTest expects selfType to be 'self', but pure reflection and the full parse produce '\\voku\\tests\\ReflectionTypeFixture'. PHP 8.5 also reports 'Using null as an array offset is deprecated, use an empty string instead' at src/voku/SimplePhpParser/Parsers/PhpCodeParser.php:529. Treat the observations independently unless evidence proves one root cause. Preserve the intended cross-version public type model, AST/reflection consistency, parser-v4/v5 compatibility, existing PHP 8.1-8.4 behavior, PHPUnit and PHPStan."
+    },
+    "source_paths": [
+        "src",
+        "tests"
+    ],
+    "verified": {
+        "edit_files": [
+            "src/voku/SimplePhpParser/Model/PHPClass.php",
+            "src/voku/SimplePhpParser/Parsers/PhpCodeParser.php"
+        ],
+        "edit_ranges": [
+            {
+                "file": "src/voku/SimplePhpParser/Model/PHPClass.php",
+                "start": 38,
+                "end": 130,
+                "note": "PHPClass::readObjectFromPhpNode - AST/reflection merge loop for properties and methods (the location the issue text does not name)"
+            },
+            {
+                "file": "src/voku/SimplePhpParser/Parsers/PhpCodeParser.php",
+                "start": 457,
+                "end": 543,
+                "note": "PhpCodeParser::mergeInheritdocData - null parent lookup at base line 529, named verbatim in the issue text"
+            }
+        ],
+        "test_files": [
+            "tests/ReflectionTypeFormattingRegressionTest.php"
+        ],
+        "test_note": "the failing test exists at the base commit; the fix also added tests/InheritdocWithoutParentRegressionTest.php"
+    },
+    "grading_note": "Two independent locations. The issue names PhpCodeParser.php:529 outright, so the discovery question is only whether a strategy reaches PHPClass::readObjectFromPhpNode, which no strategy is told about. Primary location for grading is therefore the PHPClass one.",
+    "primary_location": "src/voku/SimplePhpParser/Model/PHPClass.php"
+}
