@@ -21,7 +21,7 @@ evidence-backed decisions per capability, including the ones that say *do not ch
 | PHP | 8.4.19, SQLite FTS5 available, sqlite-vec loadable |
 | phpstan/phpstan | `2.2.x-dev` historical replay environment; exact package source reference was not captured and cannot be reconstructed from committed evidence |
 
-Future replay runs should record the exact resolved PHPStan package version/source alongside the report. The historical rows below remain useful, but this missing package-level provenance is an explicit reproducibility limit rather than an invented pin.
+The historical rows below remain useful, but this missing package-level provenance is an explicit reproducibility limit rather than an invented pin - it cannot be reconstructed after the fact, so it is not going to be. New reports no longer have that gap: every replay now records agent-map's own `AnalysisFingerprint` (PHPStan version, PHPStan config digest, `composer.lock` digest, source digest) in its observation envelope.
 
 Every replay was run twice: once with `--backend=structural` and once with `--backend=phpstan`.
 That is not a detail. See the first finding.
@@ -153,3 +153,39 @@ The replay evidence supports the following bounded conclusions:
 - `discover`, `impact`, and model-invoked navigation surfaces need their own real-task evidence before stronger product claims.
 
 No product PHP change is justified by this report alone.
+
+## Evidence integrity
+
+A report is only comparable if the backend it claims is the backend that produced it, so the replay
+path refuses to publish anything it cannot prove:
+
+- a `--backend=phpstan` run stops before setup when phpstan/phpstan is unavailable, and stops again
+  after the build unless the map's own `AgentMapIndex::backend` names the PHPStan semantic backend;
+- a `--backend=structural` run is asserted the same way, so an installed PHPStan cannot silently
+  upgrade a structural measurement;
+- the report is written only after that check, to a temporary file that is renamed into place, and
+  the target is cleared when the run starts - a failed rerun leaves no earlier report where the
+  summary would read it as fresh evidence;
+- `summarize-replays.php` re-checks each report and fails the whole summary rather than rendering a
+  row whose requested and effective backends disagree.
+
+A filename like `portable-ascii-135-phpstan.json` is therefore a label, never the evidence.
+
+## Reproduction
+
+```bash
+composer install                     # phpstan/phpstan is required for the phpstan rows
+tools/dogfood/run-replays.sh /tmp/agent-map-dogfood
+```
+
+The script clones each replay's upstream repository, checks out the frozen base commit named by the
+fixture, runs all three replays under both backends, and prints the evidence table. One replay on its
+own:
+
+```bash
+php tools/dogfood/navigation-replay.php \
+    --replay=tools/dogfood/replays/portable-ascii-135.json \
+    --repo=/tmp/agent-map-dogfood/frozen/portable-ascii-135 \
+    --artifacts=/tmp/agent-map-dogfood/artifacts/portable-ascii-135-phpstan \
+    --backend=phpstan --json=/tmp/report.json
+```

@@ -13,7 +13,8 @@
   },
   "autoload-dev": {
     "psr-4": {
-      "voku\\AgentMap\\Tests\\": "tests/"
+      "voku\\AgentMap\\Tests\\": "tests/",
+      "voku\\AgentMap\\Dogfood\\": "tools/dogfood/"
     }
   },
   "require": {

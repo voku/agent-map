@@ -9,8 +9,23 @@ declare(strict_types=1);
  * the baseline pays grep output plus opened source, the map strategies pay the projection they add
  * to the prompt plus the exact ranges the model then reads.
  *
- * Usage: php tools/dogfood/summarize-replays.php --reports=/path/to/reports [--markdown]
+ * Reports that contradict themselves are rejected rather than summarised: a row claiming a PHPStan
+ * measurement that a structural-only map produced would be worse than no row at all, because it
+ * would look like evidence. Files that are not replay reports are skipped quietly - a directory may
+ * legitimately hold other JSON - but a file that *is* a replay report and disagrees with itself
+ * fails the whole summary.
+ *
+ * Usage: php tools/dogfood/summarize-replays.php --reports=/path/to/reports
  */
+
+$autoload = __DIR__ . '/../../vendor/autoload.php';
+if (!is_file($autoload)) {
+    fwrite(STDERR, "Run composer install first.\n");
+    exit(1);
+}
+require $autoload;
+
+use voku\AgentMap\Dogfood\ReplayBackendContract;
 
 $options = [];
 foreach (array_slice($argv, 1) as $argument) {
@@ -38,6 +53,13 @@ foreach ($files as $file) {
     ) {
         continue;
     }
+    try {
+        ReplayBackendContract::assertReportIsConsistent($report, 'Replay report ' . basename($file));
+    } catch (RuntimeException $exception) {
+        fwrite(STDERR, $exception->getMessage() . "\n");
+        exit(1);
+    }
+
     $envelope = $report['observation_envelope'];
     foreach ($report['strategies'] as $strategy) {
         if (!is_array($strategy)) {
@@ -49,7 +71,8 @@ foreach ($files as $file) {
         $rows[] = [
             'replay' => $report['replay']['id'] ?? 'unknown',
             'shape' => $report['replay']['shape'] ?? 'unknown',
-            'backend' => $envelope['requested_backend'] ?? $envelope['backend'] ?? 'unknown',
+            // Safe only because the report was proven self-consistent above.
+            'backend' => $envelope['requested_backend'],
             'strategy' => $strategy['strategy'] ?? 'unknown',
             'file_hit' => ($strategy['correct_edit_file_found'] ?? false) ? 'yes' : 'no',
             'range_hit' => ($strategy['correct_edit_range_found'] ?? false) ? 'yes' : 'no',
