@@ -26,12 +26,12 @@ final class SourceNameLocator
     {
     }
 
-    /** @return array{start_file_pos: int, end_file_pos: int} */
+    /** @return array{start_file_pos: int, end_file_pos: int, actual: string} */
     public function declaration(string $path, int $lineStart, int $lineEnd, string $expected): array
     {
         $matches = [];
         foreach ($this->nodes($path) as $node) {
-            if (!$node instanceof ClassMethod || $node->name->toString() !== $expected) {
+            if (!$node instanceof ClassMethod || strcasecmp($node->name->toString(), $expected) !== 0) {
                 continue;
             }
             if ($node->getStartLine() !== $lineStart || $node->getEndLine() !== $lineEnd) {
@@ -43,7 +43,7 @@ final class SourceNameLocator
         return $this->one($matches, $path, $lineStart, $lineEnd, 'method declaration', $expected);
     }
 
-    /** @return array{start_file_pos: int, end_file_pos: int} */
+    /** @return array{start_file_pos: int, end_file_pos: int, actual: string} */
     public function call(string $path, int $lineStart, int $lineEnd, string $expected): array
     {
         $matches = [];
@@ -51,7 +51,7 @@ final class SourceNameLocator
             if (!$node instanceof MethodCall && !$node instanceof NullsafeMethodCall && !$node instanceof StaticCall) {
                 continue;
             }
-            if (!$node->name instanceof Identifier || $node->name->toString() !== $expected) {
+            if (!$node->name instanceof Identifier || strcasecmp($node->name->toString(), $expected) !== 0) {
                 continue;
             }
             if ($node->getStartLine() !== $lineStart || $node->getEndLine() !== $lineEnd) {
@@ -64,8 +64,8 @@ final class SourceNameLocator
     }
 
     /**
-     * @param list<array{start_file_pos: int, end_file_pos: int}> $matches
-     * @return array{start_file_pos: int, end_file_pos: int}
+     * @param list<array{start_file_pos: int, end_file_pos: int, actual: string}> $matches
+     * @return array{start_file_pos: int, end_file_pos: int, actual: string}
      */
     private function one(array $matches, string $path, int $lineStart, int $lineEnd, string $kind, string $expected): array
     {
@@ -84,7 +84,7 @@ final class SourceNameLocator
         return $matches[0];
     }
 
-    /** @return array{start_file_pos: int, end_file_pos: int} */
+    /** @return array{start_file_pos: int, end_file_pos: int, actual: string} */
     private function position(string $path, Identifier $identifier, string $expected): array
     {
         $start = $identifier->getStartFilePos();
@@ -94,9 +94,9 @@ final class SourceNameLocator
         }
 
         $actual = substr($this->source($path), $start, $end - $start + 1);
-        if ($actual !== $expected) {
+        if (strcasecmp($actual, $expected) !== 0) {
             throw new RuntimeException(sprintf(
-                'Source token mismatch at %s:%d-%d: expected "%s", found "%s".',
+                'Source token mismatch at %s:%d-%d: expected method "%s", found "%s".',
                 $path,
                 $identifier->getStartLine(),
                 $identifier->getEndLine(),
@@ -105,7 +105,7 @@ final class SourceNameLocator
             ));
         }
 
-        return ['start_file_pos' => $start, 'end_file_pos' => $end];
+        return ['start_file_pos' => $start, 'end_file_pos' => $end, 'actual' => $actual];
     }
 
     /** @return list<Node> */
