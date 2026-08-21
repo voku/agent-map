@@ -31,12 +31,15 @@ final readonly class ClassRenamePlanner
 
         $staleEntries = $map->staleEntries();
         usort($staleEntries, static fn (array $left, array $right): int => $left['path'] <=> $right['path']);
+        /** @var list<RenameStaleEvidence> $staleEvidence */
         $staleEvidence = array_map(
             static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
             $staleEntries,
         );
 
+        /** @var list<string> $blockers */
         $blockers = [];
+        /** @var list<RenameBlindSpot> $blindSpots */
         $blindSpots = [];
         if ($symbol->reconciliationStatus === 'conflict') {
             $blockers[] = 'Cannot rename a class whose structural and semantic identity conflict: ' . $symbol->fqn;
@@ -58,6 +61,7 @@ final readonly class ClassRenamePlanner
 
         $locator = new SourceClassNameLocator($map->root);
         $scopeGuard = new ClassRenameScopeGuard($map->root);
+        /** @var list<RenameEdit> $edits */
         $edits = [];
         try {
             $declaration = $locator->declaration($file->path, $symbol->lineStart, $symbol->lineEnd, $symbol->name);
@@ -94,13 +98,18 @@ final readonly class ClassRenamePlanner
                     $replacementShort,
                     $symbol->id(),
                 );
-                $edits = [...$edits, ...$references['edits']];
-                $blindSpots = [...$blindSpots, ...$references['blind_spots']];
+                foreach ($references['edits'] as $edit) {
+                    $edits[] = $edit;
+                }
+                foreach ($references['blind_spots'] as $blindSpot) {
+                    $blindSpots[] = $blindSpot;
+                }
             } catch (RuntimeException $exception) {
                 $blockers[] = $exception->getMessage();
             }
         }
 
+        /** @var list<RenameMove> $moves */
         $moves = [];
         [$move, $moveBlindSpot, $moveBlocker] = $this->fileMove($map, $file, $symbol, $replacementShort);
         if ($move instanceof RenameMove) {
@@ -114,7 +123,9 @@ final readonly class ClassRenamePlanner
         }
 
         $edits = $this->uniqueSortedEdits($edits);
-        $blockers = [...$blockers, ...$this->overlapBlockers($edits)];
+        foreach ($this->overlapBlockers($edits) as $blocker) {
+            $blockers[] = $blocker;
+        }
 
         return $this->result($map, $symbol, $replacementFqn, $edits, $moves, $blindSpots, $staleEvidence, $blockers);
     }
@@ -233,22 +244,30 @@ final readonly class ClassRenamePlanner
         ];
     }
 
-    /** @param list<RenameEdit> $edits @return list<RenameEdit> */
+    /**
+     * @param list<RenameEdit> $edits
+     * @return list<RenameEdit>
+     */
     private function uniqueSortedEdits(array $edits): array
     {
+        /** @var array<string, RenameEdit> $unique */
         $unique = [];
         foreach ($edits as $edit) {
             $unique[$edit->path . ':' . $edit->startFilePos . ':' . $edit->endFilePos] = $edit;
         }
-        $edits = array_values($unique);
-        usort($edits, static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
+        $result = array_values($unique);
+        usort($result, static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
 
-        return $edits;
+        return $result;
     }
 
-    /** @param list<RenameEdit> $edits @return list<string> */
+    /**
+     * @param list<RenameEdit> $edits
+     * @return list<string>
+     */
     private function overlapBlockers(array $edits): array
     {
+        /** @var list<string> $blockers */
         $blockers = [];
         $previous = null;
         foreach ($edits as $edit) {
@@ -306,9 +325,13 @@ final readonly class ClassRenamePlanner
         );
     }
 
-    /** @param list<RenameBlindSpot> $blindSpots @return list<RenameBlindSpot> */
+    /**
+     * @param list<RenameBlindSpot> $blindSpots
+     * @return list<RenameBlindSpot>
+     */
     private function uniqueBlindSpots(array $blindSpots): array
     {
+        /** @var array<string, RenameBlindSpot> $unique */
         $unique = [];
         foreach ($blindSpots as $blindSpot) {
             $unique[implode(':', [$blindSpot->kind, $blindSpot->path ?? '', (string) ($blindSpot->lineStart ?? 0), (string) ($blindSpot->lineEnd ?? 0)])] = $blindSpot;
@@ -336,7 +359,10 @@ final readonly class ClassRenamePlanner
         }
 
         try {
-            token_get_all('<?php class ' . $name . ' {}', TOKEN_PARSE);
+            $tokens = token_get_all('<?php class ' . $name . ' {}', TOKEN_PARSE);
+            if ($tokens === []) {
+                throw new InvalidArgumentException('Invalid PHP class name: ' . $name);
+            }
         } catch (ParseError) {
             throw new InvalidArgumentException('Invalid or reserved PHP class name: ' . $name);
         }
