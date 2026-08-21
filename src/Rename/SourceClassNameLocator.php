@@ -60,9 +60,7 @@ final class SourceClassNameLocator
         return $matches[0];
     }
 
-    /**
-     * @return array{edits: list<RenameEdit>, blind_spots: list<RenameBlindSpot>}
-     */
+    /** @return array{edits: list<RenameEdit>, blind_spots: list<RenameBlindSpot>} */
     public function references(
         string $path,
         string $sourceSha256,
@@ -71,7 +69,9 @@ final class SourceClassNameLocator
         string $replacementShort,
         string $symbolId,
     ): array {
+        /** @var list<RenameEdit> $edits */
         $edits = [];
+        /** @var list<RenameBlindSpot> $blindSpots */
         $blindSpots = [];
         foreach ($this->ast($path) as $node) {
             $this->collectNode(
@@ -114,7 +114,7 @@ final class SourceClassNameLocator
     ): void {
         if ($node instanceof Use_) {
             foreach ($node->uses as $use) {
-                if (!$use instanceof UseItem || !$this->isClassUse($use, $node->type)) {
+                if (!$this->isClassUse($use, $node->type)) {
                     continue;
                 }
                 $this->collectImport(
@@ -134,7 +134,7 @@ final class SourceClassNameLocator
         if ($node instanceof GroupUse) {
             $prefix = $node->prefix->toString();
             foreach ($node->uses as $use) {
-                if (!$use instanceof UseItem || !$this->isClassUse($use, $node->type)) {
+                if (!$this->isClassUse($use, $node->type)) {
                     continue;
                 }
                 $this->collectImport(
@@ -277,15 +277,11 @@ final class SourceClassNameLocator
         $source = $this->source($path);
         preg_match_all('/\/\*\*.*?\*\//s', $source, $matches, PREG_OFFSET_CAPTURE);
         $blindSpots = [];
-        foreach ($matches[0] ?? [] as $match) {
-            if (!is_array($match) || !is_string($match[0] ?? null) || !is_int($match[1] ?? null)) {
-                continue;
-            }
-            $comment = $match[0];
+        foreach ($matches[0] as [$comment, $offset]) {
             if (!$this->commentMentionsClass($comment, $targetFqn, $expectedShort)) {
                 continue;
             }
-            $startLine = substr_count(substr($source, 0, $match[1]), "\n") + 1;
+            $startLine = substr_count(substr($source, 0, $offset), "\n") + 1;
             $blindSpots[] = new RenameBlindSpot(
                 kind: 'phpdoc_type_reference',
                 message: 'PHPDoc may reference the renamed class; docblock rewriting is not yet part of the exact-token contract.',
@@ -379,22 +375,30 @@ final class SourceClassNameLocator
         return $this->sourceByPath[$path];
     }
 
-    /** @param list<RenameEdit> $edits @return list<RenameEdit> */
+    /**
+     * @param list<RenameEdit> $edits
+     * @return list<RenameEdit>
+     */
     private function uniqueEdits(array $edits): array
     {
+        /** @var array<string, RenameEdit> $unique */
         $unique = [];
         foreach ($edits as $edit) {
             $unique[$edit->path . ':' . $edit->startFilePos . ':' . $edit->endFilePos] = $edit;
         }
-        $edits = array_values($unique);
-        usort($edits, static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
+        $result = array_values($unique);
+        usort($result, static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
 
-        return $edits;
+        return $result;
     }
 
-    /** @param list<RenameBlindSpot> $blindSpots @return list<RenameBlindSpot> */
+    /**
+     * @param list<RenameBlindSpot> $blindSpots
+     * @return list<RenameBlindSpot>
+     */
     private function uniqueBlindSpots(array $blindSpots): array
     {
+        /** @var array<string, RenameBlindSpot> $unique */
         $unique = [];
         foreach ($blindSpots as $blindSpot) {
             $unique[implode(':', [$blindSpot->kind, $blindSpot->path ?? '', (string) ($blindSpot->lineStart ?? 0), (string) ($blindSpot->lineEnd ?? 0)])] = $blindSpot;
