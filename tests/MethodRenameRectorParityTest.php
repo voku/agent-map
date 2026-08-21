@@ -9,8 +9,11 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
 use voku\AgentMap\Index\AgentMapBuilder;
+use voku\AgentMap\Index\AgentMapIndex;
+use voku\AgentMap\Rename\MethodRenameDefinition;
 use voku\AgentMap\Rename\MethodRenamePlan;
 use voku\AgentMap\Rename\MethodRenamePlanner;
+use voku\AgentMap\Rename\RenameEdit;
 
 /**
  * Focused regression scenarios adapted from Rector's method-rename coverage:
@@ -91,7 +94,7 @@ PHP);
         $map = $this->map();
         self::assertNotSame([], $map->incoming('method:RectorParity\\Service::oldName', 'calls'));
 
-        $plan = (new MethodRenamePlanner())->plan($map, 'RectorParity\\Service::oldName', 'renamed');
+        $plan = $this->plan($map, new MethodRenameDefinition('RectorParity\\Service', 'oldName', 'renamed'));
 
         self::assertSame(MethodRenamePlan::STATUS_SAFE, $plan->status, implode("\n", $plan->blockers));
         self::assertSame(['call', 'declaration'], $this->roles($plan));
@@ -134,17 +137,22 @@ PHP);
         $map = $this->map();
         self::assertNotSame([], $map->incoming('method:RectorParity\\Service::oldName', 'calls'));
 
-        $plan = (new MethodRenamePlanner())->plan($map, 'RectorParity\\Service::oldName', 'renamed');
+        $plan = $this->plan($map, MethodRenameDefinition::fromTarget('RectorParity\\Service::oldName', 'renamed'));
 
         self::assertSame(MethodRenamePlan::STATUS_SAFE, $plan->status, implode("\n", $plan->blockers));
         self::assertSame(['call', 'declaration'], $this->roles($plan));
         self::assertSame(['oldName', 'oldName'], $this->expectedTokens($plan));
     }
 
+    private function plan(AgentMapIndex $map, MethodRenameDefinition $rename): MethodRenamePlan
+    {
+        return (new MethodRenamePlanner())->plan($map, $rename->target(), $rename->newMethod);
+    }
+
     /** @return list<string> */
     private function roles(MethodRenamePlan $plan): array
     {
-        $roles = array_map(static fn ($edit): string => $edit->role, $plan->edits);
+        $roles = array_map(static fn (RenameEdit $edit): string => $edit->role, $plan->edits);
         sort($roles, SORT_STRING);
 
         return $roles;
@@ -153,10 +161,10 @@ PHP);
     /** @return list<string> */
     private function expectedTokens(MethodRenamePlan $plan): array
     {
-        return array_map(static fn ($edit): string => $edit->expected, $plan->edits);
+        return array_map(static fn (RenameEdit $edit): string => $edit->expected, $plan->edits);
     }
 
-    private function map(): \voku\AgentMap\Index\AgentMapIndex
+    private function map(): AgentMapIndex
     {
         return (new AgentMapBuilder())->build(
             root: $this->root,
