@@ -46,6 +46,13 @@ final class MethodRenamePlannerTest extends TestCase
         self::assertCount(3, $plan->edits);
         self::assertSame(['call', 'declaration', 'declaration'], $this->sortedRoles($plan->edits));
         self::assertSame([], $plan->blockers);
+        self::assertSame([], $plan->staleEvidence);
+        self::assertSame('simple-php-code-parser+phpstan', $plan->provenance->backend);
+        self::assertStringStartsWith('sha256:', $plan->provenance->mapDigest);
+        self::assertSame(
+            ['src/Caller.php', 'src/Contract.php', 'src/Impl.php'],
+            array_keys($plan->provenance->sourceHashes),
+        );
 
         $rewritten = $this->applyEdits($plan->edits);
         foreach ($rewritten as $source) {
@@ -139,6 +146,22 @@ final class MethodRenamePlannerTest extends TestCase
         self::assertStringContainsString('PHPStan-backed map', implode("\n", $plan->blockers));
     }
 
+    public function testStaleEvidenceIsMachineDistinguishableFromSemanticBlockers(): void
+    {
+        $this->writeFixture();
+        $map = $this->map();
+        file_put_contents($this->root . '/src/Caller.php', "\n// changed after mapping\n", FILE_APPEND);
+
+        $plan = (new MethodRenamePlanner())->plan($map, 'Demo\\Contract::oldName', 'renamed');
+
+        self::assertSame(MethodRenamePlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertSame([], $plan->blockers);
+        self::assertCount(1, $plan->staleEvidence);
+        self::assertSame('src/Caller.php', $plan->staleEvidence[0]->path);
+        self::assertSame('hash', $plan->staleEvidence[0]->reason);
+    }
+
     public function testCliPublishesMachineReadablePlanWithoutMutatingSource(): void
     {
         $this->writeFixture();
@@ -164,6 +187,10 @@ final class MethodRenamePlannerTest extends TestCase
         $payload = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
         self::assertIsArray($payload);
         self::assertSame('safe', $payload['status'] ?? null);
+        self::assertSame(MethodRenamePlan::CONTRACT_VERSION, $payload['contract_version'] ?? null);
+        self::assertSame('simple-php-code-parser+phpstan', $payload['provenance']['backend'] ?? null);
+        self::assertCount(3, $payload['provenance']['source_hashes'] ?? []);
+        self::assertSame([], $payload['stale_evidence'] ?? null);
         self::assertCount(3, $payload['edits'] ?? []);
         self::assertSame($before, file_get_contents($this->root . '/src/Caller.php'));
     }
