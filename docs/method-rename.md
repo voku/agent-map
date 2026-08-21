@@ -39,12 +39,11 @@ The `provenance` object identifies all evidence used by the plan:
 
 - `map_digest`: deterministic digest of the complete indexed map;
 - `backend`: the effective structural or PHPStan backend recorded by that map;
-- `source_hashes`: repository-relative path to indexed SHA-256 for every mapped PHP source file;
 - `analysis_fingerprint`: PHPStan version/reference, configuration and lock hashes, and source digest when the map carries semantic analysis provenance (otherwise `null`).
 
 The pre-0.9 top-level `backend` and `map_digest` fields remain compatibility aliases for the corresponding provenance values. New consumers should use `provenance`; the aliases may be removed in a future major contract version.
 
-Each edit repeats its own source hash so an applying host can validate an edit without reconstructing plan-wide provenance. `family`, `edits`, `blind_spots`, `stale_evidence`, `blockers`, and `not_observable` are always present, including when empty. Blocked plans never publish edits.
+The map digest and fingerprint source digest identify the complete snapshot without repeating every mapped path/hash pair in each plan. Each edit carries its own source hash for mutation-time validation. Before applying, a host must prove the map is still current through the owner readiness API, then validate every edited file's hash and expected token. `family`, `edits`, `blind_spots`, `stale_evidence`, `blockers`, and `not_observable` are always present, including when empty. Blocked plans never publish edits.
 
 Staleness is not a semantic blocker. Source snapshot mismatches are emitted as typed `stale_evidence` entries with a path and reason (`missing` or `hash`); semantic safety failures remain in `blockers`. Either makes the plan `blocked`, but consumers can respond to stale evidence by rebuilding instead of presenting it as a refactoring ambiguity.
 

@@ -424,13 +424,7 @@ final readonly class MethodRenamePlanner
 
     private function provenance(AgentMapIndex $map): MethodRenameProvenance
     {
-        $sourceHashes = [];
-        foreach ($map->files as $file) {
-            $sourceHashes[$file->path] = $file->sha256;
-        }
-        ksort($sourceHashes, SORT_STRING);
-
-        return new MethodRenameProvenance($map->mapDigest(), $map->backend, $sourceHashes, $map->fingerprint);
+        return new MethodRenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint);
     }
 
     /**

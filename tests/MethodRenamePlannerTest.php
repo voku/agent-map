@@ -49,10 +49,6 @@ final class MethodRenamePlannerTest extends TestCase
         self::assertSame([], $plan->staleEvidence);
         self::assertSame('simple-php-code-parser+phpstan', $plan->provenance->backend);
         self::assertStringStartsWith('sha256:', $plan->provenance->mapDigest);
-        self::assertSame(
-            ['src/Caller.php', 'src/Contract.php', 'src/Impl.php'],
-            array_keys($plan->provenance->sourceHashes),
-        );
 
         $rewritten = $this->applyEdits($plan->edits);
         foreach ($rewritten as $source) {
@@ -189,7 +185,7 @@ final class MethodRenamePlannerTest extends TestCase
         self::assertSame('safe', $payload['status'] ?? null);
         self::assertSame(MethodRenamePlan::CONTRACT_VERSION, $payload['contract_version'] ?? null);
         self::assertSame('simple-php-code-parser+phpstan', $payload['provenance']['backend'] ?? null);
-        self::assertCount(3, $payload['provenance']['source_hashes'] ?? []);
+        self::assertArrayNotHasKey('source_hashes', $payload['provenance'] ?? []);
         self::assertSame([], $payload['stale_evidence'] ?? null);
         self::assertCount(3, $payload['edits'] ?? []);
         self::assertSame($before, file_get_contents($this->root . '/src/Caller.php'));
