@@ -1,0 +1,90 @@
+name: Prepare 0.8.4 release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prepare-0.8.4.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Prepare exact release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='72e17a16e60cc59c045cfe4e545d502515bcac41'
+          git merge-base --is-ancestor "${target}" HEAD
+
+          php <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          $path = 'CHANGELOG.md';
+          $text = file_get_contents($path);
+          if ($text === false) {
+              throw new RuntimeException('Cannot read CHANGELOG.md');
+          }
+          if (str_contains($text, '## 0.8.4 - 2026-08-22')) {
+              throw new RuntimeException('0.8.4 section already exists');
+          }
+
+          $unreleased = "## Unreleased\n\n";
+          $next = "## 0.8.3 - 2026-08-20\n";
+          if (substr_count($text, $unreleased) !== 1 || substr_count($text, $next) !== 1) {
+              throw new RuntimeException('Release changelog anchors are not unique');
+          }
+
+          $unreleasedOffset = strpos($text, $unreleased);
+          if ($unreleasedOffset === false) {
+              throw new RuntimeException('Cannot locate Unreleased changelog section');
+          }
+          $bodyOffset = $unreleasedOffset + strlen($unreleased);
+          $nextOffset = strpos($text, $next, $bodyOffset);
+          if ($nextOffset === false) {
+              throw new RuntimeException('Cannot locate previous release changelog section');
+          }
+
+          $body = substr($text, $bodyOffset, $nextOffset - $bodyOffset);
+          if (trim($body) === '') {
+              throw new RuntimeException('Unreleased changelog section is empty');
+          }
+
+          $release = "## Unreleased\n\n## 0.8.4 - 2026-08-22\n\n"
+              . rtrim($body)
+              . "\n\n";
+          $text = substr($text, 0, $unreleasedOffset)
+              . $release
+              . substr($text, $nextOffset);
+
+          if (file_put_contents($path, $text) === false) {
+              throw new RuntimeException('Cannot write CHANGELOG.md');
+          }
+          PHP
+
+          mkdir -p .release
+          cat > .release/0.8.4.json <<'JSON'
+          {
+            "version": "0.8.4",
+            "target_sha": "72e17a16e60cc59c045cfe4e545d502515bcac41"
+          }
+          JSON
+
+          rm .github/workflows/prepare-0.8.4.yml
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CHANGELOG.md .release/0.8.4.json .github/workflows/prepare-0.8.4.yml
+          git diff --cached --check
+          git commit -m 'release: prepare 0.8.4'
+          git push origin HEAD:main
