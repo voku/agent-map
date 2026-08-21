@@ -64,6 +64,21 @@ final class FunctionNameLocator
         return $this->one($matches, $path, $lineStart, $lineEnd, 'function call', $expected);
     }
 
+    /** Confirms that unresolved call evidence at this range is specifically a dynamic FuncCall. */
+    public function isDynamicFunctionCall(string $path, int $lineStart, int $lineEnd): bool
+    {
+        foreach ($this->nodes($path) as $node) {
+            if (!$node instanceof FuncCall || $node->name instanceof Name) {
+                continue;
+            }
+            if ($node->getStartLine() === $lineStart && $node->getEndLine() === $lineEnd) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @param list<array{start_file_pos: int, end_file_pos: int, actual: string}> $matches
      * @return array{start_file_pos: int, end_file_pos: int, actual: string}
