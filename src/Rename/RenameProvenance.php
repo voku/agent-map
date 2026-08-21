@@ -6,8 +6,8 @@ namespace voku\AgentMap\Rename;
 
 use voku\AgentMap\Index\AnalysisFingerprint;
 
-/** Immutable identity of the map and source snapshot used to produce one rename plan. */
-readonly class RenameProvenance
+/** Immutable identity of the map and source snapshot used to produce one function rename plan. */
+final readonly class RenameProvenance
 {
     public function __construct(
         public string $mapDigest,
