@@ -33,9 +33,11 @@ final readonly class MethodRenamePlanner
 
         $blockers = [];
         $blindSpots = [];
+        $staleEntries = $map->staleEntries();
+        usort($staleEntries, static fn (array $left, array $right): int => $left['path'] <=> $right['path']);
         $staleEvidence = array_map(
             static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
-            $map->staleEntries(),
+            $staleEntries,
         );
         if (!str_ends_with($map->backend, '+phpstan')) {
             $blockers[] = 'Method rename requires a PHPStan-backed map so caller identity is semantic rather than textual.';
