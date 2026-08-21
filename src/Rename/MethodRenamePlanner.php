@@ -33,16 +33,18 @@ final readonly class MethodRenamePlanner
 
         $blockers = [];
         $blindSpots = [];
-        $stale = $map->staleEntries();
-        if ($stale !== []) {
-            $blockers[] = sprintf('Map is stale for %d file(s); refresh it before planning a rename.', count($stale));
-        }
+        $staleEntries = $map->staleEntries();
+        usort($staleEntries, static fn (array $left, array $right): int => $left['path'] <=> $right['path']);
+        $staleEvidence = array_map(
+            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            $staleEntries,
+        );
         if (!str_ends_with($map->backend, '+phpstan')) {
             $blockers[] = 'Method rename requires a PHPStan-backed map so caller identity is semantic rather than textual.';
         }
 
-        if ($blockers !== []) {
-            return $this->result($map, $seed, $originalName, $replacementName, [$seed->id => $seed], [], $blindSpots, $blockers);
+        if ($staleEvidence !== [] || $blockers !== []) {
+            return $this->result($map, $seed, $originalName, $replacementName, [$seed->id => $seed], [], $blindSpots, $staleEvidence, $blockers);
         }
 
         [$family, $familyBlockers] = $this->family($map, $seed);
@@ -56,7 +58,7 @@ final readonly class MethodRenamePlanner
         $blockers = array_values(array_unique($blockers));
 
         if ($blockers !== []) {
-            return $this->result($map, $seed, $originalName, $replacementName, $family, [], $blindSpots, $blockers);
+            return $this->result($map, $seed, $originalName, $replacementName, $family, [], $blindSpots, $staleEvidence, $blockers);
         }
 
         $locator = new SourceNameLocator($map->root);
@@ -157,7 +159,7 @@ final readonly class MethodRenamePlanner
         $blockers = [...$blockers, ...$this->overlapBlockers($edits)];
         $blockers = array_values(array_unique($blockers));
 
-        return $this->result($map, $seed, $originalName, $replacementName, $family, $edits, $blindSpots, $blockers);
+        return $this->result($map, $seed, $originalName, $replacementName, $family, $edits, $blindSpots, $staleEvidence, $blockers);
     }
 
     /**
@@ -385,6 +387,7 @@ final readonly class MethodRenamePlanner
      * @param array<string, ResolvedMethod> $family
      * @param list<RenameEdit> $edits
      * @param list<RenameBlindSpot> $blindSpots
+     * @param list<RenameStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      */
     private function result(
@@ -395,13 +398,14 @@ final readonly class MethodRenamePlanner
         array $family,
         array $edits,
         array $blindSpots,
+        array $staleEvidence,
         array $blockers,
     ): MethodRenamePlan {
         $familyIds = array_keys($family);
         sort($familyIds, SORT_STRING);
         $blockers = array_values(array_unique($blockers));
         $blindSpots = $this->uniqueBlindSpots($blindSpots);
-        $status = $blockers !== []
+        $status = $staleEvidence !== [] || $blockers !== []
             ? MethodRenamePlan::STATUS_BLOCKED
             : ($blindSpots !== [] ? MethodRenamePlan::STATUS_REVIEW_REQUIRED : MethodRenamePlan::STATUS_SAFE);
 
@@ -410,14 +414,19 @@ final readonly class MethodRenamePlanner
             targetId: $seed->id,
             originalName: $originalName,
             replacementName: $replacementName,
-            backend: $map->backend,
-            mapDigest: $map->mapDigest(),
+            provenance: $this->provenance($map),
             family: $familyIds,
             edits: $status === MethodRenamePlan::STATUS_BLOCKED ? [] : $edits,
             blindSpots: $blindSpots,
+            staleEvidence: $staleEvidence,
             blockers: $blockers,
             notObservable: self::NOT_OBSERVABLE,
         );
+    }
+
+    private function provenance(AgentMapIndex $map): MethodRenameProvenance
+    {
+        return new MethodRenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint);
     }
 
     /**

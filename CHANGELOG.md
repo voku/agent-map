@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- Publish method rename planning as an explicit versioned contract. Plans now carry complete map provenance (digest, effective backend, and analysis fingerprint) and expose stale source evidence separately from semantic blockers so hosts can fail closed and choose the correct recovery.
+- Measure rename-plan provenance size on three real repositories before freezing the contract; the all-source hash projection consumed 80-88% of JSON output and was removed in favor of complete map identity plus per-edit mutation hashes.
+- Document the read-only `rename-plan` evidence, status, observation, and mutation-host validation boundary.
+
+### Changed
+
+- Machine-readable method rename plans now use contract version `1.0`, collect evidence identity under `provenance`, and always publish typed `stale_evidence`. The pre-0.9 top-level backend and digest fields remain compatibility aliases; blocked plans continue to publish no edits.
+
 ## 0.8.3 - 2026-08-20
 
 ### Added

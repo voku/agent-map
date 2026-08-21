@@ -31,6 +31,22 @@ Each planned edit records:
 
 A mutation host must re-check the file hash and expected token before applying any edit. Edits should be applied from the highest byte offset to the lowest within each file, then the map, PHPStan and project tests should be rebuilt/run.
 
+## Public plan contract
+
+`MethodRenamePlan` and its JSON/TOON representation are the public, typed consumption boundary. Machine output contains `type: method_rename_plan` and `contract_version: 1.0`. Consumers should reject a contract version they do not support rather than infer compatibility.
+
+The `provenance` object identifies all evidence used by the plan:
+
+- `map_digest`: deterministic digest of the complete indexed map;
+- `backend`: the effective structural or PHPStan backend recorded by that map;
+- `analysis_fingerprint`: PHPStan version/reference, configuration and lock hashes, and source digest when the map carries semantic analysis provenance (otherwise `null`).
+
+The pre-0.9 top-level `backend` and `map_digest` fields remain compatibility aliases for the corresponding provenance values. New consumers should use `provenance`; the aliases may be removed in a future major contract version.
+
+The map digest and fingerprint source digest identify the complete snapshot without repeating every mapped path/hash pair in each plan. Each edit carries its own source hash for mutation-time validation. Before applying, a host must prove the map is still current through the owner readiness API, then validate every edited file's hash and expected token. `family`, `edits`, `blind_spots`, `stale_evidence`, `blockers`, and `not_observable` are always present, including when empty. Blocked plans never publish edits.
+
+Staleness is not a semantic blocker. Source snapshot mismatches are emitted as typed `stale_evidence` entries with a path and reason (`missing` or `hash`); semantic safety failures remain in `blockers`. Either makes the plan `blocked`, but consumers can respond to stale evidence by rebuilding instead of presenting it as a refactoring ambiguity.
+
 ## Status
 
 ### `safe`
@@ -45,7 +61,7 @@ All deterministic edits are available, but the map contains a concrete dynamic-d
 
 No edits are published. Blocking conditions include:
 
-- stale source/map evidence;
+- stale source/map evidence (reported separately in `stale_evidence`);
 - structural-only map without PHPStan semantic call identity;
 - an override/prototype outside the indexed map;
 - trait methods, until trait aliases and `insteadof` adaptations are explicit rename evidence;

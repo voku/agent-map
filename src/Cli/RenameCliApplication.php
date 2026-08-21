@@ -153,7 +153,8 @@ TEXT;
             sprintf('Method rename plan: %s', strtoupper($plan->status)),
             sprintf('Target: %s', $plan->targetId),
             sprintf('Rename: %s -> %s', $plan->originalName, $plan->replacementName),
-            sprintf('Backend: %s', $plan->backend),
+            sprintf('Backend: %s', $plan->provenance->backend),
+            sprintf('Map digest: %s', $plan->provenance->mapDigest),
             sprintf('Family: %d method(s)', count($plan->family)),
             sprintf('Edits: %d', count($plan->edits)),
         ];
@@ -166,6 +167,9 @@ TEXT;
         }
         foreach ($plan->blindSpots as $blindSpot) {
             $lines[] = $this->blindSpotLine($blindSpot);
+        }
+        foreach ($plan->staleEvidence as $stale) {
+            $lines[] = sprintf('  STALE [%s] %s', $stale->reason, $stale->path);
         }
         foreach ($plan->blockers as $blocker) {
             $lines[] = '  BLOCKER: ' . $blocker;

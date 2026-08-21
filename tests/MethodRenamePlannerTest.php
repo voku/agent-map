@@ -46,6 +46,10 @@ final class MethodRenamePlannerTest extends TestCase
         self::assertCount(3, $plan->edits);
         self::assertSame(['call', 'declaration', 'declaration'], $this->sortedRoles($plan->edits));
         self::assertSame([], $plan->blockers);
+        self::assertSame([], $plan->staleEvidence);
+        self::assertSame('simple-php-code-parser+phpstan', $plan->provenance->backend);
+        self::assertStringStartsWith('sha256:', $plan->provenance->mapDigest);
+        self::assertNull($plan->provenance->analysisFingerprint);
 
         $rewritten = $this->applyEdits($plan->edits);
         foreach ($rewritten as $source) {
@@ -139,6 +143,38 @@ final class MethodRenamePlannerTest extends TestCase
         self::assertStringContainsString('PHPStan-backed map', implode("\n", $plan->blockers));
     }
 
+    public function testStaleEvidenceIsMachineDistinguishableFromSemanticBlockers(): void
+    {
+        $this->writeFixture();
+        $map = $this->map();
+        file_put_contents($this->root . '/src/Caller.php', "\n// changed after mapping\n", FILE_APPEND);
+
+        $plan = (new MethodRenamePlanner())->plan($map, 'Demo\\Contract::oldName', 'renamed');
+
+        self::assertSame(MethodRenamePlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertSame([], $plan->blockers);
+        self::assertCount(1, $plan->staleEvidence);
+        self::assertSame('src/Caller.php', $plan->staleEvidence[0]->path);
+        self::assertSame('hash', $plan->staleEvidence[0]->reason);
+    }
+
+    public function testStaleEvidenceIsSortedByPath(): void
+    {
+        $this->writeFixture();
+        $map = $this->map();
+        file_put_contents($this->root . '/src/Contract.php', "\n// changed after mapping\n", FILE_APPEND);
+        file_put_contents($this->root . '/src/Caller.php', "\n// changed after mapping\n", FILE_APPEND);
+
+        $plan = (new MethodRenamePlanner())->plan($map, 'Demo\\Contract::oldName', 'renamed');
+
+        self::assertSame(MethodRenamePlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertCount(2, $plan->staleEvidence);
+        self::assertSame('src/Caller.php', $plan->staleEvidence[0]->path);
+        self::assertSame('src/Contract.php', $plan->staleEvidence[1]->path);
+    }
+
     public function testCliPublishesMachineReadablePlanWithoutMutatingSource(): void
     {
         $this->writeFixture();
@@ -164,6 +200,12 @@ final class MethodRenamePlannerTest extends TestCase
         $payload = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
         self::assertIsArray($payload);
         self::assertSame('safe', $payload['status'] ?? null);
+        self::assertSame(MethodRenamePlan::CONTRACT_VERSION, $payload['contract_version'] ?? null);
+        self::assertSame('simple-php-code-parser+phpstan', $payload['provenance']['backend'] ?? null);
+        self::assertArrayNotHasKey('source_hashes', $payload['provenance'] ?? []);
+        self::assertArrayHasKey('analysis_fingerprint', $payload['provenance'] ?? []);
+        self::assertNull($payload['provenance']['analysis_fingerprint']);
+        self::assertSame([], $payload['stale_evidence'] ?? null);
         self::assertCount(3, $payload['edits'] ?? []);
         self::assertSame($before, file_get_contents($this->root . '/src/Caller.php'));
     }
