@@ -90,10 +90,15 @@ final readonly class FunctionRenamePlanner
             if ($relation->kind !== 'calls') {
                 continue;
             }
-            if ($relation->resolution === 'dynamic' && $relation->targetIds === [] && $relation->receiverType === null) {
+            if (
+                $relation->resolution === 'dynamic'
+                && $relation->targetIds === ['unresolved:calls']
+                && $relation->receiverType === null
+                && $locator->isDynamicFunctionCall($relation->file, $relation->lineStart, $relation->lineEnd)
+            ) {
                 $blindSpots[] = new RenameBlindSpot(
                     kind: 'dynamic_function_name',
-                    message: 'A dynamic call without a resolved receiver may invoke the renamed function at runtime.',
+                    message: 'A dynamic function call may invoke the renamed function at runtime.',
                     path: $relation->file,
                     lineStart: $relation->lineStart,
                     lineEnd: $relation->lineEnd,
