@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.8.4 - 2026-08-22
+
 ### Added
 
 - Publish method rename planning as an explicit versioned contract. Plans now carry complete map provenance (digest, effective backend, and analysis fingerprint) and expose stale source evidence separately from semantic blockers so hosts can fail closed and choose the correct recovery.
