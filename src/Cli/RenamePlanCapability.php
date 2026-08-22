@@ -12,6 +12,7 @@ final readonly class RenamePlanCapability
         public string $command,
         public string $planType,
         public string $contractVersion,
+        public string $semanticBackend,
     ) {
     }
 
@@ -23,7 +24,7 @@ final readonly class RenamePlanCapability
             'command' => $this->command,
             'plan_type' => $this->planType,
             'contract_version' => $this->contractVersion,
-            'semantic_backend' => 'phpstan',
+            'semantic_backend' => $this->semanticBackend,
         ];
     }
 }
