@@ -21,12 +21,14 @@ final class ClassConstantRenamePlannerTest extends TestCase
 {
     private string $root;
 
+    /** Creates an isolated structural-map fixture. */
     protected function setUp(): void
     {
         $this->root = sys_get_temp_dir() . '/agent-map-class-constant-' . bin2hex(random_bytes(6));
         mkdir($this->root . '/src', 0o775, true);
     }
 
+    /** Removes every generated fixture path. */
     protected function tearDown(): void
     {
         if (!is_dir($this->root)) {
@@ -43,6 +45,7 @@ final class ClassConstantRenamePlannerTest extends TestCase
         rmdir($this->root);
     }
 
+    /** Proves exact declaration, import, FQN and owner-local self fetch edits. */
     public function testPlansDeclarationImportedFullyQualifiedAndSelfFetches(): void
     {
         file_put_contents($this->root . '/src/Settings.php', <<<'PHP'
@@ -71,6 +74,7 @@ PHP);
         self::assertCount(4, $plan->edits);
     }
 
+    /** Proves exact replacement collisions block and dynamic names require review. */
     public function testCollisionBlocksAndDynamicNameRequiresReview(): void
     {
         file_put_contents($this->root . '/src/Settings.php', <<<'PHP'
@@ -94,6 +98,27 @@ PHP);
         self::assertSame('dynamic_class_constant_name', $review->blindSpots[0]->kind);
     }
 
+    /** Proves class-constant collision checks preserve PHP's case-sensitive identifier semantics. */
+    public function testCaseDistinctReplacementCollisionBlocks(): void
+    {
+        file_put_contents($this->root . '/src/Settings.php', <<<'PHP'
+<?php
+namespace Demo;
+final class Settings
+{
+    public const OLD_NAME = 1;
+    public const old_name = 2;
+}
+PHP);
+
+        $plan = (new ClassConstantRenamePlanner())->plan($this->map(), 'Demo\Settings::OLD_NAME', 'old_name');
+
+        self::assertSame(ClassConstantRenamePlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertContains('Replacement class constant Demo\Settings::old_name already exists.', $plan->blockers);
+    }
+
+    /** Proves late-static and inherited declarations are never presented as exact-owner edits. */
     public function testLateStaticAndInheritedOwnerEvidenceRequireReview(): void
     {
         file_put_contents($this->root . '/src/Settings.php', <<<'PHP'
@@ -133,6 +158,7 @@ PHP);
         self::assertContains('unproven_class_constant_owner', $kinds);
     }
 
+    /** Proves any indexed-source drift blocks the plan and suppresses edits. */
     public function testStaleSourceBlocksAndPublishesNoEdits(): void
     {
         $path = $this->root . '/src/Settings.php';
@@ -155,6 +181,7 @@ PHP);
         self::assertNotSame([], $plan->staleEvidence);
     }
 
+    /** Proves malformed targets and replacements are rejected before planning. */
     public function testRejectsInvalidTargetAndReplacementNames(): void
     {
         file_put_contents($this->root . '/src/Settings.php', <<<'PHP'
@@ -176,6 +203,7 @@ PHP);
         $planner->plan($map, 'Demo\Settings::OLD_NAME', 'not-valid!');
     }
 
+    /** Builds the current structural map from fixture sources. */
     private function map(): AgentMapIndex
     {
         return (new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))->build($this->root, ['src'], []);
