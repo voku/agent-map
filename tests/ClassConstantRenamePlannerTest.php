@@ -13,6 +13,7 @@ use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Rename\ClassConstantRenamePlan;
 use voku\AgentMap\Rename\ClassConstantRenamePlanner;
+use voku\AgentMap\Rename\RenameBlindSpot;
 use voku\AgentMap\Rename\RenameEdit;
 
 /** Behavioral coverage adapted from Rector's RenameClassConstFetch rule. */
@@ -127,7 +128,7 @@ PHP);
         self::assertSame(ClassConstantRenamePlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
         self::assertCount(1, $plan->edits);
         self::assertSame('class_constant_declaration', $plan->edits[0]->role);
-        $kinds = array_map(static fn ($blindSpot): string => $blindSpot->kind, $plan->blindSpots);
+        $kinds = array_map(static fn (RenameBlindSpot $blindSpot): string => $blindSpot->kind, $plan->blindSpots);
         self::assertContains('late_static_class_constant_fetch', $kinds);
         self::assertContains('unproven_class_constant_owner', $kinds);
     }
