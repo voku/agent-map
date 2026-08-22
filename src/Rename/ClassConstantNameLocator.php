@@ -22,11 +22,16 @@ final class ClassConstantNameLocator
     /** @var array<string, string> */
     private array $sources = [];
 
+    /** Uses the indexed project root as the only source-reading boundary. */
     public function __construct(private readonly string $root)
     {
     }
 
-    /** @return array{edits: list<array{start_file_pos: int, end_file_pos: int, line_start: int, line_end: int, role: string}>, blind_spots: list<RenameBlindSpot>, collision: bool} */
+    /**
+     * Locates exact declaration/fetch tokens and emits review evidence whenever owner identity is not proven.
+     *
+     * @return array{edits: list<array{start_file_pos: int, end_file_pos: int, line_start: int, line_end: int, role: string}>, blind_spots: list<RenameBlindSpot>, collision: bool}
+     */
     public function locate(string $path, string $ownerFqn, string $original, string $replacement): array
     {
         $edits = [];
@@ -108,6 +113,7 @@ final class ClassConstantNameLocator
         return ['edits' => $edits, 'blind_spots' => $blindSpots, 'collision' => $collision];
     }
 
+    /** Resolves only owners whose identity is parser-proven; late-static and parent lookups stay unresolved. */
     private function fetchOwner(Name $name, ?string $classFqn): ?string
     {
         $spelling = strtolower($name->toString());
@@ -131,7 +137,7 @@ final class ClassConstantNameLocator
         return null;
     }
 
-    /** @return array{start_file_pos: int, end_file_pos: int, line_start: int, line_end: int, role: string} */
+    /** @return array{start_file_pos: int, end_file_pos: int, line_start: int, line_end: int, role: string} Exact parser byte evidence. */
     private function position(string $path, Identifier $name, string $role): array
     {
         $start = $name->getStartFilePos();
@@ -149,7 +155,7 @@ final class ClassConstantNameLocator
         ];
     }
 
-    /** @return list<array{0: Node, 1: ?string}> */
+    /** @return list<array{0: Node, 1: ?string}> Flattened AST nodes paired with their lexical class-like FQN. */
     private function nodes(string $path): array
     {
         if (!isset($this->ast[$path])) {
@@ -164,7 +170,7 @@ final class ClassConstantNameLocator
         return $result;
     }
 
-    /** @param list<array{0: Node, 1: ?string}> $result */
+    /** @param list<array{0: Node, 1: ?string}> $result Flattened node accumulator. */
     private function append(array &$result, Node $node, ?string $classFqn): void
     {
         if ($node instanceof ClassLike) {
@@ -191,6 +197,7 @@ final class ClassConstantNameLocator
         }
     }
 
+    /** Reads and caches one indexed source file, failing instead of substituting missing content. */
     private function source(string $path): string
     {
         if (!isset($this->sources[$path])) {
