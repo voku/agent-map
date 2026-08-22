@@ -70,14 +70,13 @@ final readonly class CliApplication
         return $status;
     }
 
-    /**
-     * @return list<RenamePlanCliApplication>
-     */
+    /** @return list<RenamePlanCliApplication> */
     private function renameApplications(?MapArtifactPaths $artifacts): array
     {
         return [
             new ClassRenameCliApplication(artifacts: $artifacts),
             new FunctionRenameCliApplication(artifacts: $artifacts),
+            new PropertyRenameCliApplication(artifacts: $artifacts),
             new RenameCliApplication(artifacts: $artifacts),
         ];
     }

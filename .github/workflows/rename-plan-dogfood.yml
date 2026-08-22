@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           root="${RUNNER_TEMP}/agent-map-rename-dogfood"
           rm -rf "$root"
-          mkdir -p "$root/method/src" "$root/function/src" "$root/class/src" "$root/self"
+          mkdir -p "$root/method/src" "$root/function/src" "$root/class/src" "$root/property/src" "$root/self"
           echo "DOGFOOD_ROOT=$root" >> "$GITHUB_ENV"
 
           cat > "$root/method/src/Greeter.php" <<'PHP'
@@ -48,32 +48,6 @@ jobs:
               public function oldName(string $name): string
               {
                   return 'Hello ' . $name;
-              }
-          }
-          PHP
-
-          cat > "$root/class/src/OldService.php" <<'PHP'
-          <?php
-
-          declare(strict_types=1);
-
-          namespace Dogfood;
-
-          final class OldService {}
-          PHP
-
-          cat > "$root/class/src/ClassConsumer.php" <<'PHP'
-          <?php
-
-          declare(strict_types=1);
-
-          namespace Dogfood;
-
-          final class ClassConsumer
-          {
-              public function create(): OldService
-              {
-                  return new OldService();
               }
           }
           PHP
@@ -120,6 +94,52 @@ jobs:
           }
           PHP
 
+          cat > "$root/class/src/OldService.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class OldService {}
+          PHP
+
+          cat > "$root/class/src/ClassConsumer.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class ClassConsumer
+          {
+              public function create(): OldService
+              {
+                  return new OldService();
+              }
+          }
+          PHP
+
+          cat > "$root/property/src/PropertyBox.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class PropertyBox
+          {
+              private string $name = 'map';
+
+              public function read(?PropertyBox $other): string
+              {
+                  $otherName = $other?->name;
+
+                  return $otherName ?? $this->name;
+              }
+          }
+          PHP
+
       - name: Discover registered rename capabilities
         shell: bash
         run: |
@@ -132,12 +152,15 @@ jobs:
           method_command="$(jq -r '.capabilities[] | select(.plan_type == "method_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
           function_command="$(jq -r '.capabilities[] | select(.plan_type == "function_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
           class_command="$(jq -r '.capabilities[] | select(.plan_type == "class_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
+          property_command="$(jq -r '.capabilities[] | select(.plan_type == "property_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
           test -n "$method_command" && test "$method_command" != "null"
           test -n "$function_command" && test "$function_command" != "null"
           test -n "$class_command" && test "$class_command" != "null"
+          test -n "$property_command" && test "$property_command" != "null"
           echo "METHOD_RENAME_COMMAND=$method_command" >> "$GITHUB_ENV"
           echo "FUNCTION_RENAME_COMMAND=$function_command" >> "$GITHUB_ENV"
           echo "CLASS_RENAME_COMMAND=$class_command" >> "$GITHUB_ENV"
+          echo "PROPERTY_RENAME_COMMAND=$property_command" >> "$GITHUB_ENV"
 
       - name: Build semantic maps and publish read-only plans
         shell: bash
@@ -174,31 +197,29 @@ jobs:
             --index="$DOGFOOD_ROOT/class/map.json" \
             --format=json > "$DOGFOOD_ROOT/class/plan.json"
 
+          php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/property" \
+            --paths=src \
+            --out="$DOGFOOD_ROOT/property/map.json" \
+            --phpstan-memory-limit=512M
+          php bin/agent-map "$PROPERTY_RENAME_COMMAND" \
+            'Dogfood\PropertyBox::$name' label \
+            --index="$DOGFOOD_ROOT/property/map.json" \
+            --format=json > "$DOGFOOD_ROOT/property/plan.json"
+
       - name: Apply exact plan evidence only inside dogfood workspaces
         shell: bash
         run: |
           set -euo pipefail
 
-          php tools/dogfood/rename-plan.php \
-            "$DOGFOOD_ROOT/method" \
-            "$DOGFOOD_ROOT/method/map.json" \
-            "$DOGFOOD_ROOT/method/plan.json" \
-            "$DOGFOOD_ROOT/capabilities.json" \
-            > "$DOGFOOD_ROOT/method/report.json"
-
-          php tools/dogfood/rename-plan.php \
-            "$DOGFOOD_ROOT/function" \
-            "$DOGFOOD_ROOT/function/map.json" \
-            "$DOGFOOD_ROOT/function/plan.json" \
-            "$DOGFOOD_ROOT/capabilities.json" \
-            > "$DOGFOOD_ROOT/function/report.json"
-
-          php tools/dogfood/rename-plan.php \
-            "$DOGFOOD_ROOT/class" \
-            "$DOGFOOD_ROOT/class/map.json" \
-            "$DOGFOOD_ROOT/class/plan.json" \
-            "$DOGFOOD_ROOT/capabilities.json" \
-            > "$DOGFOOD_ROOT/class/report.json"
+          for kind in method function class property; do
+            php tools/dogfood/rename-plan.php \
+              "$DOGFOOD_ROOT/$kind" \
+              "$DOGFOOD_ROOT/$kind/map.json" \
+              "$DOGFOOD_ROOT/$kind/plan.json" \
+              "$DOGFOOD_ROOT/capabilities.json" \
+              > "$DOGFOOD_ROOT/$kind/report.json"
+          done
 
       - name: Prove every registered capability is dogfooded
         shell: bash
@@ -217,7 +238,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          self_paths='src/Cli/CliApplication.php,src/Cli/ClassRenameCliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/RenamePlanCapability.php,src/Cli/RenamePlanCliApplication.php,src/Rename/ClassRenamePlanner.php,src/Rename/SourceClassNameLocator.php,tests/CliApplicationTest.php,tests/ClassRenamePlannerTest.php,tools/dogfood/rename-plan.php'
+          self_paths='src/Cli/CliApplication.php,src/Cli/ClassRenameCliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/PropertyRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/RenamePlanCapability.php,src/Cli/RenamePlanCliApplication.php,src/Rename/ClassRenamePlanner.php,src/Rename/SourceClassNameLocator.php,src/Rename/PropertyRenamePlanner.php,src/Rename/PropertyNameLocator.php,tests/CliApplicationTest.php,tests/ClassRenamePlannerTest.php,tests/PropertyRenamePlannerTest.php,tools/dogfood/rename-plan.php'
           php bin/agent-map build \
             --root="$GITHUB_WORKSPACE" \
             --paths="$self_paths" \
@@ -250,12 +271,22 @@ jobs:
             src/Cli/RenameCliApplication.php \
             src/Cli/ClassRenameCliApplication.php \
             src/Cli/FunctionRenameCliApplication.php \
+            src/Cli/PropertyRenameCliApplication.php \
             src/Cli/RenamePlanCliApplication.php \
             src/Cli/CliApplication.php
           do
             jq -e --arg path "$path" '[.results[].file_path] | index($path) != null' \
               "$DOGFOOD_ROOT/self/search-capability.json" >/dev/null
           done
+
+          php bin/agent-map search 'property rename evidence' \
+            --root="$GITHUB_WORKSPACE" \
+            --index="$DOGFOOD_ROOT/self/map.json" \
+            --database="$DOGFOOD_ROOT/self/search.sqlite" \
+            --format=json \
+            --limit=25 > "$DOGFOOD_ROOT/self/search-property.json"
+          jq -e '[.results[].file_path] | index("src/Rename/PropertyRenamePlanner.php") != null' \
+            "$DOGFOOD_ROOT/self/search-property.json" >/dev/null
 
           php bin/agent-map search 'exact rename plan dogfood evidence' \
             --root="$GITHUB_WORKSPACE" \
@@ -294,12 +325,19 @@ jobs:
           grep -R -n --fixed-strings 'NewService' "$DOGFOOD_ROOT/class/src/NewService.php"
           grep -R -n --fixed-strings 'new NewService()' "$DOGFOOD_ROOT/class/src/ClassConsumer.php"
 
+          if grep -R -n -q --fixed-strings '$name' "$DOGFOOD_ROOT/property/src"; then
+            echo 'Leftover $name in rewritten property sources.' >&2
+            exit 1
+          fi
+          grep -R -n --fixed-strings '$label' "$DOGFOOD_ROOT/property/src/PropertyBox.php"
+
           php -l "$DOGFOOD_ROOT/method/src/Greeter.php"
           php -l "$DOGFOOD_ROOT/method/src/Caller.php"
           php -l "$DOGFOOD_ROOT/function/src/Functions.php"
           php -l "$DOGFOOD_ROOT/function/src/FunctionCaller.php"
           php -l "$DOGFOOD_ROOT/class/src/NewService.php"
           php -l "$DOGFOOD_ROOT/class/src/ClassConsumer.php"
+          php -l "$DOGFOOD_ROOT/property/src/PropertyBox.php"
 
           jq -e '.status == "passed" and .type == "method_rename_plan" and .kind == "method" and .edit_count >= 2' \
             "$DOGFOOD_ROOT/method/report.json" >/dev/null
@@ -307,6 +345,8 @@ jobs:
             "$DOGFOOD_ROOT/function/report.json" >/dev/null
           jq -e '.status == "passed" and .type == "class_rename_plan" and .kind == "class" and .edit_count >= 3 and .move_count == 1' \
             "$DOGFOOD_ROOT/class/report.json" >/dev/null
+          jq -e '.status == "passed" and .type == "property_rename_plan" and .kind == "property" and .edit_count >= 3' \
+            "$DOGFOOD_ROOT/property/report.json" >/dev/null
 
       - name: Upload rename dogfood evidence
         if: always()
