@@ -20,6 +20,7 @@ final readonly class ClassConstantRenamePlanner
         'PHP source outside the indexed map and non-PHP configuration are outside the observable envelope.',
     ];
 
+    /** Builds one immutable plan and publishes no edits when stale or semantic blockers exist. */
     public function plan(AgentMapIndex $map, string $target, string $replacement): ClassConstantRenamePlan
     {
         [$owner, $original] = $this->target($target);
@@ -27,6 +28,7 @@ final readonly class ClassConstantRenamePlanner
         if ($original === $replacement) {
             throw new InvalidArgumentException('Replacement class constant is identical to the current name: ' . $original);
         }
+
         [$file, $symbol] = $this->resolveOwner($map, $owner);
         $stale = array_map(
             static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
@@ -76,6 +78,7 @@ final readonly class ClassConstantRenamePlanner
         if ($declarations !== 1) {
             $blockers[] = sprintf('Expected exactly one declaration of %s::%s in %s; found %d.', $symbol->fqn, $original, $file->path, $declarations);
         }
+
         $unique = [];
         foreach ($edits as $edit) {
             $unique[$edit->path . ':' . $edit->startFilePos . ':' . $edit->endFilePos] = $edit;
@@ -86,7 +89,7 @@ final readonly class ClassConstantRenamePlanner
         return $this->result($map, $symbol, $original, $replacement, $edits, $blindSpots, $stale, $blockers);
     }
 
-    /** @return array{0: string, 1: string} */
+    /** @return array{0: string, 1: string} Validated owner and constant name. */
     private function target(string $target): array
     {
         $target = ltrim(trim($target), '\\');
@@ -100,10 +103,11 @@ final readonly class ClassConstantRenamePlanner
             throw new InvalidArgumentException('Class constant owner cannot be empty.');
         }
         $this->assertConstantName($name);
+
         return [$owner, $name];
     }
 
-    /** @return array{0: FileEntry, 1: SymbolEntry} */
+    /** @return array{0: FileEntry, 1: SymbolEntry} Exactly one mapped class-like owner. */
     private function resolveOwner(AgentMapIndex $map, string $owner): array
     {
         $matches = [];
@@ -121,10 +125,13 @@ final readonly class ClassConstantRenamePlanner
         if (count($matches) !== 1) {
             throw new RuntimeException(count($matches) === 0 ? 'Class constant owner not found: ' . $owner : 'Class constant owner is ambiguous: ' . $owner);
         }
+
         return $matches[0];
     }
 
     /**
+     * Derives the contract status and suppresses all edits for a blocked plan.
+     *
      * @param list<RenameEdit> $edits
      * @param list<RenameBlindSpot> $blindSpots
      * @param list<RenameStaleEvidence> $stale
@@ -133,7 +140,10 @@ final readonly class ClassConstantRenamePlanner
     private function result(AgentMapIndex $map, SymbolEntry $owner, string $original, string $replacement, array $edits, array $blindSpots, array $stale, array $blockers): ClassConstantRenamePlan
     {
         $blockers = array_values(array_unique($blockers));
-        $status = $stale !== [] || $blockers !== [] ? ClassConstantRenamePlan::STATUS_BLOCKED : ($blindSpots !== [] ? ClassConstantRenamePlan::STATUS_REVIEW_REQUIRED : ClassConstantRenamePlan::STATUS_SAFE);
+        $status = $stale !== [] || $blockers !== []
+            ? ClassConstantRenamePlan::STATUS_BLOCKED
+            : ($blindSpots !== [] ? ClassConstantRenamePlan::STATUS_REVIEW_REQUIRED : ClassConstantRenamePlan::STATUS_SAFE);
+
         return new ClassConstantRenamePlan(
             $status,
             'class_constant:' . ltrim($owner->fqn, '\\') . '::' . $original,
@@ -149,6 +159,7 @@ final readonly class ClassConstantRenamePlanner
         );
     }
 
+    /** Rejects names that cannot be PHP class-constant identifiers. */
     private function assertConstantName(string $name): void
     {
         if ($name === '' || preg_match('/^[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*$/D', $name) !== 1) {
