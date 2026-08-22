@@ -16,11 +16,13 @@ use voku\AgentMap\PhpStan\Collector\FunctionCollector;
 use voku\AgentMap\PhpStan\Collector\InstantiationCollector;
 use voku\AgentMap\PhpStan\Collector\MethodCallCollector;
 use voku\AgentMap\PhpStan\Collector\NullsafeMethodCallCollector;
+use voku\AgentMap\PhpStan\Collector\NullsafePropertyFetchCollector;
+use voku\AgentMap\PhpStan\Collector\PropertyDeclarationCollector;
+use voku\AgentMap\PhpStan\Collector\PropertyFetchCollector;
 use voku\AgentMap\PhpStan\Collector\StaticCallCollector;
+use voku\AgentMap\PhpStan\Collector\StaticPropertyFetchCollector;
 
-/**
- * @implements Rule<CollectedDataNode>
- */
+/** @implements Rule<CollectedDataNode> */
 final readonly class CollectedMapExportRule implements Rule
 {
     public function getNodeType(): string
@@ -45,10 +47,16 @@ final readonly class CollectedMapExportRule implements Rule
             StaticCallCollector::class,
             FunctionCallCollector::class,
             InstantiationCollector::class,
+            PropertyDeclarationCollector::class,
+            PropertyFetchCollector::class,
+            NullsafePropertyFetchCollector::class,
+            StaticPropertyFetchCollector::class,
         ] as $collector) {
             foreach ($node->get($collector) as $fileRecords) {
                 foreach ($fileRecords as $record) {
-                    $records[] = $record;
+                    if (is_array($record)) {
+                        $records[] = $record;
+                    }
                 }
             }
         }

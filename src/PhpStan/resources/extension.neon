@@ -32,6 +32,22 @@ services:
         tags:
             - phpstan.collector
     -
+        class: voku\AgentMap\PhpStan\Collector\PropertyDeclarationCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\PropertyFetchCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\NullsafePropertyFetchCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\StaticPropertyFetchCollector
+        tags:
+            - phpstan.collector
+    -
         class: voku\AgentMap\PhpStan\CollectedMapExportRule
         tags:
             - phpstan.rules.rule
