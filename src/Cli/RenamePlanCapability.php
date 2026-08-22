@@ -12,7 +12,7 @@ final readonly class RenamePlanCapability
         public string $command,
         public string $planType,
         public string $contractVersion,
-        public string $semanticBackend,
+        public string $semanticBackend = 'phpstan',
     ) {
     }
 
