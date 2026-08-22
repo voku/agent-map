@@ -137,12 +137,14 @@ jobs:
             "$DOGFOOD_ROOT/method" \
             "$DOGFOOD_ROOT/method/map.json" \
             "$DOGFOOD_ROOT/method/plan.json" \
+            "$DOGFOOD_ROOT/capabilities.json" \
             > "$DOGFOOD_ROOT/method/report.json"
 
           php tools/dogfood/rename-plan.php \
             "$DOGFOOD_ROOT/function" \
             "$DOGFOOD_ROOT/function/map.json" \
             "$DOGFOOD_ROOT/function/plan.json" \
+            "$DOGFOOD_ROOT/capabilities.json" \
             > "$DOGFOOD_ROOT/function/report.json"
 
       - name: Prove every registered capability is dogfooded
@@ -162,9 +164,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          self_paths='src/Cli/CliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/RenamePlanCapability.php,src/Cli/RenamePlanCliApplication.php,tests/CliApplicationTest.php,tools/dogfood/rename-plan.php'
           php bin/agent-map build \
             --root="$GITHUB_WORKSPACE" \
-            --paths=src,tests,tools/dogfood \
+            --paths="$self_paths" \
             --out="$DOGFOOD_ROOT/self/map.json" \
             --phpstan-memory-limit=512M
           php bin/agent-map search-index build \
@@ -179,29 +182,35 @@ jobs:
             --limit=10 > "$DOGFOOD_ROOT/self/related-capability.json"
           jq -e '.primary | map(.path) | index("src/Cli/RenamePlanCliApplication.php") != null' \
             "$DOGFOOD_ROOT/self/related-capability.json" >/dev/null
+          jq -e '.likely_tests | map(.path) | index("tests/CliApplicationTest.php") != null' \
+            "$DOGFOOD_ROOT/self/related-capability.json" >/dev/null
+          jq -e '.mentions | map(.path) | index("src/Cli/CliApplication.php") != null' \
+            "$DOGFOOD_ROOT/self/related-capability.json" >/dev/null
 
-          set +e
           php bin/agent-map search 'rename capability registration' \
             --root="$GITHUB_WORKSPACE" \
             --index="$DOGFOOD_ROOT/self/map.json" \
             --database="$DOGFOOD_ROOT/self/search.sqlite" \
             --format=json \
             --limit=10 > "$DOGFOOD_ROOT/self/search-capability.json"
-          capability_search_exit=$?
+          for path in \
+            src/Cli/RenameCliApplication.php \
+            src/Cli/FunctionRenameCliApplication.php \
+            src/Cli/RenamePlanCliApplication.php \
+            src/Cli/CliApplication.php
+          do
+            jq -e --arg path "$path" '[.results[].file_path] | index($path) != null' \
+              "$DOGFOOD_ROOT/self/search-capability.json" >/dev/null
+          done
+
           php bin/agent-map search 'exact rename plan dogfood evidence' \
             --root="$GITHUB_WORKSPACE" \
             --index="$DOGFOOD_ROOT/self/map.json" \
             --database="$DOGFOOD_ROOT/self/search.sqlite" \
             --format=json \
             --limit=10 > "$DOGFOOD_ROOT/self/search-dogfood.json"
-          dogfood_search_exit=$?
-          set -e
-
-          jq -n \
-            --argjson capability_search_exit "$capability_search_exit" \
-            --argjson dogfood_search_exit "$dogfood_search_exit" \
-            '{capability_search_exit: $capability_search_exit, dogfood_search_exit: $dogfood_search_exit}' \
-            > "$DOGFOOD_ROOT/self/search-status.json"
+          jq -e '[.results[].file_path] | index("tools/dogfood/rename-plan.php") != null' \
+            "$DOGFOOD_ROOT/self/search-dogfood.json" >/dev/null
 
       - name: Prove rewritten dummy PHP is complete and valid
         shell: bash
@@ -221,9 +230,9 @@ jobs:
           php -l "$DOGFOOD_ROOT/function/src/Functions.php"
           php -l "$DOGFOOD_ROOT/function/src/FunctionCaller.php"
 
-          jq -e '.status == "passed" and .type == "method_rename_plan" and .edit_count >= 2' \
+          jq -e '.status == "passed" and .type == "method_rename_plan" and .kind == "method" and .edit_count >= 2' \
             "$DOGFOOD_ROOT/method/report.json" >/dev/null
-          jq -e '.status == "passed" and .type == "function_rename_plan" and .edit_count >= 2' \
+          jq -e '.status == "passed" and .type == "function_rename_plan" and .kind == "function" and .edit_count >= 2' \
             "$DOGFOOD_ROOT/function/report.json" >/dev/null
 
       - name: Upload rename dogfood evidence
