@@ -18,6 +18,7 @@ final class ClassConstantNameLocator
 {
     /** @var array<string, array<int, Node>> */
     private array $ast = [];
+
     /** @var array<string, string> */
     private array $sources = [];
 
@@ -31,6 +32,7 @@ final class ClassConstantNameLocator
         $edits = [];
         $blindSpots = [];
         $collision = false;
+
         foreach ($this->nodes($path) as [$node, $classFqn]) {
             if ($node instanceof ClassConst && strcasecmp($classFqn ?? '', $ownerFqn) === 0) {
                 foreach ($node->consts as $constant) {
@@ -42,26 +44,65 @@ final class ClassConstantNameLocator
                         $edits[] = $this->position($path, $constant->name, 'declaration');
                     }
                 }
+
                 continue;
             }
+
             if (!$node instanceof ClassConstFetch) {
                 continue;
             }
+
             if (!$node->name instanceof Identifier) {
-                $blindSpots[] = new RenameBlindSpot('dynamic_class_constant_name', 'A dynamic class-constant name may resolve to the renamed constant at runtime.', $path, $node->getStartLine(), $node->getEndLine());
+                $blindSpots[] = new RenameBlindSpot(
+                    'dynamic_class_constant_name',
+                    'A dynamic class-constant name may resolve to the renamed constant at runtime.',
+                    $path,
+                    $node->getStartLine(),
+                    $node->getEndLine(),
+                );
                 continue;
             }
+
             if ($node->name->toString() !== $original) {
                 continue;
             }
+
             if (!$node->class instanceof Name) {
-                $blindSpots[] = new RenameBlindSpot('dynamic_class_constant_fetch', 'A dynamic class-constant owner may resolve to the renamed constant at runtime.', $path, $node->getStartLine(), $node->getEndLine());
+                $blindSpots[] = new RenameBlindSpot(
+                    'dynamic_class_constant_fetch',
+                    'A dynamic class-constant owner may resolve to the renamed constant at runtime.',
+                    $path,
+                    $node->getStartLine(),
+                    $node->getEndLine(),
+                );
                 continue;
             }
+
+            $spelling = strtolower($node->class->toString());
+            if ($spelling === 'static') {
+                $blindSpots[] = new RenameBlindSpot(
+                    'late_static_class_constant_fetch',
+                    'static:: class-constant lookup is late-bound and cannot be assigned to one declaring class without inheritance evidence.',
+                    $path,
+                    $node->getStartLine(),
+                    $node->getEndLine(),
+                );
+                continue;
+            }
+
             $fetchOwner = $this->fetchOwner($node->class, $classFqn);
             if ($fetchOwner !== null && strcasecmp($fetchOwner, $ownerFqn) === 0) {
                 $edits[] = $this->position($path, $node->name, 'fetch');
+                continue;
             }
+
+            $blindSpots[] = new RenameBlindSpot(
+                'unproven_class_constant_owner',
+                'A same-name class-constant fetch has no proven declaring-owner identity; inherited and parent lookups require review.',
+                $path,
+                $node->getStartLine(),
+                $node->getEndLine(),
+            );
         }
 
         return ['edits' => $edits, 'blind_spots' => $blindSpots, 'collision' => $collision];
@@ -70,16 +111,23 @@ final class ClassConstantNameLocator
     private function fetchOwner(Name $name, ?string $classFqn): ?string
     {
         $spelling = strtolower($name->toString());
-        if (($spelling === 'self' || $spelling === 'static') && $classFqn !== null) {
+        if ($spelling === 'self' && $classFqn !== null) {
             return $classFqn;
         }
+
+        if ($spelling === 'static' || $spelling === 'parent') {
+            return null;
+        }
+
         $resolved = $name->getAttribute('resolvedName');
         if ($resolved instanceof Name) {
             return ltrim($resolved->toString(), '\\');
         }
+
         if ($name->isFullyQualified()) {
             return ltrim($name->toString(), '\\');
         }
+
         return null;
     }
 
@@ -91,7 +139,14 @@ final class ClassConstantNameLocator
         if ($start < 0 || $end < $start) {
             throw new RuntimeException('Parser did not expose class-constant byte positions in ' . $path . '.');
         }
-        return ['start_file_pos' => $start, 'end_file_pos' => $end, 'line_start' => $name->getStartLine(), 'line_end' => $name->getEndLine(), 'role' => $role];
+
+        return [
+            'start_file_pos' => $start,
+            'end_file_pos' => $end,
+            'line_start' => $name->getStartLine(),
+            'line_end' => $name->getEndLine(),
+            'role' => $role,
+        ];
     }
 
     /** @return list<array{0: Node, 1: ?string}> */
@@ -100,10 +155,12 @@ final class ClassConstantNameLocator
         if (!isset($this->ast[$path])) {
             $this->ast[$path] = PhpCodeParser::getAstFromString($this->source($path));
         }
+
         $result = [];
         foreach ($this->ast[$path] as $node) {
             $this->append($result, $node, null);
         }
+
         return $result;
     }
 
@@ -118,6 +175,7 @@ final class ClassConstantNameLocator
                 $classFqn = ltrim($node->namespacedName->toString(), '\\');
             }
         }
+
         $result[] = [$node, $classFqn];
         foreach ($node->getSubNodeNames() as $key) {
             $child = $node->{$key};
@@ -142,6 +200,7 @@ final class ClassConstantNameLocator
             }
             $this->sources[$path] = $source;
         }
+
         return $this->sources[$path];
     }
 }
