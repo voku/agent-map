@@ -147,11 +147,12 @@ TEXT;
             echo "Governed rename-plan capabilities:\n";
             foreach ($capabilities as $capability) {
                 echo sprintf(
-                    "  %s: %s -> %s@%s [phpstan]\n",
+                    "  %s: %s -> %s@%s [%s]\n",
                     $capability->kind,
                     $capability->command,
                     $capability->planType,
                     $capability->contractVersion,
+                    $capability->semanticBackend,
                 );
             }
 
