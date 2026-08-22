@@ -195,8 +195,8 @@ PHP);
         try {
             $planner->plan($map, 'Demo\Settings', 'NEW_NAME');
             self::fail('Missing class-constant separator should be rejected.');
-        } catch (InvalidArgumentException) {
-            self::assertTrue(true);
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame('Class constant target must use ClassName::CONSTANT syntax.', $exception->getMessage());
         }
 
         $this->expectException(InvalidArgumentException::class);
