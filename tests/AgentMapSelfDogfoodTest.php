@@ -59,11 +59,15 @@ final class AgentMapSelfDogfoodTest extends TestCase
                 'src/Cli/CliApplication.php',
                 'src/Cli/ClassRenameCliApplication.php',
                 'src/Cli/FunctionRenameCliApplication.php',
+                'src/Cli/PropertyRenameCliApplication.php',
                 'src/Cli/RenameCliApplication.php',
                 'src/Cli/RenamePlanCapability.php',
                 'src/Cli/RenamePlanCliApplication.php',
+                'src/Rename/PropertyNameLocator.php',
+                'src/Rename/PropertyRenamePlanner.php',
                 'tests/CliApplicationTest.php',
                 'tests/ClassRenamePlannerTest.php',
+                'tests/PropertyRenamePlannerTest.php',
             ],
             [],
             phpStanMemoryLimit: '512M',
@@ -93,6 +97,7 @@ final class AgentMapSelfDogfoodTest extends TestCase
         self::assertSame([
             'class:voku\\AgentMap\\Cli\\ClassRenameCliApplication',
             'class:voku\\AgentMap\\Cli\\FunctionRenameCliApplication',
+            'class:voku\\AgentMap\\Cli\\PropertyRenameCliApplication',
             'class:voku\\AgentMap\\Cli\\RenameCliApplication',
         ], $implementers);
 
@@ -102,5 +107,8 @@ final class AgentMapSelfDogfoodTest extends TestCase
                 && $relation->kind === 'references_type'
                 && in_array($interfaceId, $relation->targetIds, true),
         ));
+
+        self::assertSame('exact', $map->query('PropertyRenamePlanner')->matchType);
+        self::assertSame('exact', $map->query('PropertyNameLocator')->matchType);
     }
 }

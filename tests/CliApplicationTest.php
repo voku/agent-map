@@ -30,6 +30,7 @@ final class CliApplicationTest extends TestCase
         self::assertSame(1, substr_count($output, 'Temporal evolution:'));
         self::assertSame(1, substr_count($output, 'Rename capability discovery:'));
         self::assertSame(1, substr_count($output, 'rename-capabilities List registered governed rename-plan contracts'));
+        self::assertSame(1, substr_count($output, 'Property refactoring evidence:'));
     }
 
     public function testRenameCapabilitiesReflectTheRegisteredRenameRouters(): void
@@ -64,6 +65,13 @@ final class CliApplicationTest extends TestCase
                 'kind' => 'method',
                 'command' => 'rename-plan',
                 'plan_type' => 'method_rename_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'phpstan',
+            ],
+            [
+                'kind' => 'property',
+                'command' => 'property-rename-plan',
+                'plan_type' => 'property_rename_plan',
                 'contract_version' => '1.0',
                 'semantic_backend' => 'phpstan',
             ],
