@@ -26,20 +26,27 @@ declare(strict_types=1);
 
 namespace Demo;
 
-final class Box
+class Base
+{
+    protected string $inherited = 'base';
+}
+
+final class Box extends Base
 {
     private string $name = 'initial';
+    private string $nullsafeOnly = 'nullable';
     private static int $count = 0;
 
     public function exercise(?Box $other): ?string
     {
         $this->name = 'changed';
-        $copy = $other?->name;
+        $copy = $other?->nullsafeOnly;
+        $inherited = $this->inherited;
         self::$count++;
         $field = 'name';
         $dynamic = $this->{$field};
 
-        return $copy ?? $dynamic ?? $this->name;
+        return $copy ?? $inherited ?? $dynamic ?? $this->name;
     }
 }
 PHP);
@@ -59,21 +66,38 @@ PHP);
             $index->relations,
             static fn (RelationEntry $relation): bool => $relation->kind === 'declares_property',
         ));
-        self::assertCount(1, $declarations);
+        self::assertCount(2, $declarations);
+        $declaredTargets = [];
+        foreach ($declarations as $declaration) {
+            self::assertSame('phpstan_resolved', $declaration->resolution);
+            $declaredTargets = [...$declaredTargets, ...$declaration->targetIds];
+        }
+        sort($declaredTargets, SORT_STRING);
         self::assertSame([
+            'property:Demo\\Base::$inherited',
             'property:Demo\\Box::$count',
             'property:Demo\\Box::$name',
-        ], $declarations[0]->targetIds);
-        self::assertSame('phpstan_resolved', $declarations[0]->resolution);
+            'property:Demo\\Box::$nullsafeOnly',
+        ], $declaredTargets);
 
         $accesses = array_values(array_filter(
             $index->relations,
             static fn (RelationEntry $relation): bool => $relation->kind === 'property_access',
         ));
-        self::assertGreaterThanOrEqual(5, count($accesses));
+        self::assertGreaterThanOrEqual(6, count($accesses));
         self::assertNotEmpty(array_filter(
             $accesses,
             static fn (RelationEntry $relation): bool => in_array('property:Demo\\Box::$name', $relation->targetIds, true)
+                && $relation->resolution === 'phpstan_resolved',
+        ));
+        self::assertNotEmpty(array_filter(
+            $accesses,
+            static fn (RelationEntry $relation): bool => $relation->targetIds === ['property:Demo\\Box::$nullsafeOnly']
+                && $relation->resolution === 'phpstan_resolved',
+        ));
+        self::assertNotEmpty(array_filter(
+            $accesses,
+            static fn (RelationEntry $relation): bool => $relation->targetIds === ['property:Demo\\Base::$inherited']
                 && $relation->resolution === 'phpstan_resolved',
         ));
         self::assertNotEmpty(array_filter(
