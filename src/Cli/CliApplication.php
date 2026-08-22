@@ -76,6 +76,7 @@ final readonly class CliApplication
     private function renameApplications(?MapArtifactPaths $artifacts): array
     {
         return [
+            new ClassRenameCliApplication(artifacts: $artifacts),
             new FunctionRenameCliApplication(artifacts: $artifacts),
             new RenameCliApplication(artifacts: $artifacts),
         ];
@@ -105,7 +106,7 @@ TEXT;
                 $token = $tokens[$index];
                 if ($token === '--format') {
                     $value = $tokens[$index + 1] ?? null;
-                    if (!is_string($value) || $value === '') {
+                    if (!is_string($value) || $value === '' || str_starts_with($value, '--')) {
                         throw new InvalidArgumentException('Missing value for option: --format');
                     }
                     $format = $value;

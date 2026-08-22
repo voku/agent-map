@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- Add a versioned, read-only class rename plan with exact parser-resolved edits, explicit stale/review/blocker evidence, and preconditioned same-directory file moves.
+- Register class rename through the shared capability authority and dogfood its exact edits and move evidence in a temporary project.
+
 ## 0.8.4 - 2026-08-22
 
 ### Added

@@ -47,6 +47,13 @@ final class CliApplicationTest extends TestCase
         self::assertSame('rename_capabilities', $payload['type'] ?? null);
         self::assertSame([
             [
+                'kind' => 'class',
+                'command' => 'class-rename-plan',
+                'plan_type' => 'class_rename_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'none',
+            ],
+            [
                 'kind' => 'function',
                 'command' => 'function-rename-plan',
                 'plan_type' => 'function_rename_plan',
