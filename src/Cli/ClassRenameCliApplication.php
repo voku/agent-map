@@ -9,13 +9,14 @@ use InvalidArgumentException;
 use Throwable;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
-use voku\AgentMap\Rename\MethodRenamePlan;
-use voku\AgentMap\Rename\MethodRenamePlanner;
+use voku\AgentMap\Rename\ClassRenamePlan;
+use voku\AgentMap\Rename\ClassRenamePlanner;
 use voku\AgentMap\Rename\RenameBlindSpot;
 use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Rename\RenameMove;
 
-/** Read-only CLI boundary for deterministic source rename planning. */
-final readonly class RenameCliApplication implements RenamePlanCliApplication
+/** Read-only CLI boundary for same-namespace PHP class rename planning. */
+final readonly class ClassRenameCliApplication implements RenamePlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
@@ -27,22 +28,19 @@ final readonly class RenameCliApplication implements RenamePlanCliApplication
     public function capability(): RenamePlanCapability
     {
         return new RenamePlanCapability(
-            kind: 'method',
-            command: 'rename-plan',
-            planType: 'method_rename_plan',
-            contractVersion: MethodRenamePlan::CONTRACT_VERSION,
+            kind: 'class',
+            command: 'class-rename-plan',
+            planType: 'class_rename_plan',
+            contractVersion: ClassRenamePlan::CONTRACT_VERSION,
+            semanticBackend: 'none',
         );
     }
 
     /** @param list<string> $argv */
     public function supports(array $argv): bool
     {
-        $command = $argv[1] ?? null;
-        if ($command === 'rename-plan') {
-            return true;
-        }
-
-        return $command === 'help' && ($argv[2] ?? null) === 'rename-plan';
+        return ($argv[1] ?? null) === 'class-rename-plan'
+            || (($argv[1] ?? null) === 'help' && ($argv[2] ?? null) === 'class-rename-plan');
     }
 
     /** @param list<string> $argv */
@@ -55,10 +53,10 @@ final readonly class RenameCliApplication implements RenamePlanCliApplication
     {
         return <<<'TEXT'
 
-Refactoring evidence:
-  rename-plan Build a read-only, fail-closed method rename plan from current map evidence
+Class refactoring evidence:
+  class-rename-plan Build a read-only same-namespace class rename plan with exact source edits and file-move evidence
 
-Run `agent-map help rename-plan` for details.
+Run `agent-map help class-rename-plan` for details.
 TEXT;
     }
 
@@ -77,13 +75,13 @@ TEXT;
                 return 0;
             }
             if (count($parsed['arguments']) !== 2) {
-                throw new InvalidArgumentException('rename-plan requires exactly Class::method and replacementName.');
+                throw new InvalidArgumentException('class-rename-plan requires exactly ClassName and replacementName.');
             }
 
             $indexPath = $parsed['options']['index'] ?? $this->artifacts->indexJson();
             $format = $this->format($parsed['options']['format'] ?? 'text');
             $map = (new IndexReader())->read($indexPath);
-            $plan = (new MethodRenamePlanner())->plan($map, $parsed['arguments'][0], $parsed['arguments'][1]);
+            $plan = (new ClassRenamePlanner())->plan($map, $parsed['arguments'][0], $parsed['arguments'][1]);
 
             echo $this->render($plan, $format);
 
@@ -148,7 +146,7 @@ TEXT;
         return $format;
     }
 
-    private function render(MethodRenamePlan $plan, string $format): string
+    private function render(ClassRenamePlan $plan, string $format): string
     {
         return match ($format) {
             'json' => json_encode($plan->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n",
@@ -157,32 +155,31 @@ TEXT;
         };
     }
 
-    private function text(MethodRenamePlan $plan): string
+    private function text(ClassRenamePlan $plan): string
     {
         $lines = [
-            sprintf('Method rename plan: %s', strtoupper($plan->status)),
+            sprintf('Class rename plan: %s', strtoupper($plan->status)),
             sprintf('Target: %s', $plan->targetId),
-            sprintf('Rename: %s -> %s', $plan->originalName, $plan->replacementName),
+            sprintf('Rename: %s -> %s', $plan->originalFqn, $plan->replacementFqn),
             sprintf('Backend: %s', $plan->provenance->backend),
-            sprintf('Map digest: %s', $plan->provenance->mapDigest),
-            sprintf('Family: %d method(s)', count($plan->family)),
             sprintf('Edits: %d', count($plan->edits)),
+            sprintf('Moves: %d', count($plan->moves)),
         ];
 
-        foreach ($plan->family as $methodId) {
-            $lines[] = '  family ' . $methodId;
-        }
         foreach ($plan->edits as $edit) {
             $lines[] = $this->editLine($edit);
+        }
+        foreach ($plan->moves as $move) {
+            $lines[] = $this->moveLine($move);
         }
         foreach ($plan->blindSpots as $blindSpot) {
             $lines[] = $this->blindSpotLine($blindSpot);
         }
-        foreach ($plan->staleEvidence as $stale) {
-            $lines[] = sprintf('  STALE [%s] %s', $stale->reason, $stale->path);
-        }
         foreach ($plan->blockers as $blocker) {
             $lines[] = '  BLOCKER: ' . $blocker;
+        }
+        foreach ($plan->staleEvidence as $stale) {
+            $lines[] = sprintf('  STALE %s: %s', $stale->path, $stale->reason);
         }
         if ($plan->notObservable !== []) {
             $lines[] = 'Not observable:';
@@ -210,6 +207,11 @@ TEXT;
         );
     }
 
+    private function moveLine(RenameMove $move): string
+    {
+        return sprintf('  move %s -> %s [%s]', $move->fromPath, $move->toPath, $move->sourceSha256);
+    }
+
     private function blindSpotLine(RenameBlindSpot $blindSpot): string
     {
         $location = $blindSpot->path === null
@@ -222,18 +224,21 @@ TEXT;
     private function help(): string
     {
         return <<<'TEXT'
-Usage: agent-map rename-plan Class::method replacementName [--index PATH] [--format text|json|toon]
+Usage: agent-map class-rename-plan ClassName replacementName [--index PATH] [--format text|json|toon]
 
-Build a read-only rename plan. The command never modifies source.
+Build a read-only same-namespace class rename plan. The command never modifies source or moves files.
 
-A plan is SAFE when every observed declaration and call can be mapped to one exact source token.
-It is REVIEW_REQUIRED when concrete dynamic-dispatch blind spots remain, and BLOCKED when the map
-is stale or structural-only, an override contract is outside the map, the new name collides in the
-type family, a call can also target a method outside the rename family, or semantic evidence cannot
-be mapped to exactly one parser token.
+Static PHP class-name tokens are resolved through the names-resolved parser AST, so this capability works
+with both PHPStan-backed and structural-only maps. Imports, aliases, type declarations, `new`, `instanceof`,
+static references, attributes, inheritance and `::class` references are projected as exact byte-range edits.
 
-Each edit carries the indexed source SHA-256 plus the exact byte range and expected token. A later
-mutation boundary must re-check those values before applying anything.
+When the class lives in `OldName.php`, the plan also projects a preconditioned same-directory move to
+`NewName.php`. PHPDoc references, exact class-name strings, unconventional file names and multi-type files
+become REVIEW_REQUIRED evidence. Stale source, destination symbol collisions, destination file collisions,
+namespace moves and ambiguous targets are BLOCKED.
+
+Every edit and move is tied to the pre-edit indexed SHA-256. A mutation host must validate the complete
+precondition set before applying any source edit or file move.
 
 TEXT;
     }

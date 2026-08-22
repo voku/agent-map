@@ -15,13 +15,23 @@ use voku\AgentMap\Rename\RenameBlindSpot;
 use voku\AgentMap\Rename\RenameEdit;
 
 /** Read-only CLI boundary for one versioned PHP function rename plan. */
-final readonly class FunctionRenameCliApplication
+final readonly class FunctionRenameCliApplication implements RenamePlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
     public function __construct(?MapArtifactPaths $artifacts = null)
     {
         $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
+    }
+
+    public function capability(): RenamePlanCapability
+    {
+        return new RenamePlanCapability(
+            kind: 'function',
+            command: 'function-rename-plan',
+            planType: 'function_rename_plan',
+            contractVersion: FunctionRenamePlan::CONTRACT_VERSION,
+        );
     }
 
     /** @param list<string> $argv */

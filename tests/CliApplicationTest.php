@@ -15,7 +15,7 @@ use voku\AgentMap\MapArtifactPaths;
 
 final class CliApplicationTest extends TestCase
 {
-    public function testGeneralHelpIncludesArtifactNoteDiscoveryAndTemporalCommandsOnce(): void
+    public function testGeneralHelpIncludesArtifactNoteDiscoveryTemporalAndRenameCapabilitiesOnce(): void
     {
         ob_start();
         try {
@@ -28,6 +28,46 @@ final class CliApplicationTest extends TestCase
         self::assertSame(1, substr_count($output, 'Artifact paths:'));
         self::assertSame(1, substr_count($output, 'Architecture discovery:'));
         self::assertSame(1, substr_count($output, 'Temporal evolution:'));
+        self::assertSame(1, substr_count($output, 'Rename capability discovery:'));
+        self::assertSame(1, substr_count($output, 'rename-capabilities List registered governed rename-plan contracts'));
+    }
+
+    public function testRenameCapabilitiesReflectTheRegisteredRenameRouters(): void
+    {
+        ob_start();
+        try {
+            $exit = (new CliApplication())->run(['agent-map', 'rename-capabilities', '--format=json']);
+        } finally {
+            $output = (string) ob_get_clean();
+        }
+
+        self::assertSame(0, $exit);
+        $payload = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        self::assertSame('rename_capabilities', $payload['type'] ?? null);
+        self::assertSame([
+            [
+                'kind' => 'class',
+                'command' => 'class-rename-plan',
+                'plan_type' => 'class_rename_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'none',
+            ],
+            [
+                'kind' => 'function',
+                'command' => 'function-rename-plan',
+                'plan_type' => 'function_rename_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'phpstan',
+            ],
+            [
+                'kind' => 'method',
+                'command' => 'rename-plan',
+                'plan_type' => 'method_rename_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'phpstan',
+            ],
+        ], $payload['capabilities'] ?? null);
     }
 
     public function testGeneralAndDiscoveryCommandsShareEmbeddedMapRoot(): void
