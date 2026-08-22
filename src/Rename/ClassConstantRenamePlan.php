@@ -13,6 +13,8 @@ final readonly class ClassConstantRenamePlan
     public const STATUS_BLOCKED = 'blocked';
 
     /**
+     * Carries exact edit evidence and keeps stale evidence separate from semantic blockers.
+     *
      * @param list<RenameEdit> $edits
      * @param list<RenameBlindSpot> $blindSpots
      * @param list<RenameStaleEvidence> $staleEvidence
@@ -34,12 +36,13 @@ final readonly class ClassConstantRenamePlan
     ) {
     }
 
+    /** Returns whether consumers must reject the plan without applying any edit. */
     public function isBlocked(): bool
     {
         return $this->status === self::STATUS_BLOCKED;
     }
 
-    /** @return array<string, mixed> */
+    /** @return array<string, mixed> Stable machine-readable contract payload. */
     public function toArray(): array
     {
         return [
