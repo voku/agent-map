@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add a Rector-inspired, versioned class-constant rename plan that locates exact declaration and statically resolved fetch tokens, blocks collisions and stale evidence, and reports dynamic owners.
 - Add a versioned, read-only class rename plan with exact parser-resolved edits, explicit stale/review/blocker evidence, and preconditioned same-directory file moves.
 - Register class rename through the shared capability authority and dogfood its exact edits and move evidence in a temporary project.
 

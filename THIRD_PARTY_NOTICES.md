@@ -10,6 +10,10 @@ Pinned distribution commit used for the method-rename hardening work: `29ac8eb5d
 
 Pinned source commit referenced by that distribution: `83496b5d65035792e7b8eea3bb083e8f3b16bec0`
 
+Class-constant rename behavior was additionally adapted from
+`rules/Renaming/Rector/ClassConstFetch/RenameClassConstFetchRector.php` at upstream commit
+`f92750937f4744876ad0cfd5a1ef9d7010b50020`.
+
 ### MIT License
 
 The MIT License
