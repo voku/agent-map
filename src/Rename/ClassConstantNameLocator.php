@@ -42,7 +42,7 @@ final class ClassConstantNameLocator
             if ($node instanceof ClassConst && strcasecmp($classFqn ?? '', $ownerFqn) === 0) {
                 foreach ($node->consts as $constant) {
                     $name = $constant->name->toString();
-                    if (strcasecmp($name, $replacement) === 0 && strcasecmp($name, $original) !== 0) {
+                    if ($name === $replacement && $name !== $original) {
                         $collision = true;
                     }
                     if ($name === $original) {
