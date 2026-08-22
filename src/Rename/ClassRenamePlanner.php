@@ -265,7 +265,7 @@ final readonly class ClassRenamePlanner
                 $maxEnd = null;
                 $coveringEdit = null;
             }
-            if ($maxEnd !== null && $coveringEdit instanceof RenameEdit && $edit->startFilePos <= $maxEnd) {
+            if ($maxEnd !== null && $edit->startFilePos <= $maxEnd) {
                 $blockers[] = sprintf(
                     'Class rename edits overlap in %s at byte ranges %d-%d and %d-%d.',
                     $edit->path,
