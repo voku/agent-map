@@ -1,0 +1,244 @@
+name: Rename plan dogfood
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: rename-plan-dogfood-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rename-plan-dogfood:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+
+      - name: Create temporary rename projects
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="${RUNNER_TEMP}/agent-map-rename-dogfood"
+          rm -rf "$root"
+          mkdir -p "$root/method/src" "$root/function/src" "$root/self"
+          echo "DOGFOOD_ROOT=$root" >> "$GITHUB_ENV"
+
+          cat > "$root/method/src/Greeter.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class Greeter
+          {
+              public function oldName(string $name): string
+              {
+                  return 'Hello ' . $name;
+              }
+          }
+          PHP
+
+          cat > "$root/method/src/Caller.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class Caller
+          {
+              public function run(Greeter $greeter): string
+              {
+                  return $greeter->oldName('map');
+              }
+          }
+          PHP
+
+          cat > "$root/function/src/Functions.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          function old_function(string $name): string
+          {
+              return strtoupper($name);
+          }
+          PHP
+
+          cat > "$root/function/src/FunctionCaller.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          function use_format(): string
+          {
+              return old_function('map');
+          }
+          PHP
+
+      - name: Discover registered rename capabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          php bin/agent-map rename-capabilities --format=json > "$DOGFOOD_ROOT/capabilities.json"
+          jq -e '.type == "rename_capabilities" and (.capabilities | length) > 0' \
+            "$DOGFOOD_ROOT/capabilities.json" >/dev/null
+
+          method_command="$(jq -r '.capabilities[] | select(.plan_type == "method_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
+          function_command="$(jq -r '.capabilities[] | select(.plan_type == "function_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
+          test -n "$method_command" && test "$method_command" != "null"
+          test -n "$function_command" && test "$function_command" != "null"
+          echo "METHOD_RENAME_COMMAND=$method_command" >> "$GITHUB_ENV"
+          echo "FUNCTION_RENAME_COMMAND=$function_command" >> "$GITHUB_ENV"
+
+      - name: Build semantic maps and publish read-only plans
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/method" \
+            --paths=src \
+            --out="$DOGFOOD_ROOT/method/map.json" \
+            --phpstan-memory-limit=512M
+          php bin/agent-map "$METHOD_RENAME_COMMAND" \
+            'Dogfood\Greeter::oldName' renamedMethod \
+            --index="$DOGFOOD_ROOT/method/map.json" \
+            --format=json > "$DOGFOOD_ROOT/method/plan.json"
+
+          php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/function" \
+            --paths=src \
+            --out="$DOGFOOD_ROOT/function/map.json" \
+            --phpstan-memory-limit=512M
+          php bin/agent-map "$FUNCTION_RENAME_COMMAND" \
+            'Dogfood\old_function' renamed_function \
+            --index="$DOGFOOD_ROOT/function/map.json" \
+            --format=json > "$DOGFOOD_ROOT/function/plan.json"
+
+      - name: Apply exact plan evidence only inside dogfood workspaces
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          php tools/dogfood/rename-plan.php \
+            "$DOGFOOD_ROOT/method" \
+            "$DOGFOOD_ROOT/method/map.json" \
+            "$DOGFOOD_ROOT/method/plan.json" \
+            "$DOGFOOD_ROOT/capabilities.json" \
+            > "$DOGFOOD_ROOT/method/report.json"
+
+          php tools/dogfood/rename-plan.php \
+            "$DOGFOOD_ROOT/function" \
+            "$DOGFOOD_ROOT/function/map.json" \
+            "$DOGFOOD_ROOT/function/plan.json" \
+            "$DOGFOOD_ROOT/capabilities.json" \
+            > "$DOGFOOD_ROOT/function/report.json"
+
+      - name: Prove every registered capability is dogfooded
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          jq -r '.capabilities[].plan_type' "$DOGFOOD_ROOT/capabilities.json" \
+            | sort > "$DOGFOOD_ROOT/registered-plan-types.txt"
+          find "$DOGFOOD_ROOT" -mindepth 2 -maxdepth 2 -name report.json -print0 \
+            | xargs -0 -r jq -r '.type' \
+            | sort > "$DOGFOOD_ROOT/exercised-plan-types.txt"
+          diff -u "$DOGFOOD_ROOT/registered-plan-types.txt" "$DOGFOOD_ROOT/exercised-plan-types.txt"
+
+      - name: Let agent-map discover its own rename extension points
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          self_paths='src/Cli/CliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/RenamePlanCapability.php,src/Cli/RenamePlanCliApplication.php,tests/CliApplicationTest.php,tools/dogfood/rename-plan.php'
+          php bin/agent-map build \
+            --root="$GITHUB_WORKSPACE" \
+            --paths="$self_paths" \
+            --out="$DOGFOOD_ROOT/self/map.json" \
+            --phpstan-memory-limit=512M
+          php bin/agent-map search-index build \
+            --root="$GITHUB_WORKSPACE" \
+            --index="$DOGFOOD_ROOT/self/map.json" \
+            --database="$DOGFOOD_ROOT/self/search.sqlite"
+
+          php bin/agent-map related RenamePlanCliApplication \
+            --root="$GITHUB_WORKSPACE" \
+            --index="$DOGFOOD_ROOT/self/map.json" \
+            --format=json \
+            --limit=10 > "$DOGFOOD_ROOT/self/related-capability.json"
+          jq -e '.primary | map(.path) | index("src/Cli/RenamePlanCliApplication.php") != null' \
+            "$DOGFOOD_ROOT/self/related-capability.json" >/dev/null
+          jq -e '.likely_tests | map(.path) | index("tests/CliApplicationTest.php") != null' \
+            "$DOGFOOD_ROOT/self/related-capability.json" >/dev/null
+          jq -e '.mentions | map(.path) | index("src/Cli/CliApplication.php") != null' \
+            "$DOGFOOD_ROOT/self/related-capability.json" >/dev/null
+
+          php bin/agent-map search 'rename capability registration' \
+            --root="$GITHUB_WORKSPACE" \
+            --index="$DOGFOOD_ROOT/self/map.json" \
+            --database="$DOGFOOD_ROOT/self/search.sqlite" \
+            --format=json \
+            --limit=10 > "$DOGFOOD_ROOT/self/search-capability.json"
+          for path in \
+            src/Cli/RenameCliApplication.php \
+            src/Cli/FunctionRenameCliApplication.php \
+            src/Cli/RenamePlanCliApplication.php \
+            src/Cli/CliApplication.php
+          do
+            jq -e --arg path "$path" '[.results[].file_path] | index($path) != null' \
+              "$DOGFOOD_ROOT/self/search-capability.json" >/dev/null
+          done
+
+          php bin/agent-map search 'exact rename plan dogfood evidence' \
+            --root="$GITHUB_WORKSPACE" \
+            --index="$DOGFOOD_ROOT/self/map.json" \
+            --database="$DOGFOOD_ROOT/self/search.sqlite" \
+            --format=json \
+            --limit=10 > "$DOGFOOD_ROOT/self/search-dogfood.json"
+          jq -e '[.results[].file_path] | index("tools/dogfood/rename-plan.php") != null' \
+            "$DOGFOOD_ROOT/self/search-dogfood.json" >/dev/null
+
+      - name: Prove rewritten dummy PHP is complete and valid
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ! grep -R -n --fixed-strings 'oldName' "$DOGFOOD_ROOT/method/src"
+          grep -R -n --fixed-strings 'renamedMethod' "$DOGFOOD_ROOT/method/src/Greeter.php"
+          grep -R -n --fixed-strings 'renamedMethod' "$DOGFOOD_ROOT/method/src/Caller.php"
+
+          ! grep -R -n --fixed-strings 'old_function' "$DOGFOOD_ROOT/function/src"
+          grep -R -n --fixed-strings 'renamed_function' "$DOGFOOD_ROOT/function/src/Functions.php"
+          grep -R -n --fixed-strings 'renamed_function' "$DOGFOOD_ROOT/function/src/FunctionCaller.php"
+
+          php -l "$DOGFOOD_ROOT/method/src/Greeter.php"
+          php -l "$DOGFOOD_ROOT/method/src/Caller.php"
+          php -l "$DOGFOOD_ROOT/function/src/Functions.php"
+          php -l "$DOGFOOD_ROOT/function/src/FunctionCaller.php"
+
+          jq -e '.status == "passed" and .type == "method_rename_plan" and .kind == "method" and .edit_count >= 2' \
+            "$DOGFOOD_ROOT/method/report.json" >/dev/null
+          jq -e '.status == "passed" and .type == "function_rename_plan" and .kind == "function" and .edit_count >= 2' \
+            "$DOGFOOD_ROOT/function/report.json" >/dev/null
+
+      - name: Upload rename dogfood evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rename-plan-dogfood-${{ github.sha }}
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/agent-map-rename-dogfood
