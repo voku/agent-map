@@ -55,6 +55,13 @@ final class CliApplicationTest extends TestCase
                 'semantic_backend' => 'none',
             ],
             [
+                'kind' => 'class_constant',
+                'command' => 'class-constant-rename-plan',
+                'plan_type' => 'class_constant_rename_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'none',
+            ],
+            [
                 'kind' => 'function',
                 'command' => 'function-rename-plan',
                 'plan_type' => 'function_rename_plan',
