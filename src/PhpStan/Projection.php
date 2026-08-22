@@ -7,6 +7,9 @@ namespace voku\AgentMap\PhpStan;
 use PhpParser\Node;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\NullsafeMethodCall;
+use PhpParser\Node\Expr\NullsafePropertyFetch;
+use PhpParser\Node\Expr\PropertyFetch;
+use PhpParser\Node\Expr\StaticPropertyFetch;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ExtendedMethodReflection;
 use PHPStan\Reflection\ExtendedParameterReflection;
@@ -75,6 +78,54 @@ final readonly class Projection
 
         return self::relation(
             kind: 'calls',
+            scope: $scope,
+            node: $node,
+            targetIds: $targets,
+            receiverType: TypeProjector::describe($receiverType),
+            resultType: TypeProjector::describe($scope->getType($node)),
+        );
+    }
+
+    /** @return array<string, mixed> */
+    public static function propertyAccess(PropertyFetch|NullsafePropertyFetch $node, Scope $scope): array
+    {
+        $receiverType = $scope->getType($node->var);
+        $targets = [];
+        if ($node->name instanceof Node\Identifier) {
+            $propertyName = $node->name->toString();
+            $property = $scope->getInstancePropertyReflection($receiverType, $propertyName);
+            if ($property !== null) {
+                $targets[] = 'property:' . $property->getDeclaringClass()->getName() . '::$' . $propertyName;
+            }
+        }
+
+        return self::relation(
+            kind: 'property_access',
+            scope: $scope,
+            node: $node,
+            targetIds: $targets,
+            receiverType: TypeProjector::describe($receiverType),
+            resultType: TypeProjector::describe($scope->getType($node)),
+        );
+    }
+
+    /** @return array<string, mixed> */
+    public static function staticPropertyAccess(StaticPropertyFetch $node, Scope $scope): array
+    {
+        $receiverType = $node->class instanceof Node\Name
+            ? $scope->resolveTypeByName($node->class)
+            : $scope->getType($node->class);
+        $targets = [];
+        if ($node->name instanceof Node\VarLikeIdentifier) {
+            $propertyName = $node->name->toString();
+            $property = $scope->getStaticPropertyReflection($receiverType, $propertyName);
+            if ($property !== null) {
+                $targets[] = 'property:' . $property->getDeclaringClass()->getName() . '::$' . $propertyName;
+            }
+        }
+
+        return self::relation(
+            kind: 'property_access',
             scope: $scope,
             node: $node,
             targetIds: $targets,
