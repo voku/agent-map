@@ -133,7 +133,9 @@ jobs:
 
               public function read(?PropertyBox $other): string
               {
-                  return $other?->name ?? $this->name;
+                  $otherName = $other?->name;
+
+                  return $otherName ?? $this->name;
               }
           }
           PHP
