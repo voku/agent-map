@@ -87,6 +87,22 @@ jobs:
           }
           PHP
 
+      - name: Discover registered rename capabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          php bin/agent-map rename-capabilities --format=json > "$DOGFOOD_ROOT/capabilities.json"
+          jq -e '.type == "rename_capabilities" and (.capabilities | length) > 0' \
+            "$DOGFOOD_ROOT/capabilities.json" >/dev/null
+
+          method_command="$(jq -r '.capabilities[] | select(.plan_type == "method_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
+          function_command="$(jq -r '.capabilities[] | select(.plan_type == "function_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
+          test -n "$method_command" && test "$method_command" != "null"
+          test -n "$function_command" && test "$function_command" != "null"
+          echo "METHOD_RENAME_COMMAND=$method_command" >> "$GITHUB_ENV"
+          echo "FUNCTION_RENAME_COMMAND=$function_command" >> "$GITHUB_ENV"
+
       - name: Build semantic maps and publish read-only plans
         shell: bash
         run: |
@@ -97,7 +113,7 @@ jobs:
             --paths=src \
             --out="$DOGFOOD_ROOT/method/map.json" \
             --phpstan-memory-limit=512M
-          php bin/agent-map rename-plan \
+          php bin/agent-map "$METHOD_RENAME_COMMAND" \
             'Dogfood\Greeter::oldName' renamedMethod \
             --index="$DOGFOOD_ROOT/method/map.json" \
             --format=json > "$DOGFOOD_ROOT/method/plan.json"
@@ -107,7 +123,7 @@ jobs:
             --paths=src \
             --out="$DOGFOOD_ROOT/function/map.json" \
             --phpstan-memory-limit=512M
-          php bin/agent-map function-rename-plan \
+          php bin/agent-map "$FUNCTION_RENAME_COMMAND" \
             'Dogfood\old_function' renamed_function \
             --index="$DOGFOOD_ROOT/function/map.json" \
             --format=json > "$DOGFOOD_ROOT/function/plan.json"
@@ -128,6 +144,18 @@ jobs:
             "$DOGFOOD_ROOT/function/map.json" \
             "$DOGFOOD_ROOT/function/plan.json" \
             > "$DOGFOOD_ROOT/function/report.json"
+
+      - name: Prove every registered capability is dogfooded
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          jq -r '.capabilities[].plan_type' "$DOGFOOD_ROOT/capabilities.json" \
+            | sort > "$DOGFOOD_ROOT/registered-plan-types.txt"
+          find "$DOGFOOD_ROOT" -mindepth 2 -maxdepth 2 -name report.json -print0 \
+            | xargs -0 -r jq -r '.type' \
+            | sort > "$DOGFOOD_ROOT/exercised-plan-types.txt"
+          diff -u "$DOGFOOD_ROOT/registered-plan-types.txt" "$DOGFOOD_ROOT/exercised-plan-types.txt"
 
       - name: Prove rewritten dummy PHP is complete and valid
         shell: bash
