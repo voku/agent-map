@@ -8,8 +8,8 @@ use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
-if ($argc !== 4) {
-    fwrite(STDERR, "Usage: php tools/dogfood/rename-plan.php PROJECT_ROOT MAP_JSON PLAN_JSON\n");
+if ($argc !== 5) {
+    fwrite(STDERR, "Usage: php tools/dogfood/rename-plan.php PROJECT_ROOT MAP_JSON PLAN_JSON CAPABILITIES_JSON\n");
     exit(2);
 }
 
@@ -28,12 +28,56 @@ if (!is_array($plan)) {
     throw new RuntimeException('Rename plan must decode to an object.');
 }
 
-$type = $plan['type'] ?? null;
-if (!is_string($type) || !in_array($type, ['method_rename_plan', 'function_rename_plan'], true)) {
-    throw new RuntimeException('Unsupported dogfood rename-plan type: ' . (is_scalar($type) ? (string) $type : get_debug_type($type)));
+$capabilitiesJson = file_get_contents($argv[4]);
+if (!is_string($capabilitiesJson)) {
+    throw new RuntimeException('Unable to read rename capabilities: ' . $argv[4]);
 }
-if (($plan['contract_version'] ?? null) !== '1.0') {
-    throw new RuntimeException('Dogfood only accepts rename-plan contract 1.0.');
+$registry = json_decode($capabilitiesJson, true, 512, JSON_THROW_ON_ERROR);
+if (!is_array($registry) || ($registry['type'] ?? null) !== 'rename_capabilities' || !is_array($registry['capabilities'] ?? null)) {
+    throw new RuntimeException('Rename capability registry has an unsupported shape.');
+}
+
+/** @var array<string, array{kind: string, command: string, plan_type: string, contract_version: string, semantic_backend: string}> $capabilitiesByPlanType */
+$capabilitiesByPlanType = [];
+foreach ($registry['capabilities'] as $capability) {
+    if (!is_array($capability)) {
+        throw new RuntimeException('Rename capability must be an object.');
+    }
+    $kind = $capability['kind'] ?? null;
+    $command = $capability['command'] ?? null;
+    $planType = $capability['plan_type'] ?? null;
+    $contractVersion = $capability['contract_version'] ?? null;
+    $semanticBackend = $capability['semantic_backend'] ?? null;
+    if (!is_string($kind) || $kind === ''
+        || !is_string($command) || $command === ''
+        || !is_string($planType) || $planType === ''
+        || !is_string($contractVersion) || $contractVersion === ''
+        || !is_string($semanticBackend) || $semanticBackend === '') {
+        throw new RuntimeException('Rename capability contains incomplete identity.');
+    }
+    if (isset($capabilitiesByPlanType[$planType])) {
+        throw new RuntimeException('Rename capability registry contains duplicate plan type: ' . $planType);
+    }
+    $capabilitiesByPlanType[$planType] = [
+        'kind' => $kind,
+        'command' => $command,
+        'plan_type' => $planType,
+        'contract_version' => $contractVersion,
+        'semantic_backend' => $semanticBackend,
+    ];
+}
+
+$type = $plan['type'] ?? null;
+if (!is_string($type) || !isset($capabilitiesByPlanType[$type])) {
+    throw new RuntimeException('Rename plan type is not registered by agent-map: ' . (is_scalar($type) ? (string) $type : get_debug_type($type)));
+}
+$capability = $capabilitiesByPlanType[$type];
+if (($plan['contract_version'] ?? null) !== $capability['contract_version']) {
+    throw new RuntimeException(sprintf(
+        'Rename plan contract does not match registered %s capability version %s.',
+        $capability['kind'],
+        $capability['contract_version'],
+    ));
 }
 if (($plan['status'] ?? null) !== 'safe') {
     throw new RuntimeException('Dogfood requires a safe rename plan.');
@@ -42,6 +86,9 @@ foreach (['blockers', 'blind_spots', 'stale_evidence'] as $field) {
     if (($plan[$field] ?? null) !== []) {
         throw new RuntimeException('Safe dogfood plan unexpectedly contains ' . $field . '.');
     }
+}
+if (($plan['moves'] ?? []) !== []) {
+    throw new RuntimeException('Dogfood plan contains file moves; extend the shared dogfood publisher before claiming this capability is exercised.');
 }
 
 $provenance = $plan['provenance'] ?? null;
@@ -53,6 +100,15 @@ if (($provenance['map_digest'] ?? null) !== $map->mapDigest()) {
 }
 if (($provenance['backend'] ?? null) !== $map->backend) {
     throw new RuntimeException('Rename plan backend does not match the dogfood map.');
+}
+if ($map->backend !== $capability['semantic_backend']
+    && !str_ends_with($map->backend, '+' . $capability['semantic_backend'])) {
+    throw new RuntimeException(sprintf(
+        'Rename capability %s requires semantic backend %s, map reports %s.',
+        $capability['kind'],
+        $capability['semantic_backend'],
+        $map->backend,
+    ));
 }
 
 $edits = $plan['edits'] ?? null;
@@ -144,7 +200,9 @@ sort($rewrittenPaths, SORT_STRING);
 
 echo json_encode([
     'type' => $type,
-    'contract_version' => '1.0',
+    'kind' => $capability['kind'],
+    'command' => $capability['command'],
+    'contract_version' => $capability['contract_version'],
     'status' => 'passed',
     'backend' => $map->backend,
     'map_digest' => $map->mapDigest(),
