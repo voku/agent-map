@@ -57,11 +57,13 @@ final class AgentMapSelfDogfoodTest extends TestCase
             $root,
             [
                 'src/Cli/CliApplication.php',
+                'src/Cli/ClassRenameCliApplication.php',
                 'src/Cli/FunctionRenameCliApplication.php',
                 'src/Cli/RenameCliApplication.php',
                 'src/Cli/RenamePlanCapability.php',
                 'src/Cli/RenamePlanCliApplication.php',
                 'tests/CliApplicationTest.php',
+                'tests/ClassRenamePlannerTest.php',
             ],
             [],
             phpStanMemoryLimit: '512M',
@@ -89,6 +91,7 @@ final class AgentMapSelfDogfoodTest extends TestCase
         }
         sort($implementers, SORT_STRING);
         self::assertSame([
+            'class:voku\\AgentMap\\Cli\\ClassRenameCliApplication',
             'class:voku\\AgentMap\\Cli\\FunctionRenameCliApplication',
             'class:voku\\AgentMap\\Cli\\RenameCliApplication',
         ], $implementers);

@@ -2,7 +2,12 @@ name: Rename plan dogfood
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+
+permissions:
+  contents: read
 
 concurrency:
   group: rename-plan-dogfood-${{ github.ref }}
@@ -13,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
@@ -26,7 +33,7 @@ jobs:
           set -euo pipefail
           root="${RUNNER_TEMP}/agent-map-rename-dogfood"
           rm -rf "$root"
-          mkdir -p "$root/method/src" "$root/function/src" "$root/self"
+          mkdir -p "$root/method/src" "$root/function/src" "$root/class/src" "$root/self"
           echo "DOGFOOD_ROOT=$root" >> "$GITHUB_ENV"
 
           cat > "$root/method/src/Greeter.php" <<'PHP'
@@ -41,6 +48,32 @@ jobs:
               public function oldName(string $name): string
               {
                   return 'Hello ' . $name;
+              }
+          }
+          PHP
+
+          cat > "$root/class/src/OldService.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class OldService {}
+          PHP
+
+          cat > "$root/class/src/ClassConsumer.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class ClassConsumer
+          {
+              public function create(): OldService
+              {
+                  return new OldService();
               }
           }
           PHP
@@ -98,10 +131,13 @@ jobs:
 
           method_command="$(jq -r '.capabilities[] | select(.plan_type == "method_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
           function_command="$(jq -r '.capabilities[] | select(.plan_type == "function_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
+          class_command="$(jq -r '.capabilities[] | select(.plan_type == "class_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
           test -n "$method_command" && test "$method_command" != "null"
           test -n "$function_command" && test "$function_command" != "null"
+          test -n "$class_command" && test "$class_command" != "null"
           echo "METHOD_RENAME_COMMAND=$method_command" >> "$GITHUB_ENV"
           echo "FUNCTION_RENAME_COMMAND=$function_command" >> "$GITHUB_ENV"
+          echo "CLASS_RENAME_COMMAND=$class_command" >> "$GITHUB_ENV"
 
       - name: Build semantic maps and publish read-only plans
         shell: bash
@@ -128,6 +164,16 @@ jobs:
             --index="$DOGFOOD_ROOT/function/map.json" \
             --format=json > "$DOGFOOD_ROOT/function/plan.json"
 
+          php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/class" \
+            --paths=src \
+            --backend=structural \
+            --out="$DOGFOOD_ROOT/class/map.json"
+          php bin/agent-map "$CLASS_RENAME_COMMAND" \
+            'Dogfood\OldService' NewService \
+            --index="$DOGFOOD_ROOT/class/map.json" \
+            --format=json > "$DOGFOOD_ROOT/class/plan.json"
+
       - name: Apply exact plan evidence only inside dogfood workspaces
         shell: bash
         run: |
@@ -147,6 +193,13 @@ jobs:
             "$DOGFOOD_ROOT/capabilities.json" \
             > "$DOGFOOD_ROOT/function/report.json"
 
+          php tools/dogfood/rename-plan.php \
+            "$DOGFOOD_ROOT/class" \
+            "$DOGFOOD_ROOT/class/map.json" \
+            "$DOGFOOD_ROOT/class/plan.json" \
+            "$DOGFOOD_ROOT/capabilities.json" \
+            > "$DOGFOOD_ROOT/class/report.json"
+
       - name: Prove every registered capability is dogfooded
         shell: bash
         run: |
@@ -164,7 +217,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          self_paths='src/Cli/CliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/RenamePlanCapability.php,src/Cli/RenamePlanCliApplication.php,tests/CliApplicationTest.php,tools/dogfood/rename-plan.php'
+          self_paths='src/Cli/CliApplication.php,src/Cli/ClassRenameCliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/RenamePlanCapability.php,src/Cli/RenamePlanCliApplication.php,src/Rename/ClassRenamePlanner.php,src/Rename/SourceClassNameLocator.php,tests/CliApplicationTest.php,tests/ClassRenamePlannerTest.php,tools/dogfood/rename-plan.php'
           php bin/agent-map build \
             --root="$GITHUB_WORKSPACE" \
             --paths="$self_paths" \
@@ -179,7 +232,7 @@ jobs:
             --root="$GITHUB_WORKSPACE" \
             --index="$DOGFOOD_ROOT/self/map.json" \
             --format=json \
-            --limit=10 > "$DOGFOOD_ROOT/self/related-capability.json"
+            --limit=25 > "$DOGFOOD_ROOT/self/related-capability.json"
           jq -e '.primary | map(.path) | index("src/Cli/RenamePlanCliApplication.php") != null' \
             "$DOGFOOD_ROOT/self/related-capability.json" >/dev/null
           jq -e '.likely_tests | map(.path) | index("tests/CliApplicationTest.php") != null' \
@@ -192,9 +245,10 @@ jobs:
             --index="$DOGFOOD_ROOT/self/map.json" \
             --database="$DOGFOOD_ROOT/self/search.sqlite" \
             --format=json \
-            --limit=10 > "$DOGFOOD_ROOT/self/search-capability.json"
+            --limit=25 > "$DOGFOOD_ROOT/self/search-capability.json"
           for path in \
             src/Cli/RenameCliApplication.php \
+            src/Cli/ClassRenameCliApplication.php \
             src/Cli/FunctionRenameCliApplication.php \
             src/Cli/RenamePlanCliApplication.php \
             src/Cli/CliApplication.php
@@ -208,7 +262,7 @@ jobs:
             --index="$DOGFOOD_ROOT/self/map.json" \
             --database="$DOGFOOD_ROOT/self/search.sqlite" \
             --format=json \
-            --limit=10 > "$DOGFOOD_ROOT/self/search-dogfood.json"
+            --limit=25 > "$DOGFOOD_ROOT/self/search-dogfood.json"
           jq -e '[.results[].file_path] | index("tools/dogfood/rename-plan.php") != null' \
             "$DOGFOOD_ROOT/self/search-dogfood.json" >/dev/null
 
@@ -217,23 +271,42 @@ jobs:
         run: |
           set -euo pipefail
 
-          ! grep -R -n --fixed-strings 'oldName' "$DOGFOOD_ROOT/method/src"
+          if grep -R -n -q --fixed-strings 'oldName' "$DOGFOOD_ROOT/method/src"; then
+            echo 'Leftover oldName in rewritten method sources.' >&2
+            exit 1
+          fi
           grep -R -n --fixed-strings 'renamedMethod' "$DOGFOOD_ROOT/method/src/Greeter.php"
           grep -R -n --fixed-strings 'renamedMethod' "$DOGFOOD_ROOT/method/src/Caller.php"
 
-          ! grep -R -n --fixed-strings 'old_function' "$DOGFOOD_ROOT/function/src"
+          if grep -R -n -q --fixed-strings 'old_function' "$DOGFOOD_ROOT/function/src"; then
+            echo 'Leftover old_function in rewritten function sources.' >&2
+            exit 1
+          fi
           grep -R -n --fixed-strings 'renamed_function' "$DOGFOOD_ROOT/function/src/Functions.php"
           grep -R -n --fixed-strings 'renamed_function' "$DOGFOOD_ROOT/function/src/FunctionCaller.php"
+
+          test ! -e "$DOGFOOD_ROOT/class/src/OldService.php"
+          test -f "$DOGFOOD_ROOT/class/src/NewService.php"
+          if grep -R -n -q --fixed-strings 'OldService' "$DOGFOOD_ROOT/class/src"; then
+            echo 'Leftover OldService in rewritten class sources.' >&2
+            exit 1
+          fi
+          grep -R -n --fixed-strings 'NewService' "$DOGFOOD_ROOT/class/src/NewService.php"
+          grep -R -n --fixed-strings 'new NewService()' "$DOGFOOD_ROOT/class/src/ClassConsumer.php"
 
           php -l "$DOGFOOD_ROOT/method/src/Greeter.php"
           php -l "$DOGFOOD_ROOT/method/src/Caller.php"
           php -l "$DOGFOOD_ROOT/function/src/Functions.php"
           php -l "$DOGFOOD_ROOT/function/src/FunctionCaller.php"
+          php -l "$DOGFOOD_ROOT/class/src/NewService.php"
+          php -l "$DOGFOOD_ROOT/class/src/ClassConsumer.php"
 
           jq -e '.status == "passed" and .type == "method_rename_plan" and .kind == "method" and .edit_count >= 2' \
             "$DOGFOOD_ROOT/method/report.json" >/dev/null
           jq -e '.status == "passed" and .type == "function_rename_plan" and .kind == "function" and .edit_count >= 2' \
             "$DOGFOOD_ROOT/function/report.json" >/dev/null
+          jq -e '.status == "passed" and .type == "class_rename_plan" and .kind == "class" and .edit_count >= 3 and .move_count == 1' \
+            "$DOGFOOD_ROOT/class/report.json" >/dev/null
 
       - name: Upload rename dogfood evidence
         if: always()
