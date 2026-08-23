@@ -249,6 +249,21 @@ The resulting `EditContextPlan` contains:
 
 The default traversal is intentionally one hop. Context selection is deterministic and methods are never truncated halfway through.
 
+### Plan safe PHP removals
+
+Avoid line-oriented `sed` edits when deleting PHP declarations. A PHPStan-backed map can produce a
+whole-node, hash-guarded deletion for an unused private method:
+
+```bash
+vendor/bin/agent-map method-removal-plan 'App\Worker::obsolete' --format=json
+```
+
+The plan includes the exact byte range and expected source, including associated PHPDoc and attributes,
+but remains read-only. Observed calls, public/protected contracts, stale files, conflicting parser
+evidence, traits, magic methods/dispatch, unresolved class-string static calls anywhere in indexed
+source, and unsafe same-line source fail closed. Typed dynamic dispatch and method attributes are
+surfaced for review rather than promoted to certainty.
+
 ## Keep a map current
 
 A full semantic build of a large repository costs minutes. `refresh` re-analyses only the files

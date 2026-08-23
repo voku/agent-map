@@ -7,8 +7,10 @@ namespace voku\AgentMap;
 /** The embedder chooses the root; agent-map owns every filename below it. */
 final readonly class MapArtifactPaths
 {
-    private function __construct(private string $root)
-    {
+    private function __construct(
+        private string $root,
+        private string $projectRoot,
+    ) {
     }
 
     public static function forProject(string $projectRoot, ?string $artifactRoot = null): self
@@ -18,7 +20,10 @@ final readonly class MapArtifactPaths
             ? '.agent-map'
             : trim(str_replace('\\', '/', $artifactRoot));
 
-        return new self(rtrim(self::isAbsolute($root) ? $root : $projectRoot . '/' . trim($root, '/'), '/'));
+        return new self(
+            rtrim(self::isAbsolute($root) ? $root : $projectRoot . '/' . trim($root, '/'), '/'),
+            $projectRoot,
+        );
     }
 
     public function indexJson(): string
@@ -49,6 +54,17 @@ final readonly class MapArtifactPaths
     public function phpStanCache(): string
     {
         return $this->path('phpstan-cache');
+    }
+
+    /** Resolve one user-supplied artifact path using the public --root contract. */
+    public function projectPath(string $path): string
+    {
+        $path = str_replace('\\', '/', $path);
+        if (self::isAbsolute($path)) {
+            return $path;
+        }
+
+        return $this->projectRoot . '/' . ltrim($path, '/');
     }
 
     private function path(string $name): string
