@@ -200,6 +200,8 @@ PHP);
         self::assertSame(PropertyRemovalPlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
         self::assertCount(1, $plan->edits);
         self::assertStringContainsString('#[Marker]', $plan->edits[0]->expected);
+        self::assertSame(9, $plan->edits[0]->lineStart);
+        self::assertSame(10, $plan->edits[0]->lineEnd);
         self::assertSame('property_attributes', $plan->blindSpots[0]->kind);
     }
 
@@ -222,6 +224,8 @@ PHP);
         self::assertSame(PropertyRemovalPlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
         self::assertCount(1, $plan->edits);
         self::assertStringContainsString('@var non-empty-string', $plan->edits[0]->expected);
+        self::assertSame(4, $plan->edits[0]->lineStart);
+        self::assertSame(5, $plan->edits[0]->lineEnd);
         self::assertSame('property_phpdoc', $plan->blindSpots[0]->kind);
     }
 
