@@ -90,8 +90,8 @@ jobs:
           before="$(sha256sum "$DOGFOOD_ROOT/safe/src/Worker.php" | cut -d' ' -f1)"
           php bin/agent-map method-removal-plan \
             'Dogfood\Worker::obsolete' \
-            --index="$DOGFOOD_ROOT/safe/map.json" \
-            --format=json > "$DOGFOOD_ROOT/safe/plan.json"
+            --index "$DOGFOOD_ROOT/safe/map.json" \
+            --format json > "$DOGFOOD_ROOT/safe/plan.json"
           after="$(sha256sum "$DOGFOOD_ROOT/safe/src/Worker.php" | cut -d' ' -f1)"
           test "$before" = "$after"
 
