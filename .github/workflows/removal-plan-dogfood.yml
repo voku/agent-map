@@ -37,7 +37,9 @@ jobs:
             "$root/method-safe/src" \
             "$root/method-used/src" \
             "$root/property-safe/src" \
-            "$root/property-used/src"
+            "$root/property-used/src" \
+            "$root/class-constant-safe/src" \
+            "$root/class-constant-used/src"
           echo "DOGFOOD_ROOT=$root" >> "$GITHUB_ENV"
 
           cat > "$root/method-safe/src/Worker.php" <<'PHP'
@@ -111,6 +113,41 @@ jobs:
               public function run(): void
               {
                   $this->used = 'write-only-is-not-yet-proven-removable';
+              }
+          }
+          PHP
+
+          cat > "$root/class-constant-safe/src/Worker.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class Worker
+          {
+              private const OBSOLETE = 'unused';
+
+              public function run(): void
+              {
+              }
+          }
+          PHP
+
+          cat > "$root/class-constant-used/src/Worker.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class Worker
+          {
+              private const USED = 'used';
+
+              public function run(): string
+              {
+                  return self::USED;
               }
           }
           PHP
@@ -260,3 +297,75 @@ jobs:
             and ([.blockers[] | contains("zero observed semantic accesses")] | any)
             and ([.not_observable[] | contains("Write-only property elimination")] | any)
           ' "$DOGFOOD_ROOT/property-used/plan.json" >/dev/null
+
+      - name: Publish exact read-only class-constant-removal evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/class-constant-safe" \
+            --paths=src \
+            --out="$DOGFOOD_ROOT/class-constant-safe/map.json" \
+            --phpstan-memory-limit=512M
+
+          before="$(sha256sum "$DOGFOOD_ROOT/class-constant-safe/src/Worker.php" | cut -d' ' -f1)"
+          php bin/agent-map class-constant-removal-plan \
+            'Dogfood\Worker::OBSOLETE' \
+            --index="$DOGFOOD_ROOT/class-constant-safe/map.json" \
+            --format=json > "$DOGFOOD_ROOT/class-constant-safe/plan.json"
+          after="$(sha256sum "$DOGFOOD_ROOT/class-constant-safe/src/Worker.php" | cut -d' ' -f1)"
+          test "$before" = "$after"
+
+          jq -e '
+            (.type == "class_constant_removal_plan")
+            and (.contract_version == "1.0")
+            and (.status == "safe")
+            and (.blind_spots == [])
+            and (.stale_evidence == [])
+            and (.blockers == [])
+            and (.edits | length == 1)
+            and (.edits[0].replacement == "")
+            and (.edits[0].role == "class_constant_declaration_removal")
+            and (.edits[0].resolution == "parser_resolved")
+            and (.edits[0].source_sha256 | startswith("sha256:"))
+            and (.edits[0].expected | contains("private const OBSOLETE"))
+          ' "$DOGFOOD_ROOT/class-constant-safe/plan.json" >/dev/null
+
+          php bin/agent-map class-constant-removal-plan \
+            'Dogfood\Worker::OBSOLETE' \
+            --index="$DOGFOOD_ROOT/class-constant-safe/map.json" \
+            --format=text > "$DOGFOOD_ROOT/class-constant-safe/plan.txt"
+          php bin/agent-map class-constant-removal-plan \
+            'Dogfood\Worker::OBSOLETE' \
+            --index="$DOGFOOD_ROOT/class-constant-safe/map.json" \
+            --format=toon > "$DOGFOOD_ROOT/class-constant-safe/plan.toon"
+          test -s "$DOGFOOD_ROOT/class-constant-safe/plan.txt"
+          test -s "$DOGFOOD_ROOT/class-constant-safe/plan.toon"
+          test "$before" = "$(sha256sum "$DOGFOOD_ROOT/class-constant-safe/src/Worker.php" | cut -d' ' -f1)"
+
+      - name: Prove observed class-constant fetches fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/class-constant-used" \
+            --paths=src \
+            --out="$DOGFOOD_ROOT/class-constant-used/map.json" \
+            --phpstan-memory-limit=512M
+
+          set +e
+          php bin/agent-map class-constant-removal-plan \
+            'Dogfood\Worker::USED' \
+            --index="$DOGFOOD_ROOT/class-constant-used/map.json" \
+            --format=json > "$DOGFOOD_ROOT/class-constant-used/plan.json"
+          status=$?
+          set -e
+          test "$status" -eq 1
+
+          jq -e '
+            (.status == "blocked")
+            and (.edits == [])
+            and ([.blockers[] | contains("Class constant is fetched")] | any)
+          ' "$DOGFOOD_ROOT/class-constant-used/plan.json" >/dev/null
