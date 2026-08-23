@@ -62,6 +62,9 @@ final readonly class MethodRemovalPlanner
         if (in_array(strtolower($method->method->name), self::IMPLICIT_MAGIC_METHODS, true)) {
             $blockers[] = 'Language-invoked magic methods cannot be proven unused from ordinary call relations.';
         }
+        if ($this->ownerHasMagicDispatch($method->owner->methods)) {
+            $blockers[] = 'Classes with __call or __callStatic are blocked because magic dispatch can make ordinary call evidence incomplete.';
+        }
         if ($method->method->reconciliationStatus === 'conflict') {
             $blockers[] = 'Cannot remove a method whose structural and semantic declarations conflict.';
         }
@@ -93,28 +96,32 @@ final readonly class MethodRemovalPlanner
                     $method->method->lineEnd,
                     $method->method->name,
                 );
-                if ($range['has_attributes']) {
-                    $blindSpots[] = new RenameBlindSpot(
-                        'method_attributes',
-                        'Method attributes may represent runtime or framework entry points that ordinary call relations do not prove unused.',
+                if ($range['has_class_string_static_call']) {
+                    $blockers[] = 'A class-string static call with this method name is not resolved by the current PHPStan call collector.';
+                } else {
+                    if ($range['has_attributes']) {
+                        $blindSpots[] = new RenameBlindSpot(
+                            'method_attributes',
+                            'Method attributes may represent runtime or framework entry points that ordinary call relations do not prove unused.',
+                            $method->file->path,
+                            $method->method->lineStart,
+                            $method->method->lineEnd,
+                        );
+                    }
+                    $edits[] = new RenameEdit(
                         $method->file->path,
+                        $method->file->sha256,
+                        $range['start'],
+                        $range['end'],
                         $method->method->lineStart,
                         $method->method->lineEnd,
+                        $range['expected'],
+                        '',
+                        'method_declaration_removal',
+                        $method->id,
+                        'phpstan_resolved',
                     );
                 }
-                $edits[] = new RenameEdit(
-                    $method->file->path,
-                    $method->file->sha256,
-                    $range['start'],
-                    $range['end'],
-                    $method->method->lineStart,
-                    $method->method->lineEnd,
-                    $range['expected'],
-                    '',
-                    'method_declaration_removal',
-                    $method->id,
-                    'phpstan_resolved',
-                );
             } catch (RuntimeException $exception) {
                 $blockers[] = $exception->getMessage();
             }
@@ -136,6 +143,22 @@ final readonly class MethodRemovalPlanner
             $blockers,
             self::NOT_OBSERVABLE,
         );
+    }
+
+    /** @param list<object> $methods */
+    private function ownerHasMagicDispatch(array $methods): bool
+    {
+        foreach ($methods as $ownerMethod) {
+            if (!property_exists($ownerMethod, 'name')) {
+                continue;
+            }
+            $name = strtolower((string) $ownerMethod->name);
+            if ($name === '__call' || $name === '__callstatic') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function receiverTypeContainsOwner(string $receiverType, string $ownerFqn): bool
