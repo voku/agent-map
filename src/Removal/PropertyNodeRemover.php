@@ -61,12 +61,15 @@ final readonly class PropertyNodeRemover
 
         $property = $matches[0];
         $nodeStart = $property->getStartFilePos();
+        $lineStart = $property->getStartLine();
         $doc = $property->getDocComment();
         if ($doc !== null) {
             $nodeStart = min($nodeStart, $doc->getStartFilePos());
+            $lineStart = min($lineStart, $doc->getStartLine());
         }
         foreach ($property->attrGroups as $attributeGroup) {
             $nodeStart = min($nodeStart, $attributeGroup->getStartFilePos());
+            $lineStart = min($lineStart, $attributeGroup->getStartLine());
         }
 
         $previousNewline = strrpos(substr($source, 0, $nodeStart), "\n");
@@ -93,7 +96,7 @@ final readonly class PropertyNodeRemover
             'start' => $start,
             'end' => $end,
             'expected' => substr($source, $start, $end - $start + 1),
-            'line_start' => $property->getStartLine(),
+            'line_start' => $lineStart,
             'line_end' => $property->getEndLine(),
             'private' => $property->isPrivate(),
             'static' => $property->isStatic(),
