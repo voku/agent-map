@@ -255,12 +255,14 @@ Avoid line-oriented `sed` edits when deleting PHP declarations. A PHPStan-backed
 whole-node, hash-guarded deletion for an unused private method:
 
 ```bash
-vendor/bin/agent-map method-removal-plan 'App\\Worker::obsolete' --format=json
+vendor/bin/agent-map method-removal-plan 'App\Worker::obsolete' --format=json
 ```
 
-The plan includes the exact byte range and expected source (including PHPDoc), but remains read-only.
-Observed calls, public/protected contracts, stale files, and conflicting parser evidence fail closed;
-dynamic dispatch on the owning type is surfaced for review.
+The plan includes the exact byte range and expected source, including associated PHPDoc and attributes,
+but remains read-only. Observed calls, public/protected contracts, stale files, conflicting parser
+evidence, traits, magic methods/dispatch, unresolved class-string static calls anywhere in indexed
+source, and unsafe same-line source fail closed. Typed dynamic dispatch and method attributes are
+surfaced for review rather than promoted to certainty.
 
 ## Keep a map current
 
