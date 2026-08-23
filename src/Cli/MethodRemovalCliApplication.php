@@ -48,7 +48,11 @@ final readonly class MethodRemovalCliApplication
             }
 
             $format = $this->format($parsed['options']['format'] ?? 'text');
-            $map = (new IndexReader())->read($parsed['options']['index'] ?? $this->artifacts->indexJson());
+            $explicitIndex = $parsed['options']['index'] ?? null;
+            $index = $explicitIndex === null
+                ? $this->artifacts->indexJson()
+                : $this->artifacts->projectPath($explicitIndex);
+            $map = (new IndexReader())->read($index);
             $plan = (new MethodRemovalPlanner())->plan($map, $parsed['arguments'][0]);
             echo $this->render($plan, $format);
 
@@ -98,6 +102,9 @@ final readonly class MethodRemovalCliApplication
             if ($value === '') {
                 throw new InvalidArgumentException('Empty value for option: --' . $name);
             }
+            if (isset($options[$name])) {
+                throw new InvalidArgumentException('Duplicate option: --' . $name);
+            }
             $options[$name] = $value;
         }
 
@@ -122,15 +129,34 @@ final readonly class MethodRemovalCliApplication
         if ($format === 'toon') {
             return Toon::encode($plan->toArray()) . "\n";
         }
-        $lines = [sprintf('Method removal plan: %s', strtoupper($plan->status)), 'Target: ' . $plan->targetId, 'Edits: ' . count($plan->edits)];
+
+        $lines = [
+            sprintf('Method removal plan: %s', strtoupper($plan->status)),
+            'Target: ' . $plan->targetId,
+            'Edits: ' . count($plan->edits),
+            'Provenance:',
+            '  map_digest: ' . $plan->provenance->mapDigest,
+            '  backend: ' . $plan->provenance->backend,
+        ];
+        if ($plan->provenance->analysisFingerprint !== null) {
+            foreach ($plan->provenance->analysisFingerprint->toArray() as $name => $value) {
+                $lines[] = '  analysis_fingerprint.' . $name . ': ' . $value;
+            }
+        }
         foreach ($plan->edits as $edit) {
             $lines[] = sprintf('  delete %s:%d-%d bytes %d-%d (SHA-256 %s)', $edit->path, $edit->lineStart, $edit->lineEnd, $edit->startFilePos, $edit->endFilePos, $edit->sourceSha256);
         }
         foreach ($plan->blindSpots as $spot) {
             $lines[] = '  REVIEW: ' . $spot->message;
         }
+        foreach ($plan->staleEvidence as $stale) {
+            $lines[] = sprintf('  STALE: %s (%s)', $stale->path, $stale->reason);
+        }
         foreach ($plan->blockers as $blocker) {
             $lines[] = '  BLOCKER: ' . $blocker;
+        }
+        foreach ($plan->notObservable as $boundary) {
+            $lines[] = '  NOT OBSERVABLE: ' . $boundary;
         }
 
         return implode("\n", $lines) . "\n";
