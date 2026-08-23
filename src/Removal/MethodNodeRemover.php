@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace voku\AgentMap\Removal;
 
 use PhpParser\Node;
+use PhpParser\Node\Expr\ClassConstFetch;
+use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt\ClassMethod;
 use RuntimeException;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
@@ -16,7 +19,7 @@ final readonly class MethodNodeRemover
     {
     }
 
-    /** @return array{start: int, end: int, expected: string, has_attributes: bool} */
+    /** @return array{start: int, end: int, expected: string, has_attributes: bool, has_class_string_static_call: bool} */
     public function locate(string $path, int $lineStart, int $lineEnd, string $name): array
     {
         $absolute = rtrim($this->root, '/\\') . '/' . ltrim(str_replace('\\', '/', $path), '/');
@@ -26,8 +29,10 @@ final readonly class MethodNodeRemover
         }
 
         $matches = [];
+        $hasClassStringStaticCall = false;
         foreach (PhpCodeParser::getAstFromString($source) as $node) {
             $this->collect($node, $matches, $lineStart, $lineEnd, $name);
+            $hasClassStringStaticCall = $hasClassStringStaticCall || $this->containsClassStringStaticCall($node, $name);
         }
         if (count($matches) !== 1) {
             throw new RuntimeException(sprintf('Cannot map method removal to exactly one declaration at %s:%d-%d; found %d candidate(s).', $path, $lineStart, $lineEnd, count($matches)));
@@ -68,6 +73,7 @@ final readonly class MethodNodeRemover
             'end' => $end,
             'expected' => substr($source, $start, $end - $start + 1),
             'has_attributes' => $method->attrGroups !== [],
+            'has_class_string_static_call' => $hasClassStringStaticCall,
         ];
     }
 
@@ -86,5 +92,28 @@ final readonly class MethodNodeRemover
                 }
             }
         }
+    }
+
+    private function containsClassStringStaticCall(Node $node, string $name): bool
+    {
+        if ($node instanceof StaticCall
+            && $node->class instanceof ClassConstFetch
+            && $node->class->name instanceof Identifier
+            && strcasecmp($node->class->name->toString(), 'class') === 0
+            && $node->name instanceof Identifier
+            && strcasecmp($node->name->toString(), $name) === 0) {
+            return true;
+        }
+
+        foreach ($node->getSubNodeNames() as $subNodeName) {
+            $child = $node->{$subNodeName};
+            foreach ($child instanceof Node ? [$child] : (is_array($child) ? $child : []) as $item) {
+                if ($item instanceof Node && $this->containsClassStringStaticCall($item, $name)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }
