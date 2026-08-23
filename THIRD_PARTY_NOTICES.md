@@ -20,6 +20,12 @@ and class-string static-call safety boundaries were adapted from
 `2ac92445a4bbef7c21bce2d48dae756a64516c02`. Agent-map adapts that mutating behavior into a
 read-only, PHPStan-backed exact-edit contract.
 
+Unused-private-class-constant removal behavior, especially its private visibility and
+single-declaration safety rules, was adapted from
+`rules/DeadCode/Rector/ClassConst/RemoveUnusedPrivateClassConstantRector.php` at upstream commit
+`cd3ec48e1209436d03d9c67d47c51ac4972a20cc`. Agent-map adds hash guarding, whole-project AST fetch
+evidence, explicit uncertainty, and a read-only plan boundary.
+
 ### MIT License
 
 The MIT License

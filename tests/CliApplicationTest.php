@@ -31,6 +31,7 @@ final class CliApplicationTest extends TestCase
         self::assertSame(1, substr_count($output, 'Rename capability discovery:'));
         self::assertSame(1, substr_count($output, 'rename-capabilities List registered governed rename-plan contracts'));
         self::assertSame(1, substr_count($output, 'Property refactoring evidence:'));
+        self::assertSame(1, substr_count($output, 'class-constant-removal-plan Build an exact unused-private-class-constant deletion plan'));
     }
 
     public function testRenameCapabilitiesReflectTheRegisteredRenameRouters(): void

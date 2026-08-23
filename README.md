@@ -256,6 +256,8 @@ whole-node, hash-guarded deletion for an unused private method:
 
 ```bash
 vendor/bin/agent-map method-removal-plan 'App\Worker::obsolete' --format=json
+vendor/bin/agent-map property-removal-plan 'App\Worker::$obsolete' --format=json
+vendor/bin/agent-map class-constant-removal-plan 'App\Worker::OBSOLETE' --format=json
 ```
 
 The plan includes the exact byte range and expected source, including associated PHPDoc and attributes,
@@ -263,6 +265,13 @@ but remains read-only. Observed calls, public/protected contracts, stale files, 
 evidence, traits, magic methods/dispatch, unresolved class-string static calls anywhere in indexed
 source, and unsafe same-line source fail closed. Typed dynamic dispatch and method attributes are
 surfaced for review rather than promoted to certainty.
+
+The same read-only contract now covers unused private properties and class constants. Class-constant
+plans adapt Rector's `RemoveUnusedPrivateClassConstantRector`: only a single private declaration can
+be deleted, every indexed PHP file is AST-scanned for static fetches, and the plan includes the whole
+declaration (PHPDoc and attributes included) rather than asking an agent to splice lines with `sed`.
+Dynamic, inherited, late-static, reflective, stale, and out-of-scope evidence remains visible and
+fails closed or requires review.
 
 ## Keep a map current
 
