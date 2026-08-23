@@ -14,6 +14,28 @@ use voku\AgentMap\Rename\RenameStaleEvidence;
 /** Builds a fail-closed exact deletion plan, inspired by Rector's Removing rules. */
 final readonly class MethodRemovalPlanner
 {
+    /** @var list<string> */
+    private const IMPLICIT_MAGIC_METHODS = [
+        '__call',
+        '__callstatic',
+        '__clone',
+        '__construct',
+        '__debuginfo',
+        '__destruct',
+        '__get',
+        '__invoke',
+        '__isset',
+        '__serialize',
+        '__set',
+        '__set_state',
+        '__sleep',
+        '__tostring',
+        '__unserialize',
+        '__unset',
+        '__wakeup',
+    ];
+
+    /** @var list<string> */
     private const NOT_OBSERVABLE = [
         'Reflection, string callbacks, framework configuration and non-PHP configuration are not represented as PHPStan call relations.',
         'PHP source outside the indexed map scope is outside the observable envelope.',
@@ -34,6 +56,12 @@ final readonly class MethodRemovalPlanner
         if ($method->method->visibility !== 'private') {
             $blockers[] = 'Only private methods can be planned for removal; contracts and inheritors are intentionally excluded.';
         }
+        if ($method->owner->kind === 'trait') {
+            $blockers[] = 'Trait method removal is blocked until trait alias and insteadof adaptations are represented as removal evidence.';
+        }
+        if (in_array(strtolower($method->method->name), self::IMPLICIT_MAGIC_METHODS, true)) {
+            $blockers[] = 'Language-invoked magic methods cannot be proven unused from ordinary call relations.';
+        }
         if ($method->method->reconciliationStatus === 'conflict') {
             $blockers[] = 'Cannot remove a method whose structural and semantic declarations conflict.';
         }
@@ -45,16 +73,48 @@ final readonly class MethodRemovalPlanner
             if (in_array($method->id, $relation->targetIds, true)) {
                 $blockers[] = sprintf('Method is called at %s:%d-%d (%s).', $relation->file, $relation->lineStart, $relation->lineEnd, $relation->resolution);
             } elseif ($relation->resolution === 'dynamic' && $relation->receiverType !== null
-                && strcasecmp(ltrim($relation->receiverType, '\\'), ltrim($method->owner->fqn, '\\')) === 0) {
-                $blindSpots[] = new RenameBlindSpot('dynamic_method_name', 'A dynamic call on the owning type may invoke this method.', $relation->file, $relation->lineStart, $relation->lineEnd);
+                && $this->receiverTypeContainsOwner($relation->receiverType, $method->owner->fqn)) {
+                $blindSpots[] = new RenameBlindSpot(
+                    'dynamic_method_name',
+                    'A dynamic call on the owning type may invoke this method.',
+                    $relation->file,
+                    $relation->lineStart,
+                    $relation->lineEnd,
+                );
             }
         }
 
         $edits = [];
         if ($stale === [] && $blockers === []) {
             try {
-                $range = (new MethodNodeRemover($map->root))->locate($method->file->path, $method->method->lineStart, $method->method->lineEnd, $method->method->name);
-                $edits[] = new RenameEdit($method->file->path, $method->file->sha256, $range['start'], $range['end'], $method->method->lineStart, $method->method->lineEnd, $range['expected'], '', 'method_declaration_removal', $method->id, 'phpstan_resolved');
+                $range = (new MethodNodeRemover($map->root))->locate(
+                    $method->file->path,
+                    $method->method->lineStart,
+                    $method->method->lineEnd,
+                    $method->method->name,
+                );
+                if ($range['has_attributes']) {
+                    $blindSpots[] = new RenameBlindSpot(
+                        'method_attributes',
+                        'Method attributes may represent runtime or framework entry points that ordinary call relations do not prove unused.',
+                        $method->file->path,
+                        $method->method->lineStart,
+                        $method->method->lineEnd,
+                    );
+                }
+                $edits[] = new RenameEdit(
+                    $method->file->path,
+                    $method->file->sha256,
+                    $range['start'],
+                    $range['end'],
+                    $method->method->lineStart,
+                    $method->method->lineEnd,
+                    $range['expected'],
+                    '',
+                    'method_declaration_removal',
+                    $method->id,
+                    'phpstan_resolved',
+                );
             } catch (RuntimeException $exception) {
                 $blockers[] = $exception->getMessage();
             }
@@ -76,5 +136,15 @@ final readonly class MethodRemovalPlanner
             $blockers,
             self::NOT_OBSERVABLE,
         );
+    }
+
+    private function receiverTypeContainsOwner(string $receiverType, string $ownerFqn): bool
+    {
+        $ownerPattern = preg_quote(ltrim($ownerFqn, '\\'), '/');
+
+        return preg_match(
+            '/(?<![A-Za-z0-9_\\\\])\\\\?' . $ownerPattern . '(?![A-Za-z0-9_\\\\])/i',
+            $receiverType,
+        ) === 1;
     }
 }
