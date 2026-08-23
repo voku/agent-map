@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  method-removal-plan:
+  removal-plans:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -33,10 +33,14 @@ jobs:
           set -euo pipefail
           root="${RUNNER_TEMP}/agent-map-removal-dogfood"
           rm -rf "$root"
-          mkdir -p "$root/safe/src" "$root/used/src"
+          mkdir -p \
+            "$root/method-safe/src" \
+            "$root/method-used/src" \
+            "$root/property-safe/src" \
+            "$root/property-used/src"
           echo "DOGFOOD_ROOT=$root" >> "$GITHUB_ENV"
 
-          cat > "$root/safe/src/Worker.php" <<'PHP'
+          cat > "$root/method-safe/src/Worker.php" <<'PHP'
           <?php
 
           declare(strict_types=1);
@@ -56,7 +60,7 @@ jobs:
           }
           PHP
 
-          cat > "$root/used/src/Worker.php" <<'PHP'
+          cat > "$root/method-used/src/Worker.php" <<'PHP'
           <?php
 
           declare(strict_types=1);
@@ -76,23 +80,58 @@ jobs:
           }
           PHP
 
-      - name: Publish exact read-only removal evidence
+          cat > "$root/property-safe/src/Worker.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class Worker
+          {
+              private string $obsolete = 'unused';
+
+              public function run(): void
+              {
+              }
+          }
+          PHP
+
+          cat > "$root/property-used/src/Worker.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class Worker
+          {
+              private string $used = '';
+
+              public function run(): void
+              {
+                  $this->used = 'write-only-is-not-yet-proven-removable';
+              }
+          }
+          PHP
+
+      - name: Publish exact read-only method-removal evidence
         shell: bash
         run: |
           set -euo pipefail
 
           php bin/agent-map build \
-            --root="$DOGFOOD_ROOT/safe" \
+            --root="$DOGFOOD_ROOT/method-safe" \
             --paths=src \
-            --out="$DOGFOOD_ROOT/safe/map.json" \
+            --out="$DOGFOOD_ROOT/method-safe/map.json" \
             --phpstan-memory-limit=512M
 
-          before="$(sha256sum "$DOGFOOD_ROOT/safe/src/Worker.php" | cut -d' ' -f1)"
+          before="$(sha256sum "$DOGFOOD_ROOT/method-safe/src/Worker.php" | cut -d' ' -f1)"
           php bin/agent-map method-removal-plan \
             'Dogfood\Worker::obsolete' \
-            --index "$DOGFOOD_ROOT/safe/map.json" \
-            --format json > "$DOGFOOD_ROOT/safe/plan.json"
-          after="$(sha256sum "$DOGFOOD_ROOT/safe/src/Worker.php" | cut -d' ' -f1)"
+            --index "$DOGFOOD_ROOT/method-safe/map.json" \
+            --format json > "$DOGFOOD_ROOT/method-safe/plan.json"
+          after="$(sha256sum "$DOGFOOD_ROOT/method-safe/src/Worker.php" | cut -d' ' -f1)"
           test "$before" = "$after"
 
           jq -e '
@@ -109,36 +148,36 @@ jobs:
             and (.edits[0].source_sha256 | startswith("sha256:"))
             and (.edits[0].expected | contains("private function obsolete"))
             and (.edits[0].expected | contains("Proven unused"))
-          ' "$DOGFOOD_ROOT/safe/plan.json" >/dev/null
+          ' "$DOGFOOD_ROOT/method-safe/plan.json" >/dev/null
 
           php bin/agent-map method-removal-plan \
             'Dogfood\Worker::obsolete' \
-            --index="$DOGFOOD_ROOT/safe/map.json" \
-            --format=text > "$DOGFOOD_ROOT/safe/plan.txt"
+            --index="$DOGFOOD_ROOT/method-safe/map.json" \
+            --format=text > "$DOGFOOD_ROOT/method-safe/plan.txt"
           php bin/agent-map method-removal-plan \
             'Dogfood\Worker::obsolete' \
-            --index="$DOGFOOD_ROOT/safe/map.json" \
-            --format=toon > "$DOGFOOD_ROOT/safe/plan.toon"
-          test -s "$DOGFOOD_ROOT/safe/plan.txt"
-          test -s "$DOGFOOD_ROOT/safe/plan.toon"
-          test "$before" = "$(sha256sum "$DOGFOOD_ROOT/safe/src/Worker.php" | cut -d' ' -f1)"
+            --index="$DOGFOOD_ROOT/method-safe/map.json" \
+            --format=toon > "$DOGFOOD_ROOT/method-safe/plan.toon"
+          test -s "$DOGFOOD_ROOT/method-safe/plan.txt"
+          test -s "$DOGFOOD_ROOT/method-safe/plan.toon"
+          test "$before" = "$(sha256sum "$DOGFOOD_ROOT/method-safe/src/Worker.php" | cut -d' ' -f1)"
 
-      - name: Prove observed calls fail closed
+      - name: Prove observed method calls fail closed
         shell: bash
         run: |
           set -euo pipefail
 
           php bin/agent-map build \
-            --root="$DOGFOOD_ROOT/used" \
+            --root="$DOGFOOD_ROOT/method-used" \
             --paths=src \
-            --out="$DOGFOOD_ROOT/used/map.json" \
+            --out="$DOGFOOD_ROOT/method-used/map.json" \
             --phpstan-memory-limit=512M
 
           set +e
           php bin/agent-map method-removal-plan \
             'Dogfood\Worker::used' \
-            --index="$DOGFOOD_ROOT/used/map.json" \
-            --format=json > "$DOGFOOD_ROOT/used/plan.json"
+            --index="$DOGFOOD_ROOT/method-used/map.json" \
+            --format=json > "$DOGFOOD_ROOT/method-used/plan.json"
           status=$?
           set -e
           test "$status" -eq 1
@@ -147,4 +186,77 @@ jobs:
             (.status == "blocked")
             and (.edits == [])
             and ([.blockers[] | contains("Method is called")] | any)
-          ' "$DOGFOOD_ROOT/used/plan.json" >/dev/null
+          ' "$DOGFOOD_ROOT/method-used/plan.json" >/dev/null
+
+      - name: Publish exact read-only property-removal evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/property-safe" \
+            --paths=src \
+            --out="$DOGFOOD_ROOT/property-safe/map.json" \
+            --phpstan-memory-limit=512M
+
+          before="$(sha256sum "$DOGFOOD_ROOT/property-safe/src/Worker.php" | cut -d' ' -f1)"
+          php bin/agent-map property-removal-plan \
+            'Dogfood\Worker::$obsolete' \
+            --index "$DOGFOOD_ROOT/property-safe/map.json" \
+            --format json > "$DOGFOOD_ROOT/property-safe/plan.json"
+          after="$(sha256sum "$DOGFOOD_ROOT/property-safe/src/Worker.php" | cut -d' ' -f1)"
+          test "$before" = "$after"
+
+          jq -e '
+            (.type == "property_removal_plan")
+            and (.contract_version == "1.0")
+            and (.status == "safe")
+            and (.blind_spots == [])
+            and (.stale_evidence == [])
+            and (.blockers == [])
+            and (.edits | length == 1)
+            and (.edits[0].replacement == "")
+            and (.edits[0].role == "property_declaration_removal")
+            and (.edits[0].resolution == "phpstan_resolved")
+            and (.edits[0].source_sha256 | startswith("sha256:"))
+            and (.edits[0].expected | contains("private string $obsolete"))
+          ' "$DOGFOOD_ROOT/property-safe/plan.json" >/dev/null
+
+          php bin/agent-map property-removal-plan \
+            'Dogfood\Worker::$obsolete' \
+            --index="$DOGFOOD_ROOT/property-safe/map.json" \
+            --format=text > "$DOGFOOD_ROOT/property-safe/plan.txt"
+          php bin/agent-map property-removal-plan \
+            'Dogfood\Worker::$obsolete' \
+            --index="$DOGFOOD_ROOT/property-safe/map.json" \
+            --format=toon > "$DOGFOOD_ROOT/property-safe/plan.toon"
+          test -s "$DOGFOOD_ROOT/property-safe/plan.txt"
+          test -s "$DOGFOOD_ROOT/property-safe/plan.toon"
+          test "$before" = "$(sha256sum "$DOGFOOD_ROOT/property-safe/src/Worker.php" | cut -d' ' -f1)"
+
+      - name: Prove observed property writes fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/property-used" \
+            --paths=src \
+            --out="$DOGFOOD_ROOT/property-used/map.json" \
+            --phpstan-memory-limit=512M
+
+          set +e
+          php bin/agent-map property-removal-plan \
+            'Dogfood\Worker::$used' \
+            --index="$DOGFOOD_ROOT/property-used/map.json" \
+            --format=json > "$DOGFOOD_ROOT/property-used/plan.json"
+          status=$?
+          set -e
+          test "$status" -eq 1
+
+          jq -e '
+            (.status == "blocked")
+            and (.edits == [])
+            and ([.blockers[] | contains("zero observed semantic accesses")] | any)
+            and ([.not_observable[] | contains("Write-only property elimination")] | any)
+          ' "$DOGFOOD_ROOT/property-used/plan.json" >/dev/null
