@@ -35,6 +35,11 @@ final readonly class CliApplication
             return $temporal->run($argv);
         }
 
+        $methodRemoval = new MethodRemovalCliApplication(artifacts: $artifacts);
+        if ($methodRemoval->supports($argv)) {
+            return $methodRemoval->run($argv);
+        }
+
         foreach ($renameApplications as $renameApplication) {
             if ($renameApplication->supports($argv)) {
                 return $renameApplication->run($argv);
@@ -54,6 +59,7 @@ final readonly class CliApplication
         if ($generalHelp) {
             echo "\nArtifact paths:\n  --out, --index, and --database are relative to --root unless an absolute path is given.\n\n";
             echo "Rename capability discovery:\n  rename-capabilities List registered governed rename-plan contracts\n\n";
+            echo "Removal evidence:\n  method-removal-plan Build an exact unused-private-method deletion plan\n\n";
         }
         if ($temporal->shouldAppendToGeneralHelp($argv)) {
             echo $temporal->helpOverview();
