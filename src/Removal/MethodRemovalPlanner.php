@@ -6,6 +6,7 @@ namespace voku\AgentMap\Removal;
 
 use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
+use voku\AgentMap\Index\MethodEntry;
 use voku\AgentMap\Rename\RenameBlindSpot;
 use voku\AgentMap\Rename\RenameEdit;
 use voku\AgentMap\Rename\RenameProvenance;
@@ -145,14 +146,11 @@ final readonly class MethodRemovalPlanner
         );
     }
 
-    /** @param list<object> $methods */
+    /** @param list<MethodEntry> $methods */
     private function ownerHasMagicDispatch(array $methods): bool
     {
         foreach ($methods as $ownerMethod) {
-            if (!property_exists($ownerMethod, 'name')) {
-                continue;
-            }
-            $name = strtolower((string) $ownerMethod->name);
+            $name = strtolower($ownerMethod->name);
             if ($name === '__call' || $name === '__callstatic') {
                 return true;
             }
