@@ -91,15 +91,23 @@ final readonly class MethodRemovalPlanner
         $edits = [];
         if ($stale === [] && $blockers === []) {
             try {
-                $range = (new MethodNodeRemover($map->root))->locate(
-                    $method->file->path,
-                    $method->method->lineStart,
-                    $method->method->lineEnd,
-                    $method->method->name,
-                );
-                if ($range['has_class_string_static_call']) {
-                    $blockers[] = 'A class-string static call with this method name is not resolved by the current PHPStan call collector.';
-                } else {
+                $nodeRemover = new MethodNodeRemover($map->root);
+                foreach ($map->files as $file) {
+                    if ($nodeRemover->hasClassStringStaticCall($file->path, $method->method->name)) {
+                        $blockers[] = sprintf(
+                            'An unresolved class-string static call with this method name exists in indexed source %s; removal cannot prove it targets another scope.',
+                            $file->path,
+                        );
+                    }
+                }
+
+                if ($blockers === []) {
+                    $range = $nodeRemover->locate(
+                        $method->file->path,
+                        $method->method->lineStart,
+                        $method->method->lineEnd,
+                        $method->method->name,
+                    );
                     if ($range['has_attributes']) {
                         $blindSpots[] = new RenameBlindSpot(
                             'method_attributes',
