@@ -19,20 +19,13 @@ final readonly class MethodNodeRemover
     {
     }
 
-    /** @return array{start: int, end: int, expected: string, has_attributes: bool, has_class_string_static_call: bool} */
+    /** @return array{start: int, end: int, expected: string, has_attributes: bool} */
     public function locate(string $path, int $lineStart, int $lineEnd, string $name): array
     {
-        $absolute = rtrim($this->root, '/\\') . '/' . ltrim(str_replace('\\', '/', $path), '/');
-        $source = file_get_contents($absolute);
-        if (!is_string($source)) {
-            throw new RuntimeException('Cannot read method-removal source file: ' . $path);
-        }
-
+        $source = $this->source($path);
         $matches = [];
-        $hasClassStringStaticCall = false;
         foreach (PhpCodeParser::getAstFromString($source) as $node) {
             $this->collect($node, $matches, $lineStart, $lineEnd, $name);
-            $hasClassStringStaticCall = $hasClassStringStaticCall || $this->containsClassStringStaticCall($node, $name);
         }
         if (count($matches) !== 1) {
             throw new RuntimeException(sprintf('Cannot map method removal to exactly one declaration at %s:%d-%d; found %d candidate(s).', $path, $lineStart, $lineEnd, count($matches)));
@@ -73,8 +66,19 @@ final readonly class MethodNodeRemover
             'end' => $end,
             'expected' => substr($source, $start, $end - $start + 1),
             'has_attributes' => $method->attrGroups !== [],
-            'has_class_string_static_call' => $hasClassStringStaticCall,
         ];
+    }
+
+    /** Detect static calls such as self::class::method() that the semantic collector cannot resolve. */
+    public function hasClassStringStaticCall(string $path, string $name): bool
+    {
+        foreach (PhpCodeParser::getAstFromString($this->source($path)) as $node) {
+            if ($this->containsClassStringStaticCall($node, $name)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @param list<ClassMethod> $matches */
@@ -115,5 +119,16 @@ final readonly class MethodNodeRemover
         }
 
         return false;
+    }
+
+    private function source(string $path): string
+    {
+        $absolute = rtrim($this->root, '/\\') . '/' . ltrim(str_replace('\\', '/', $path), '/');
+        $source = file_get_contents($absolute);
+        if (!is_string($source)) {
+            throw new RuntimeException('Cannot read method-removal source file: ' . $path);
+        }
+
+        return $source;
     }
 }
