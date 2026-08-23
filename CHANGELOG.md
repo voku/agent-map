@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.8.7 - 2026-08-23
+
+### Added
+
+- Publish the versioned, read-only `property_removal_plan@1.0` contract for provably unused private properties with typed provenance, exact hash-bound deletion edits, blockers, review-required evidence, stale evidence, and explicit non-observable boundaries.
+- Add PHPStan-backed fail-closed property-removal planning plus expanded removal-plan dogfood across text, JSON, and TOON output.
+
+### Changed
+
+- Property removal is intentionally narrower than Rector: contract 1.0 requires zero observed semantic accesses and does not rewrite or remove write-only assignments.
+- Static, promoted, multi-property, hooked, trait-sensitive, Doctrine-metadata-sensitive, stale, dynamically ambiguous, attribute/PHPDoc-sensitive, and unsafe-range cases fail closed or require explicit review instead of publishing an automatic deletion.
+
+### Validation
+
+- PR #44 passed the PHP 8.2-8.5 CI matrix, structural-without-PHPStan validation, rename-plan dogfood, expanded removal-plan dogfood, and external review on exact head `29dfcb86bc0bfa9e8b9cbc4fa81e9e24c855ed1f` before squash merge to `2e9e83902b4812e2ba36836a7a8650e38e514f9a`.
+
 ## 0.8.6 - 2026-08-23
 
 ### Added
@@ -113,7 +129,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Regression coverage proves missing, invalid, stale, fingerprint-less, and current map
   states; missing, corrupt, mismatched, and current Search state; and that inspection
-  does not mutate or create the Search database.
+  does not mutate or create Search state.
 - `composer ci` is green on PHP 8.2, 8.3, 8.4, and 8.5, and the temporal self-dogfood
   job is green for the exact implementation candidate.
 
@@ -335,8 +351,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (17.8 ms for the raw `isset()`, the remainder being the `mb_strtolower()` both
   paths do).
 
-- The 11 code-domain words that are *not* in `voku/stop-words` (`class`, `method`,
-  `function`, `file`, `code`, `use`, `used`, `handle`, `handled`, `work`, `works`)
+- The 11 code-domain words that are *not* in `voku/stop-words` (`class`, `method`, `function`, `file`, `code`, `use`, `used`, `handle`, `handled`, `work`, `works`)
   gained their four German counterparts (`klasse`, `methode`, `funktion`,
   `datei`). German capitalizes every noun, so a code-domain noun in a German
   question is identifier-shaped by every structural rule there is: before this,
@@ -463,11 +478,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `related`'s `likely_tests`, `same_namespace`, and `mentions` sections now
   render as bare file paths (with an "N more symbol(s)" count when
-  applicable) instead of a full per-file symbol/method dump. Those sections
-  are context around the query, not the answer to it, and dumping full
-  detail on top of `primary` (which keeps it) made a default `related` call
-  far larger than a focused `query` for the same term. `primary`'s detail
-  level is unchanged.
+  applicable) instead of a full per-file symbol/method dump. Those sections are
+  context around the query, not the answer to it, and dumping full detail on top
+  of `primary` (which keeps it) made a default `related` call far larger than a
+  focused `query` for the same term. `primary`'s detail level is unchanged.
 
 ## 0.1.0 - 2026-07-13
 
