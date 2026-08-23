@@ -129,7 +129,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Regression coverage proves missing, invalid, stale, fingerprint-less, and current map
   states; missing, corrupt, mismatched, and current Search state; and that inspection
-  does not mutate or create Search state.
+  does not mutate or create the Search database.
 - `composer ci` is green on PHP 8.2, 8.3, 8.4, and 8.5, and the temporal self-dogfood
   job is green for the exact implementation candidate.
 
@@ -351,7 +351,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (17.8 ms for the raw `isset()`, the remainder being the `mb_strtolower()` both
   paths do).
 
-- The 11 code-domain words that are *not* in `voku/stop-words` (`class`, `method`, `function`, `file`, `code`, `use`, `used`, `handle`, `handled`, `work`, `works`)
+- The 11 code-domain words that are *not* in `voku/stop-words` (`class`, `method`,
+  `function`, `file`, `code`, `use`, `used`, `handle`, `handled`, `work`, `works`)
   gained their four German counterparts (`klasse`, `methode`, `funktion`,
   `datei`). German capitalizes every noun, so a code-domain noun in a German
   question is identifier-shaped by every structural rule there is: before this,
@@ -478,10 +479,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `related`'s `likely_tests`, `same_namespace`, and `mentions` sections now
   render as bare file paths (with an "N more symbol(s)" count when
-  applicable) instead of a full per-file symbol/method dump. Those sections are
-  context around the query, not the answer to it, and dumping full detail on top
-  of `primary` (which keeps it) made a default `related` call far larger than a
-  focused `query` for the same term. `primary`'s detail level is unchanged.
+  applicable) instead of a full per-file symbol/method dump. Those sections
+  are context around the query, not the answer to it, and dumping full
+  detail on top of `primary` (which keeps it) made a default `related` call
+  far larger than a focused `query` for the same term. `primary`'s detail
+  level is unchanged.
 
 ## 0.1.0 - 2026-07-13
 
