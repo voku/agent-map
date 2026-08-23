@@ -184,6 +184,17 @@ trait Reusable
     }
 }
 PHP);
+        file_put_contents($this->root . '/src/Worker.php', <<<'PHP'
+<?php
+final class Worker
+{
+    use Reusable;
+
+    public function run(): void
+    {
+    }
+}
+PHP);
         $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Reusable::obsolete');
 
         self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
