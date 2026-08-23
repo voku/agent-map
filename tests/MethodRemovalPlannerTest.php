@@ -15,9 +15,9 @@ use voku\AgentMap\Removal\MethodRemovalPlan;
 use voku\AgentMap\Removal\MethodRemovalPlanner;
 
 /**
- * The configured-removal behavior is adapted from Rector's
- * rules/Removing/Rector/ClassMethod/ArgumentRemoverRector.php. Agent-map emits guarded evidence
- * rather than mutating the AST.
+ * The unused-private-method behavior is adapted from Rector's
+ * rules/DeadCode/Rector/ClassMethod/RemoveUnusedPrivateMethodRector.php. Agent-map emits guarded
+ * evidence rather than mutating the AST.
  *
  * Copyright (c) 2017-present Tomáš Votruba. Licensed under the MIT License; see THIRD_PARTY_NOTICES.md.
  */
@@ -150,6 +150,29 @@ PHP);
         self::assertStringContainsString('magic methods', implode("\n", $plan->blockers));
     }
 
+    public function testOwnerMagicDispatchFailsClosed(): void
+    {
+        file_put_contents($this->root . '/src/Worker.php', <<<'PHP'
+<?php
+final class Worker
+{
+    private function obsolete(): void
+    {
+    }
+
+    public function __call(string $name, array $arguments): mixed
+    {
+        return null;
+    }
+}
+PHP);
+        $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Worker::obsolete');
+
+        self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('__call', implode("\n", $plan->blockers));
+    }
+
     public function testPrivateTraitMethodFailsClosedUntilAdaptationsAreObservable(): void
     {
         file_put_contents($this->root . '/src/Reusable.php', <<<'PHP'
@@ -166,6 +189,29 @@ PHP);
         self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
         self::assertSame([], $plan->edits);
         self::assertStringContainsString('Trait method removal', implode("\n", $plan->blockers));
+    }
+
+    public function testClassStringStaticCallFailsClosedWhenCollectorCannotResolveIt(): void
+    {
+        file_put_contents($this->root . '/src/Worker.php', <<<'PHP'
+<?php
+final class Worker
+{
+    private static function obsolete(): void
+    {
+    }
+
+    public static function run(): void
+    {
+        self::class::obsolete();
+    }
+}
+PHP);
+        $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Worker::obsolete');
+
+        self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('class-string static call', implode("\n", $plan->blockers));
     }
 
     public function testUnionTypedDynamicDispatchRequiresReviewButKeepsExactDeletionEvidence(): void
