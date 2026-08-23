@@ -43,4 +43,14 @@ final class MapArtifactPathsTest extends TestCase
             MapArtifactPaths::forProject('C:\\project', 'D:\\agent-map')->indexJson(),
         );
     }
+
+    public function testExplicitPathsResolveAgainstProjectRootAndPreserveAbsolutePaths(): void
+    {
+        $paths = MapArtifactPaths::forProject('/project', '/state/map');
+
+        self::assertSame('/project/custom/map.json', $paths->projectPath('custom/map.json'));
+        self::assertSame('/project/custom/map.json', $paths->projectPath('custom\\map.json'));
+        self::assertSame('/elsewhere/map.json', $paths->projectPath('/elsewhere/map.json'));
+        self::assertSame('D:/maps/map.json', $paths->projectPath('D:\\maps\\map.json'));
+    }
 }
