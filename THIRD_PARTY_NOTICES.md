@@ -14,10 +14,11 @@ Class-constant rename behavior was additionally adapted from
 `rules/Renaming/Rector/ClassConstFetch/RenameClassConstFetchRector.php` at upstream commit
 `f92750937f4744876ad0cfd5a1ef9d7010b50020`.
 
-Unused-private-method removal planning was inspired by the configured AST-removal approach in
-`rules/Removing/Rector/ClassMethod/ArgumentRemoverRector.php` at upstream commit
-`2ac92445a4bbef7c21bce2d48dae756a64516c02`. Agent-map adapts the approach into a read-only,
-PHPStan-backed exact-edit contract.
+Unused-private-method removal planning and its trait, magic-method, magic-dispatch, dynamic-call,
+and class-string static-call safety boundaries were adapted from
+`rules/DeadCode/Rector/ClassMethod/RemoveUnusedPrivateMethodRector.php` at upstream commit
+`2ac92445a4bbef7c21bce2d48dae756a64516c02`. Agent-map adapts that mutating behavior into a
+read-only, PHPStan-backed exact-edit contract.
 
 ### MIT License
 
