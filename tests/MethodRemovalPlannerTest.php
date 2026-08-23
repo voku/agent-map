@@ -9,6 +9,8 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
 use voku\AgentMap\Index\AgentMapBuilder;
+use voku\AgentMap\Index\AgentMapIndex;
+use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Removal\MethodRemovalPlan;
 use voku\AgentMap\Removal\MethodRemovalPlanner;
 
@@ -95,6 +97,143 @@ PHP);
         $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Worker::api');
 
         self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
         self::assertStringContainsString('Only private methods', implode("\n", $plan->blockers));
+    }
+
+    public function testCompactPrivateMethodFailsClosedInsteadOfDeletingSurroundingSource(): void
+    {
+        file_put_contents(
+            $this->root . '/src/Worker.php',
+            "<?php\nfinal class Worker { private function obsolete(): void {} public function run(): void {} }\n",
+        );
+        $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Worker::obsolete');
+
+        self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('own line', implode("\n", $plan->blockers));
+    }
+
+    public function testTrailingSourceOnMethodLineFailsClosed(): void
+    {
+        file_put_contents($this->root . '/src/Worker.php', <<<'PHP'
+<?php
+final class Worker
+{
+    private function obsolete(): void {} // intentionally retained note
+
+    public function run(): void {}
+}
+PHP);
+        $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Worker::obsolete');
+
+        self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('without trailing source', implode("\n", $plan->blockers));
+    }
+
+    public function testPrivateMagicMethodFailsClosedWithoutOrdinaryCalls(): void
+    {
+        file_put_contents($this->root . '/src/Worker.php', <<<'PHP'
+<?php
+final class Worker
+{
+    private function __construct()
+    {
+    }
+}
+PHP);
+        $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Worker::__construct');
+
+        self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('magic methods', implode("\n", $plan->blockers));
+    }
+
+    public function testPrivateTraitMethodFailsClosedUntilAdaptationsAreObservable(): void
+    {
+        file_put_contents($this->root . '/src/Reusable.php', <<<'PHP'
+<?php
+trait Reusable
+{
+    private function obsolete(): void
+    {
+    }
+}
+PHP);
+        $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Reusable::obsolete');
+
+        self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('Trait method removal', implode("\n", $plan->blockers));
+    }
+
+    public function testUnionTypedDynamicDispatchRequiresReviewButKeepsExactDeletionEvidence(): void
+    {
+        file_put_contents($this->root . '/src/Worker.php', <<<'PHP'
+<?php
+final class Worker
+{
+    private function obsolete(): void
+    {
+    }
+
+    public function run(): void
+    {
+    }
+}
+PHP);
+        $map = (new AgentMapBuilder())->build($this->root, ['src'], []);
+        $relations = $map->relations;
+        $relations[] = RelationEntry::create(
+            sourceId: 'method:Worker::run',
+            kind: 'calls',
+            targetIds: ['unresolved:calls'],
+            file: 'src/Worker.php',
+            lineStart: 9,
+            lineEnd: 9,
+            resolution: 'dynamic',
+            receiverType: 'Worker|null',
+        );
+        $map = new AgentMapIndex(
+            schemaVersion: $map->schemaVersion,
+            root: $map->root,
+            backend: $map->backend,
+            files: $map->files,
+            relations: $relations,
+            diagnostics: $map->diagnostics,
+            fingerprint: $map->fingerprint,
+        );
+
+        $plan = (new MethodRemovalPlanner())->plan($map, 'Worker::obsolete');
+
+        self::assertSame(MethodRemovalPlan::STATUS_REVIEW_REQUIRED, $plan->status);
+        self::assertCount(1, $plan->edits);
+        self::assertSame('dynamic_method_name', $plan->blindSpots[0]->kind);
+    }
+
+    public function testMethodAttributesRequireReviewAndAreIncludedInDeletionEvidence(): void
+    {
+        file_put_contents($this->root . '/src/Worker.php', <<<'PHP'
+<?php
+#[Attribute(Attribute::TARGET_METHOD)]
+final class Hook
+{
+}
+
+final class Worker
+{
+    #[Hook]
+    private function obsolete(): void
+    {
+    }
+}
+PHP);
+        $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Worker::obsolete');
+
+        self::assertSame(MethodRemovalPlan::STATUS_REVIEW_REQUIRED, $plan->status);
+        self::assertCount(1, $plan->edits);
+        self::assertStringContainsString('#[Hook]', $plan->edits[0]->expected);
+        self::assertSame('method_attributes', $plan->blindSpots[0]->kind);
     }
 }
