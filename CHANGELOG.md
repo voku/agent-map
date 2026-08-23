@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.8.8 - 2026-08-23
+
+### Added
+
+- Publish the versioned, read-only `class_constant_removal_plan@1.0` contract for provably unused private class constants with typed provenance, exact hash-bound deletion edits, blockers, review-required evidence, stale evidence, and explicit non-observable boundaries.
+- Expand the shared removal-plan dogfood to prove safe class-constant deletion evidence and fail-closed observed-fetch handling alongside method and property removal.
+
+### Changed
+
+- Class-constant removal requires a current PHPStan-backed map, exactly one private single-constant declaration, no observed indexed static fetches, and a safe whole-node deletion range before publishing an edit.
+- Reflection, `constant()`, dynamic constant names, inherited or late-static lookup, and source outside the indexed map remain explicit non-observable boundaries rather than being presented as detected evidence.
+
+### Validation
+
+- PR #45 passed the PHP 8.2-8.5 CI matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood, expanded removal-plan dogfood, and external review on exact head `40e8ee8678dde9185ad7de99163a18209ab0152d` before squash merge to `f6f27e112d16ad96af7854a8ede3da5867d5500c`.
+
 ## 0.8.7 - 2026-08-23
 
 ### Added
