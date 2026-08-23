@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.8.6 - 2026-08-23
+
+### Added
+
+- Publish the versioned, read-only `method_removal_plan@1.0` contract for unused private methods with typed provenance, exact hash-bound deletion edits, blockers, review-required evidence, stale evidence, and explicit non-observable boundaries.
+- Add PHPStan-backed fail-closed removal planning plus dedicated removal-plan dogfood across text, JSON, and TOON output.
+
+### Changed
+
+- Method removal blocks observed calls, non-private contracts, traits, PHP magic methods, owner magic dispatch, reconciliation conflicts, unsafe compact/trailing-source layouts, unresolved class-string static calls across indexed PHP files, and stale evidence instead of publishing deletion edits.
+- Explicit removal-plan `--index` paths follow the configured project root, while text output preserves provenance, stale evidence, and observability limits.
+
+### Validation
+
+- PR #42 passed the PHP 8.2-8.5 CI matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood, dedicated removal-plan dogfood, and external review on exact head `c21f1b80b9abca508a672757d44ac11e26fffc2a` before squash merge to `02adb3358eac3a1efbcd43111b541d82da455c88`.
+
 ## 0.8.5 - 2026-08-23
 
 ### Added
@@ -28,7 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Publish method rename planning as an explicit versioned contract. Plans now carry complete map provenance (digest, effective backend, and analysis fingerprint) and expose stale source evidence separately from semantic blockers so hosts can fail closed and choose the correct recovery.
+- Publish method rename planning as an explicit versioned contract. Plans now carry complete map provenance (map digest, effective backend, and analysis fingerprint) and expose stale source evidence separately from semantic blockers so hosts can fail closed and choose the correct recovery.
 - Measure rename-plan provenance size on three real repositories before freezing the contract; the all-source hash projection consumed 80-88% of JSON output and was removed in favor of complete map identity plus per-edit mutation hashes.
 - Document the read-only `rename-plan` evidence, status, observation, and mutation-host validation boundary.
 
@@ -373,8 +389,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `agent-map refresh` re-analyses only the files whose hash moved plus the ones
-  that appeared since the last build, and patches them into the existing index;
+- `agent-map refresh` re-analyses only the files whose hash moved plus the ones that appeared since the last build, and patches them into the existing index;
   deleted files drop out. `agent-map build --merge` does the same for an
   explicit `--paths` scope. Keeping a large map current no longer means paying
   for a full rebuild.
@@ -433,7 +448,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - The map schema is now 2.0 and records SHA-256 file hashes, semantic fingerprints, relations, and diagnostics.
 - Methods and functions retain native, PHPDoc, and PHPStan-resolved types separately.
-- JSON remains the default map format; TOON is selected explicitly with `build --format=toon`.
+- JSON remains the default interoperable storage format; TOON is selected explicitly with `build --format=toon`.
 - PHPStan `^2.2` is a runtime dependency while `voku/simple-php-code-parser` remains the independent structural cross-check.
 - Stale detection now uses SHA-256 content hashes instead of mtimes and SHA-1.
 - `scope` rejects stale maps rather than combining current source with outdated semantic ranges.
