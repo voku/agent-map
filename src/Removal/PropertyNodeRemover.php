@@ -7,7 +7,6 @@ namespace voku\AgentMap\Removal;
 use PhpParser\Node;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\ClassLike;
-use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\TraitUse;
 use RuntimeException;
@@ -159,7 +158,7 @@ final readonly class PropertyNodeRemover
     private function ownerHasLoadMetadata(ClassLike $class): bool
     {
         foreach ($class->getMethods() as $method) {
-            if ($method instanceof ClassMethod && strcasecmp($method->name->toString(), 'loadMetadata') === 0) {
+            if (strcasecmp($method->name->toString(), 'loadMetadata') === 0) {
                 return true;
             }
         }
