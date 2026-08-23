@@ -6,11 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.8.5 - 2026-08-23
+
 ### Added
 
-- Add a Rector-inspired, versioned class-constant rename plan that locates exact declaration and statically resolved fetch tokens, blocks collisions and stale evidence, and reports dynamic owners.
-- Add a versioned, read-only class rename plan with exact parser-resolved edits, explicit stale/review/blocker evidence, and preconditioned same-directory file moves.
-- Register class rename through the shared capability authority and dogfood its exact edits and move evidence in a temporary project.
+- Publish versioned, read-only rename plans for functions, private properties, same-namespace classes, and class constants, each with exact preconditioned edits, provenance, stale evidence, blockers, review-required state, and explicit non-observable boundaries.
+- Add PHPStan-backed semantic property declaration/fetch evidence, including nullsafe and inherited-property coverage, for governed private-property rename planning.
+- Register the complete rename-plan family through shared capability discovery and dogfood exact edits, class moves, fail-closed evidence, and parser-valid rewritten PHP in isolated fixtures.
+- Add Rector-inspired rename parity/provenance work without a Rector runtime dependency, retaining the pinned upstream source commit and MIT attribution in `THIRD_PARTY_NOTICES.md`.
+
+### Changed
+
+- Class rename plans may publish preconditioned same-directory file moves; mutation hosts remain responsible for validating and applying all edits and moves transactionally.
+- Class-constant planning fails closed on stale maps, declaration collisions, ambiguous or inherited owners, late-static lookup, dynamic names/owners, and other evidence it cannot prove exactly.
+
+### Validation
+
+- The released rename capabilities passed the repository PHP 8.2-8.5 CI matrix, structural-without-PHPStan validation, temporal dogfood, shared rename-plan dogfood, and external review on their accepted heads.
 
 ## 0.8.4 - 2026-08-22
 
@@ -307,8 +319,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (17.8 ms for the raw `isset()`, the remainder being the `mb_strtolower()` both
   paths do).
 
-- The 11 code-domain words that are *not* in `voku/stop-words` (`class`, `method`,
-  `function`, `file`, `code`, `use`, `used`, `handle`, `handled`, `work`, `works`)
+- The 11 code-domain words that are *not* in `voku/stop-words` (`class`, `method`, `function`, `file`, `code`, `use`, `used`, `handle`, `handled`, `work`, `works`)
   gained their four German counterparts (`klasse`, `methode`, `funktion`,
   `datei`). German capitalizes every noun, so a code-domain noun in a German
   question is identifier-shaped by every structural rule there is: before this,
