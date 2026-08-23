@@ -45,6 +45,11 @@ final readonly class CliApplication
             return $propertyRemoval->run($argv);
         }
 
+        $classConstantRemoval = new ClassConstantRemovalCliApplication(artifacts: $artifacts);
+        if ($classConstantRemoval->supports($argv)) {
+            return $classConstantRemoval->run($argv);
+        }
+
         foreach ($renameApplications as $renameApplication) {
             if ($renameApplication->supports($argv)) {
                 return $renameApplication->run($argv);
@@ -64,7 +69,7 @@ final readonly class CliApplication
         if ($generalHelp) {
             echo "\nArtifact paths:\n  --out, --index, and --database are relative to --root unless an absolute path is given.\n\n";
             echo "Rename capability discovery:\n  rename-capabilities List registered governed rename-plan contracts\n\n";
-            echo "Removal evidence:\n  method-removal-plan Build an exact unused-private-method deletion plan\n  property-removal-plan Build an exact unused-private-property deletion plan\n\n";
+            echo "Removal evidence:\n  method-removal-plan Build an exact unused-private-method deletion plan\n  property-removal-plan Build an exact unused-private-property deletion plan\n  class-constant-removal-plan Build an exact unused-private-class-constant deletion plan\n\n";
         }
         if ($temporal->shouldAppendToGeneralHelp($argv)) {
             echo $temporal->helpOverview();
