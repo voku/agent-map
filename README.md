@@ -270,8 +270,9 @@ The same read-only contract now covers unused private properties and class const
 plans adapt Rector's `RemoveUnusedPrivateClassConstantRector`: only a single private declaration can
 be deleted, every indexed PHP file is AST-scanned for static fetches, and the plan includes the whole
 declaration (PHPDoc and attributes included) rather than asking an agent to splice lines with `sed`.
-Dynamic, inherited, late-static, reflective, stale, and out-of-scope evidence remains visible and
-fails closed or requires review.
+Stale files and observed fetches fail closed. Attributes and PHPDoc require review. Reflection,
+`constant()`, dynamic constant names, inherited or late-static lookup, and source outside the indexed
+map are not observable; the plan lists them as explicit boundaries instead of proving them absent.
 
 ## Keep a map current
 
