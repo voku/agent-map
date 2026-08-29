@@ -1,0 +1,17 @@
+# Pre-registration seal — nav-substitution-01
+
+Recorded before the MAP_FIRST arm was run.
+Any later change to these files invalidates the pre-registration.
+
+date_utc: 2026-08-29T19:00:33Z
+base_sha: b8ecad69c6514514b40869e0a643b19fc019ebcf
+grading_key_commit: dbbe666ae92182eed8a6ebbfb453ac804399c75e
+
+sha256:
+a267a370f65c244ac0caf6b773505f13548266469ea0a362a36c1113dcb60cf3  grader/AnalysisFingerprintGraderTest.php
+7b05314d3f7e786292bc2ee28b03c572a66aa30c5390b2ddcf46041164eb8202  grader/grade.sh
+c940b201f1b56f58a39d448a4bbe661b772eef2c1ecb9b9fc9dd721434a60733  grader/RUBRIC.md
+b62c2000b20ebda456cc1e14fc28133d5a8f45f5169d6e40cf2fbb4bd7494ce1  integrity/GATE.md
+b2527d229cc842b9727037f1cdef423217ea0c211a1412c62423637950b8dd08  analysis/COST_VIEWS.md
+4c7032617233ca8ffa984f93c3f98e0a9dec666cb2c550c5d8da04410087b731  arms/map-first/TASK_PACKET.md
+2504f36bb16a168111aa309107c0460fc9c22b86618fca6527c3d28f66c639f6  pinned/composer.lock.pinned

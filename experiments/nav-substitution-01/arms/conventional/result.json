@@ -1,0 +1,58 @@
+{
+  "experiment": "nav-substitution-01",
+  "arm": "CONVENTIONAL",
+  "status": "FROZEN",
+  "frozen_note": "Do not rerun. Recorded from the completed Codex Online run.",
+  "task_shape": "known-symbol local change (single-class provenance field)",
+  "base_sha": "b8ecad69c6514514b40869e0a643b19fc019ebcf",
+  "repository": "voku/agent-map",
+  "navigation_policy": "conventional (no agent-map usage; native file reads and text search only)",
+
+  "observed": {
+    "navigation_calls": 7,
+    "navigation_bytes": 25815,
+    "source_read_calls": 4,
+    "source_read_bytes": 7781,
+    "text_search_calls": 2,
+    "text_search_bytes": 17944,
+    "largest_single_observation": {
+      "kind": "text-search",
+      "bytes": 17106,
+      "note": "One broad rg invocation. This is the specific cost MAP_FIRST must substitute away."
+    }
+  },
+
+  "derived": {
+    "navigation_bytes_check": "source_read_bytes + text_search_bytes = 7781 + 17944 = 25725",
+    "navigation_bytes_reported": 25815,
+    "residual_bytes": 90,
+    "residual_note": "90 bytes are not attributed to the source-read or text-search buckets. Unexplained. Either a third navigation category exists in the log or one bucket total is slightly off. Resolve against the raw navigation log before this pair is used for a byte-level claim."
+  },
+
+  "correctness": {
+    "independent_correctness": "PENDING",
+    "reason": "Hidden grading has not run. Repository validation passing is NOT evidence of task correctness for this pair.",
+    "known_concern": "Candidate reportedly gates the structural sentinel on phpStanVersion === 'structural-only'. Production emits 'none' (src/Build/StructuralOnlySemanticAnalyzer.php at base). See grader/RUBRIC.md."
+  },
+
+  "repository_validation": "PASS",
+  "token_usage": "NOT_OBSERVABLE",
+
+  "host_outcome": {
+    "codex_ui": "unknown error",
+    "classification": "HOST_FINALIZATION_FAILURE_AFTER_EVIDENCE_CAPTURE",
+    "not": "EXPERIMENT_FAILURE"
+  },
+
+  "preserved_artifacts": {
+    "navigation_log": "NOT_SUPPLIED_TO_THIS_SESSION",
+    "dependency_lock_digest": "NOT_SUPPLIED_TO_THIS_SESSION",
+    "candidate_patch": "NOT_SUPPLIED_TO_THIS_SESSION",
+    "candidate_patch_sha": "NOT_SUPPLIED_TO_THIS_SESSION",
+    "validation_output": "NOT_SUPPLIED_TO_THIS_SESSION",
+    "blind_spots": "NOT_SUPPLIED_TO_THIS_SESSION",
+    "task_text": "NOT_SUPPLIED_TO_THIS_SESSION",
+    "codex_model_and_config": "NOT_SUPPLIED_TO_THIS_SESSION",
+    "note": "Only the aggregate metrics above were carried into this session. The listed artifacts must be copied into this directory from the Codex run before the pair can pass the integrity gate. A digest that is not recorded here cannot be compared, and a task text that is not recorded here cannot be replayed byte-identically."
+  }
+}
