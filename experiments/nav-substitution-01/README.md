@@ -198,7 +198,7 @@ arms/conventional/result.json          frozen Conventional evidence and grade
 arms/conventional/GRADE.md             independent G1–G5 result
 arms/map-first/TASK_PACKET.md           agent-facing; safe to paste whole
 arms/map-first/OPERATOR_CHECKLIST.md    operator-only; never paste
-a nalysis/COST_VIEWS.md                 cold/steady views + substitution rubric
+analysis/COST_VIEWS.md                  cold/steady views + substitution rubric
 integrity/GATE.md                       integrity classification
 grader/RUBRIC.md                        sealed semantic contract
 grader/AnalysisFingerprintGraderTest.php
