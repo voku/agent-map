@@ -14,8 +14,25 @@ under the decision tree in `../README.md` instead.
 | source-read bytes | 7,781 |
 | text-search calls | 2 |
 | text-search bytes | 17,944 |
+| file-listing calls | 1 |
+| file-listing bytes | 90 |
 | largest single observation | 17,106 bytes, one broad `rg` |
 | token usage | NOT_OBSERVABLE |
+
+Its 7 calls, in order:
+
+| # | category | what | bytes |
+|---|----------|------|-------|
+| 1 | text-search | `rg AnalysisFingerprint` | 838 (derived) |
+| 2 | source-read | the target file | — |
+| 3 | source-read | a guessed test path that does not exist | — |
+| 4 | source-read | `AgentMapBuilder` | — |
+| 5 | file-listing | `rg --files tests \| rg 'Fingerprint\|IndexTest'` | 90 |
+| 6 | source-read | `AgentMapIndexTest` | — |
+| 7 | text-search | broad `rg` over InstalledVersions / getReference / phpstan_version / structural | 17,106 |
+
+Two of the seven calls (3 and 5) are a miss and its recovery. That is a second
+substitution target alongside the 17 KB search, and a cheaper one to win.
 
 The 17,106-byte search is the specific target. The question for this pair is
 not "does Map work" but: **does Map reach the same implementation evidence
@@ -83,6 +100,28 @@ surfaced the class but not which value actually reaches the
 `AnalysisFingerprint` constructor, an agent can still pick the wrong string —
 and would then be cheaper *and* wrong. Cost alone will not catch that; the
 grader will.
+
+## Outcome matrix — read this before reading any byte count
+
+| Conventional | MAP_FIRST | interpretation |
+|---|---|---|
+| correct | correct | compare navigation costs normally |
+| wrong | correct | potentially strong Map evidence — **but only if** the substitution classification shows Map supplied the missing semantic context. If MAP_FIRST got it right for an unrelated reason, this is luck, not evidence. |
+| correct | wrong | MAP_FIRST lost required evidence; inspect what bounded context omitted |
+| wrong | wrong | the task exposes a shared reasoning or test-coverage gap, not a Map result |
+| integrity fails | any | no strict comparative claim; see `../integrity/GATE.md` |
+
+The `wrong / correct` cell is the one to be most careful with, because it is the
+most flattering. It is also plausible here: the Conventional arm spent 17,106
+bytes on a broad search and still appears to have picked the wrong sentinel, so
+MAP_FIRST has two independent ways to win — avoid the search (efficiency) and
+follow the producer relation far enough to see which value actually reaches the
+constructor (correctness).
+
+If both happen, the finding is that the narrower evidence was simultaneously
+cheaper *and* more relevant. That is a stronger claim than a byte reduction, and
+precisely because it is stronger it needs the substitution log to support it,
+not just the two grades.
 
 ## Conclusion (task shape #1 only)
 

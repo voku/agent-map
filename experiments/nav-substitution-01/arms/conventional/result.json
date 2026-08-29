@@ -2,11 +2,16 @@
   "experiment": "nav-substitution-01",
   "arm": "CONVENTIONAL",
   "status": "FROZEN",
-  "frozen_note": "Do not rerun. Recorded from the completed Codex Online run.",
+  "frozen_note": "Do not rerun. Evidence recovered from the Codex run; measured values unchanged.",
   "task_shape": "known-symbol local change (single-class provenance field)",
   "base_sha": "b8ecad69c6514514b40869e0a643b19fc019ebcf",
   "repository": "voku/agent-map",
   "navigation_policy": "conventional (no agent-map usage; native file reads and text search only)",
+
+  "digests": {
+    "composer_lock_sha256": "e465a5906b139b7e585b5428eee721fbca9351883dbb0cbd79272eaf39c17a3e",
+    "candidate_patch_sha256": "377abd0d7afbfdca007bd42fd23e6d1f9924d8149300cec33b141ff413ca1742"
+  },
 
   "observed": {
     "navigation_calls": 7,
@@ -15,24 +20,42 @@
     "source_read_bytes": 7781,
     "text_search_calls": 2,
     "text_search_bytes": 17944,
+    "file_listing_calls": 1,
+    "file_listing_bytes": 90,
     "largest_single_observation": {
       "kind": "text-search",
       "bytes": 17106,
-      "note": "One broad rg invocation. This is the specific cost MAP_FIRST must substitute away."
+      "note": "One broad rg over InstalledVersions / getReference / phpstan_version / structural. This is the specific cost MAP_FIRST must substitute away."
     }
   },
 
-  "derived": {
-    "navigation_bytes_check": "source_read_bytes + text_search_bytes = 7781 + 17944 = 25725",
-    "navigation_bytes_reported": 25815,
-    "residual_bytes": 90,
-    "residual_note": "90 bytes are not attributed to the source-read or text-search buckets. Unexplained. Either a third navigation category exists in the log or one bucket total is slightly off. Resolve against the raw navigation log before this pair is used for a byte-level claim."
+  "reconciliation": {
+    "status": "RECONCILED",
+    "bytes": "7781 (source-read) + 17944 (text-search) + 90 (file-listing) = 25815",
+    "calls": "4 (source-read) + 2 (text-search) + 1 (file-listing) = 7",
+    "note": "The earlier 90-byte residual was a missing file_listing category, not a measurement error. Integrity criterion 9 is satisfied."
+  },
+
+  "navigation_sequence": {
+    "provenance": "RECOVERED_SUMMARY. The ordered steps and the two itemised byte counts come from the Codex run. Per-call attribution marked DERIVED is arithmetic from the category totals, not transcribed from the raw log. The verbatim log is still the authoritative artifact and belongs in navigation-log.tsv.",
+    "steps": [
+      {"n": 1, "category": "text-search", "what": "rg AnalysisFingerprint", "bytes": 838, "bytes_provenance": "DERIVED (17944 text-search total minus the itemised 17106)"},
+      {"n": 2, "category": "source-read", "what": "read src/Index/AnalysisFingerprint.php (the target)", "bytes": null},
+      {"n": 3, "category": "source-read", "what": "read a guessed test path that does not exist", "bytes": null, "note": "A miss. Step 5 exists only to recover from it."},
+      {"n": 4, "category": "source-read", "what": "read src/Index/AgentMapBuilder.php", "bytes": null},
+      {"n": 5, "category": "file-listing", "what": "rg --files tests | rg 'Fingerprint|IndexTest'", "bytes": 90, "bytes_provenance": "ITEMISED"},
+      {"n": 6, "category": "source-read", "what": "read tests/AgentMapIndexTest.php", "bytes": null},
+      {"n": 7, "category": "text-search", "what": "broad rg across InstalledVersions / getReference / phpstan_version / structural", "bytes": 17106, "bytes_provenance": "ITEMISED"}
+    ],
+    "unattributed_source_read_bytes": 7781,
+    "unattributed_note": "Steps 2, 3, 4 and 6 sum to 7781. Step 3 read a nonexistent path so its contribution is near zero. The remaining split needs the raw log."
   },
 
   "correctness": {
     "independent_correctness": "PENDING",
-    "reason": "Hidden grading has not run. Repository validation passing is NOT evidence of task correctness for this pair.",
-    "known_concern": "Candidate reportedly gates the structural sentinel on phpStanVersion === 'structural-only'. Production emits 'none' (src/Build/StructuralOnlySemanticAnalyzer.php at base). See grader/RUBRIC.md."
+    "reason": "Hidden grading has not run against the actual candidate patch. Repository validation passing is NOT evidence of task correctness for this pair.",
+    "expectation": "Likely FAIL, not yet established. The candidate reportedly gates the structural sentinel on phpStanVersion === 'structural-only'; production emits 'none'. See grader/RUBRIC.md.",
+    "expectation_status": "PREDICTION_ONLY. Recorded before grading so that the prediction is auditable against the result. It does not substitute for running grader/grade.sh."
   },
 
   "repository_validation": "PASS",
@@ -44,15 +67,14 @@
     "not": "EXPERIMENT_FAILURE"
   },
 
-  "preserved_artifacts": {
-    "navigation_log": "NOT_SUPPLIED_TO_THIS_SESSION",
-    "dependency_lock_digest": "NOT_SUPPLIED_TO_THIS_SESSION",
-    "candidate_patch": "NOT_SUPPLIED_TO_THIS_SESSION",
-    "candidate_patch_sha": "NOT_SUPPLIED_TO_THIS_SESSION",
-    "validation_output": "NOT_SUPPLIED_TO_THIS_SESSION",
-    "blind_spots": "NOT_SUPPLIED_TO_THIS_SESSION",
-    "task_text": "NOT_SUPPLIED_TO_THIS_SESSION",
-    "codex_model_and_config": "NOT_SUPPLIED_TO_THIS_SESSION",
-    "note": "Only the aggregate metrics above were carried into this session. The listed artifacts must be copied into this directory from the Codex run before the pair can pass the integrity gate. A digest that is not recorded here cannot be compared, and a task text that is not recorded here cannot be replayed byte-identically."
+  "artifacts_still_to_be_filed": {
+    "task_text": "REQUIRED - task-text.txt, byte-identical, for integrity criterion 4 and to fill the verbatim slot in the MAP_FIRST packet",
+    "navigation_log": "REQUIRED - navigation-log.tsv, per-call commands and byte counts",
+    "candidate_patch": "REQUIRED - candidate.patch, must hash to 377abd0d7afbfdca007bd42fd23e6d1f9924d8149300cec33b141ff413ca1742; without it the arm cannot be graded",
+    "composer_lock": "REQUIRED - composer.lock, must hash to e465a5906b139b7e585b5428eee721fbca9351883dbb0cbd79272eaf39c17a3e; the digest alone cannot be replayed, only checked",
+    "validation_output": "REQUIRED - composer-ci.txt, verbatim",
+    "blind_spots": "REQUIRED - blind-spots.md",
+    "model_and_config": "NOT_PROVABLE unless the Codex task page still exposes it; see integrity/GATE.md criterion 5",
+    "note": "These exist in the Codex run but were not carried into the session that wrote this file. They are listed as work, not as loss."
   }
 }

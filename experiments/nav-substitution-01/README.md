@@ -26,8 +26,8 @@ this hole is currently open.
 
 | step | state |
 |------|-------|
-| 1. Conventional arm frozen | **done** — `arms/conventional/result.json` |
-| 2. MAP_FIRST arm | **not run** — packet ready at `arms/map-first/TASK_PACKET.md` |
+| 1. Conventional arm frozen | **done, evidence recovered** — `arms/conventional/result.json` |
+| 2. MAP_FIRST arm | **not run — blocked on preflight 1** — `arms/map-first/OPERATOR_CHECKLIST.md` |
 | 3. Integrity gate | prepared — `integrity/GATE.md` |
 | 4. Hidden grading | **prepared and sealed** — `grader/` |
 | 5. Cost comparison | template — `analysis/COST_VIEWS.md` |
@@ -56,31 +56,44 @@ So the grader passes the known-good implementation and fails the reported
 Conventional shape on exactly one check, without collateral failures.
 
 That is a property of the grader, **not** a verdict on the Conventional arm.
-The real candidate patch was not carried into this session; until it is graded,
-`independent_correctness` stays `PENDING`.
+`arms/conventional/result.json` records `FAIL` as an explicit, auditable
+*prediction* so it can be checked against the eventual result — but
+`independent_correctness` stays `PENDING` until `grade.sh` runs against the
+real candidate patch (`377abd0d…`), which has to be filed first.
 
-## Two things block the pair right now
+A predicted failure is not a failure. Recording the prediction before grading
+is what makes it worth anything.
 
-**1. The Conventional arm is not actually frozen — it is remembered.**
+## What is recovered, and what still blocks the run
 
-Only the aggregate metrics survived into this session. The navigation log,
-lock digest, candidate patch and its SHA, validation output, blind spots,
-task text, and model/config did not. Integrity criteria 4 and 5 cannot be
-evaluated, and the candidate cannot be graded. Everything in
-`arms/conventional/result.json` marked `NOT_SUPPLIED_TO_THIS_SESSION` needs to
-be copied out of the Codex run.
+Most of the Conventional arm was recoverable from the Codex run. Recovered:
+base SHA, lock digest `e465a590…`, candidate patch digest `377abd0d…`, the
+ordered 7-call navigation sequence, and the resolution of the 90-byte residual
+— it was a missing `file-listing` category, so **integrity criterion 9 now
+passes** and the totals reconcile exactly on both bytes and calls.
 
-**2. Dependency reproducibility is broken by default and it is fixable now.**
+Two blockers remain, one hard and one classifying.
 
-`composer.lock` is `.gitignore`d and every requirement is a floating caret, so
-two arms resolve independently. Under the pre-registered rule that makes
-`INVALID_EXPERIMENT` the *expected* verdict on a foreseeable, preventable
-cause. `pinned/composer.lock.pinned` fixes this for future pairs; it cannot
-retroactively fix the current one, because the Conventional arm's lock is not
-recorded here.
+**1. HARD — the lock preflight fails.**
 
-Fixing dependency reproducibility **before** spending the MAP_FIRST run is
-cheaper than discovering it in the gate afterwards.
+The Conventional arm installed a lock hashing to `e465a590…`. The pin committed
+here hashes to `2504f36b…`. A SHA-256 verifies a lock but cannot reproduce one,
+so the arm's actual `composer.lock` must be filed at
+`arms/conventional/composer.lock`. Until then MAP_FIRST must not run: the whole
+value of turning this into a preflight is that a mismatch costs nothing before
+the run and a Codex run after it.
+
+**2. CLASSIFYING — model and config may be unrecoverable.**
+
+This is the one field the Codex output does not carry. If the task page still
+exposes it, freeze it. If not, criterion 5 is `NOT_PROVABLE` and the pair is a
+`DIAGNOSTIC_PILOT` rather than a `STRICT_CONTROLLED_AB` — grading and the
+substitution classification stay valid, byte-level comparative claims do not.
+The run is kept as pilot evidence, not erased and not upgraded.
+
+Also fixed: history leakage is now closed by construction rather than by audit.
+The arm gets a `git archive` export of the base tree with no `.git`, so
+`dbbe666` is unreachable instead of merely off-limits.
 
 ## Decision tree after the MAP_FIRST arm
 
@@ -121,8 +134,9 @@ rediscovery of harness mistakes.
 ## Layout
 
 ```
-arms/conventional/result.json      frozen baseline + preservation gaps
-arms/map-first/TASK_PACKET.md      paste-ready packet for the one fresh run
+arms/conventional/result.json      frozen baseline, recovered evidence, filing list
+arms/map-first/TASK_PACKET.md      agent-facing; safe to paste whole
+arms/map-first/OPERATOR_CHECKLIST.md   operator-only; holds the grading key, NEVER paste
 pinned/composer.lock.pinned        candidate dependency pin + rationale
 integrity/GATE.md                  9-criterion gate, run before grading
 grader/RUBRIC.md                   what is graded and why

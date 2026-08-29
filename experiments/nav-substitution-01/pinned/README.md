@@ -36,12 +36,33 @@ composer install
 The file is named `.pinned` because the bare pattern `composer.lock` in
 `.gitignore` matches at any depth and would otherwise silently exclude it.
 
-## Status: CANDIDATE, not verified
+## Status: MISMATCH — do not use for the strict pair
 
-This lock was resolved in this session. It is **not** known to match the
-dependency set the Conventional arm actually installed — that arm's lock
-digest was recorded during the run but was not carried into this session.
+The Conventional arm's lock digest is now known:
 
-So it makes every *future* pair reproducible, and it does not retroactively
-make the current pair reproducible. What to do about that is the open decision
-in `../README.md`.
+    conventional arm   e465a5906b139b7e585b5428eee721fbca9351883dbb0cbd79272eaf39c17a3e
+    this file          2504f36bb16a168111aa309107c0460fc9c22b86618fca6527c3d28f66c639f6
+
+They differ, which is the expected result of two independent resolutions of
+floating carets days apart.
+
+A SHA-256 verifies a lock; it cannot reproduce one. There is no way to
+regenerate the Conventional arm's exact lock from its digest — even resolving
+the same package versions would not guarantee byte-identity, since lock content
+also depends on the Composer version that wrote it.
+
+So this file cannot serve the strict pair. Two options:
+
+1. **File the real lock.** Copy the Conventional run's `composer.lock` to
+   `../arms/conventional/composer.lock`, verify it hashes to `e465a590…`, and
+   use *that* for MAP_FIRST. The strict pair survives.
+2. **Accept the mismatch.** Run MAP_FIRST on this pin and classify the pair
+   `DIAGNOSTIC_PILOT` per `../integrity/GATE.md`. Grading and the substitution
+   classification stay valid; byte-level comparative claims do not.
+
+This file remains useful either way: it pins *future* pairs, which is what
+stops this from recurring.
+
+The grader is unaffected by which lock is used. It reads
+`InstalledVersions::getReference('phpstan/phpstan')` at runtime rather than
+hardcoding a version, so it grades identically against any resolved PHPStan.

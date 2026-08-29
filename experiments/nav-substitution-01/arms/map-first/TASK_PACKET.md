@@ -8,36 +8,19 @@ policy in §3. Everything else must be byte-identical.
 
 ---
 
-## 0. Operator checklist (do this before starting the task)
-
-- [ ] Fresh Codex Online task, same model and same configuration as the Conventional arm.
-- [ ] Repository `voku/agent-map`, checked out at base
-      `b8ecad69c6514514b40869e0a643b19fc019ebcf`.
-- [ ] **Dependency pinning.** Copy `experiments/nav-substitution-01/pinned/composer.lock.pinned`
-      to `composer.lock` in the checkout *before* `composer install`, then run
-      `composer install`. `composer.lock` is `.gitignore`d in this repository
-      and the requirements are floating carets, so without this step the two
-      arms resolve independently and the pair fails the integrity gate on
-      dependency drift. See `../../integrity/GATE.md`.
-- [ ] **History leakage.** The accepted fix for this task is commit `dbbe666`,
-      a descendant of the base and reachable from `origin/main`. If the task
-      environment has full git history or a remote, the answer is one
-      `git log` away. Either strip history (`git checkout --orphan` from the
-      base tree, or export the base tree without `.git`) or require the arm to
-      log every git command so history navigation is auditable.
-      Record which option was used.
-- [ ] Same validation command as the Conventional arm, run **once** (§4).
+> This whole file is safe to paste into the Codex task.
+> Operator-only preparation lives in `OPERATOR_CHECKLIST.md`, which must never
+> be pasted.
 
 ---
 
 ## 1. Task text
 
 > **VERBATIM SLOT — do not paraphrase.**
-> Paste the Conventional arm's task text here, byte-identical, from the frozen
-> Conventional record. It is not reproduced in this session because it was not
-> carried over; see `../conventional/result.json`. Reconstructing it from the
-> historical commit message would break the "same task text" integrity
-> criterion, so it is deliberately left empty rather than guessed.
+> Paste the Conventional arm's task text here, byte-identical, from
+> `../conventional/task-text.txt`. Reconstructing it from the historical commit
+> message would break the "same task text" integrity criterion, so this is left
+> empty rather than guessed.
 
 ---
 
@@ -49,12 +32,21 @@ and **output bytes returned to the model**. Categories:
 - `map-build` — building or refreshing the agent-map index
 - `map-nav` — any `agent-map` query/read command
 - `source-read` — reading a repository file directly
-- `text-search` — `rg` / `grep` / `find` / filename globbing
+- `text-search` — `rg` / `grep` searching file *contents*
+- `file-listing` — `rg --files`, `find`, `ls`, filename globbing
 - `git-history` — any command that reads commits, diffs or branches
+
+`text-search` and `file-listing` are separate categories because the
+Conventional arm used both and they substitute differently: a content search
+competes with `query`/`related`, a filename search competes with knowing where
+a symbol lives. Its 7 calls were 4 source-read, 2 text-search, 1 file-listing.
 
 `map-build` is logged separately from `map-nav` on purpose: the cost comparison
 reports cold and steady-state Map cost as two distinct numbers and never
 averages them.
+
+The run directory has no git history, so `git-history` should stay empty. It
+exists so that an attempt is visible rather than silent.
 
 Report the totals at the end. An unlogged navigation call invalidates the arm.
 
