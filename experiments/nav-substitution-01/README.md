@@ -5,7 +5,7 @@ manipulated variable is **navigation policy**. Because the Conventional arm's
 exact dependency lock bytes and Codex model/config are not recoverable, this
 first pair is explicitly a **DIAGNOSTIC_PILOT**, not a strict controlled A/B.
 
-The pilot is now complete.
+The pilot is complete and closed.
 
 Final verdict:
 
@@ -48,6 +48,7 @@ navigation log, validation evidence and patch digest were frozen.
 | 5. MAP_FIRST independent grading | **done: GRADE=0** |
 | 6. substitution analysis | **done** |
 | 7. task-shape conclusion | **frozen: PILOT_SHARED_FAILURE** |
+| 8. further MAP_FIRST retries for pair #1 | **closed** |
 
 The accepted MAP_FIRST result is filed at:
 
