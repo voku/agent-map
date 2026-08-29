@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "id": "portable-ascii-135",
   "shape": "local-method",
   "repository": "https://github.com/voku/portable-ascii",
@@ -11,14 +11,47 @@
     "title": "Inconsistence between `to_ascii` calls (since 2.10.0)",
     "text": "Inconsistence between `to_ascii` calls (since 2.10.0)\n\nCf. the failing test PR for more informations: #134\n\nThe failing test merged from #134 (tests/AsciiTest.php):\n\n    public function testToAsciiLongCorrectAcrossRepeatedCalls()\n    {\n        $input = 'Webinaire des transitions n°34 - Agir et mobiliser pour la biodiversité dans son entreprise';\n        $output = 'Webinaire des transitions ndeg34 - Agir et mobiliser pour la biodiversite dans son entreprise';\n\n        static::assertSame($output, ASCII::to_ascii($input, 'en'), 'with cleanup');\n        static::assertSame($output, ASCII::to_ascii($input, 'en'), 'with cleanup warm');\n    }\n"
   },
+  "experiment_task": {
+    "title": "Make ASCII::to_ascii repeated calls consistent",
+    "text": "Change voku\\helper\\ASCII::to_ascii so cold and warm calls for the supplied degree-sign/accented input consistently return the accepted `Webinaire des transitions n34 - Agir et mobiliser pour la biodiversite dans son entreprise` result. Update the existing regression expectation/name if needed. Preserve the public API and unrelated transliteration behavior."
+  },
   "source_paths": ["src", "tests"],
   "verified": {
     "edit_files": ["src/voku/helper/ASCII.php"],
     "edit_ranges": [
-      {"file": "src/voku/helper/ASCII.php", "start": 795, "end": 947, "note": "ASCII::to_ascii - both fix hunks (base lines 828 and 893) are inside this one method"}
+      {"file": "src/voku/helper/ASCII.php", "start": 795, "end": 947, "note": "ASCII::to_ascii - both production fix hunks (base lines 828 and 893) are inside this one method"}
     ],
     "test_files": ["tests/AsciiTest.php"],
     "test_note": "the reproduction test already exists at the base commit (testToAsciiLongCorrectAcrossRepeatedCalls)"
   },
-  "grading_note": "The eventual fix inserts self::prepareAsciiMaps() before two use_transliterate decisions inside ASCII::to_ascii. Both are in one file and one method; nothing outside it changed."
+  "validation": {
+    "php_version": "8.4",
+    "setup_commands": [
+      "composer update --prefer-dist --no-interaction",
+      "composer dump-autoload -o",
+      "composer require --dev --no-interaction phpstan/phpstan:^2.1 phpstan/phpstan-strict-rules:^2.0"
+    ],
+    "baseline_after_setup": true,
+    "regression_command": "php vendor/bin/phpunit -c phpunit.xml --filter testToAsciiConsistentAcrossRepeatedCallsWithSpecialChars tests/AsciiTest.php",
+    "test_command": "php vendor/bin/phpunit -c phpunit.xml",
+    "static_analysis_command": "php vendor/bin/phpstan analyse -c phpstan.neon --memory-limit=1G",
+    "acceptance_assertions": [
+      "The repeated-call regression passes with the accepted n34 output on both cold and warm calls.",
+      "The complete PHPUnit suite passes.",
+      "PHPStan level 8 passes with phpstan.neon.",
+      "The production change initializes ASCII maps before both language-map existence decisions in ASCII::to_ascii.",
+      "No files outside the two allowed paths differ from the post-setup baseline."
+    ],
+    "diff_constraints": {
+      "required_files": ["src/voku/helper/ASCII.php", "tests/AsciiTest.php"],
+      "allowed_files": ["src/voku/helper/ASCII.php", "tests/AsciiTest.php"],
+      "required_ranges": [
+        {"file": "src/voku/helper/ASCII.php", "start": 795, "end": 947},
+        {"file": "tests/AsciiTest.php", "start": 237, "end": 255}
+      ],
+      "historical_patch_sha256": "956838d7425938a7d874322d4a98536e83cfbb186e2d35442f507ed116e0d22b",
+      "historical_patch_is_ground_truth_not_exact_diff_requirement": true
+    }
+  },
+  "grading_note": "The production fix inserts self::prepareAsciiMaps() before two use_transliterate decisions inside ASCII::to_ascii. The historical patch also replaces the pre-existing regression expectation/name in tests/AsciiTest.php."
 }

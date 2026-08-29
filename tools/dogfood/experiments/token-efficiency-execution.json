@@ -1,0 +1,38 @@
+{
+  "experiment": "agent-map-token-efficiency",
+  "l1_prompt": "docs/dogfood/token-efficiency-l1.md",
+  "contract_anchor_sha": "2124c244365726469197c2532a9c4bc1f878cc31",
+  "executed_at_utc": "2026-08-29T09:14:15Z",
+  "result": "INVALID_EXPERIMENT",
+  "preflight": {
+    "controller_sha_matches": true,
+    "tracked_tree_clean_before_artifacts": true,
+    "coding_model_runner": "NOT_OBSERVABLE",
+    "authoritative_model_token_telemetry": "NOT_OBSERVABLE",
+    "independent_conversation_isolation": "NOT_AVAILABLE",
+    "portable_ascii_135_validation_contract": "READY"
+  },
+  "tasks": [
+    {
+      "task_id": "portable-ascii-135",
+      "arm": "conventional|map_first",
+      "repository_sha": "88f94f89fe03bed03eb8fbcfb84178a8a5eb1d5b",
+      "result": "BLOCKED_BEFORE_ARM_START",
+      "correctness": {},
+      "tokens": {"total_input_tokens": "NOT_OBSERVABLE"},
+      "navigation": {},
+      "source_exposure": {},
+      "map_usage": {},
+      "validation": {"fixture_contract": "READY"},
+      "blind_spots": ["No isolated coding-model runner or request-level token telemetry is exposed in this environment."]
+    }
+  ],
+  "integrity_findings": [
+    "Running both arms in the current conversation would contaminate the second arm with paths, source, conclusions, and tool output from the first.",
+    "Substituting the deterministic navigation replay would compare fixed policies rather than coding-agent implementations and would not measure model-visible provider input tokens.",
+    "The portable-ascii-135 acceptance and validation contract is frozen, but execution remains Runner-owned."
+  ],
+  "cold_start_cost": "NOT_MEASURED",
+  "steady_state_cost": "NOT_MEASURED",
+  "classification_reason": "The portable-ascii-135 validation blocker is resolved. The L1 stopping and integrity rules still require Runner-owned isolated model conversations and observable or consistently estimated model input. Those execution prerequisites are absent here, so no arm was started and no comparative claim is defensible."
+}
