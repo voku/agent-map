@@ -7,12 +7,10 @@
   "base_sha": "b8ecad69c6514514b40869e0a643b19fc019ebcf",
   "repository": "voku/agent-map",
   "navigation_policy": "conventional (no agent-map usage; native file reads and text search only)",
-
   "digests": {
     "composer_lock_sha256": "e465a5906b139b7e585b5428eee721fbca9351883dbb0cbd79272eaf39c17a3e",
     "candidate_patch_sha256": "377abd0d7afbfdca007bd42fd23e6d1f9924d8149300cec33b141ff413ca1742"
   },
-
   "observed": {
     "navigation_calls": 7,
     "navigation_bytes": 25815,
@@ -28,54 +26,100 @@
       "note": "One broad rg over InstalledVersions / getReference / phpstan_version / structural. This is the specific cost MAP_FIRST must substitute away."
     }
   },
-
   "reconciliation": {
     "status": "RECONCILED",
     "bytes": "7781 (source-read) + 17944 (text-search) + 90 (file-listing) = 25815",
     "calls": "4 (source-read) + 2 (text-search) + 1 (file-listing) = 7",
     "note": "The earlier 90-byte residual was a missing file_listing category, not a measurement error. Integrity criterion 9 is satisfied."
   },
-
   "navigation_sequence": {
     "provenance": "The authoritative per-call transcript is now filed as navigation-log.tsv. The earlier recovered summary remains useful only as a cross-check.",
     "steps": [
-      {"n": 1, "category": "text-search", "what": "rg AnalysisFingerprint", "bytes": 838},
-      {"n": 2, "category": "source-read", "what": "read src/Index/AnalysisFingerprint.php", "bytes": 1340},
-      {"n": 3, "category": "source-read", "what": "read guessed tests/Unit/Index/AnalysisFingerprintTest.php; path did not exist", "bytes": 88, "exit": 2},
-      {"n": 4, "category": "source-read", "what": "read src/Index/AgentMapBuilder.php", "bytes": 2759},
-      {"n": 5, "category": "file-listing", "what": "rg --files tests | rg 'Fingerprint|IndexTest'", "bytes": 90},
-      {"n": 6, "category": "source-read", "what": "read tests/AgentMapIndexTest.php", "bytes": 3594},
-      {"n": 7, "category": "text-search", "what": "broad rg across InstalledVersions / getReference / getPrettyVersion / phpstan_version / structural", "bytes": 17106}
+      {
+        "n": 1,
+        "category": "text-search",
+        "what": "rg AnalysisFingerprint",
+        "bytes": 838
+      },
+      {
+        "n": 2,
+        "category": "source-read",
+        "what": "read src/Index/AnalysisFingerprint.php",
+        "bytes": 1340
+      },
+      {
+        "n": 3,
+        "category": "source-read",
+        "what": "read guessed tests/Unit/Index/AnalysisFingerprintTest.php; path did not exist",
+        "bytes": 88,
+        "exit": 2
+      },
+      {
+        "n": 4,
+        "category": "source-read",
+        "what": "read src/Index/AgentMapBuilder.php",
+        "bytes": 2759
+      },
+      {
+        "n": 5,
+        "category": "file-listing",
+        "what": "rg --files tests | rg 'Fingerprint|IndexTest'",
+        "bytes": 90
+      },
+      {
+        "n": 6,
+        "category": "source-read",
+        "what": "read tests/AgentMapIndexTest.php",
+        "bytes": 3594
+      },
+      {
+        "n": 7,
+        "category": "text-search",
+        "what": "broad rg across InstalledVersions / getReference / getPrettyVersion / phpstan_version / structural",
+        "bytes": 17106
+      }
     ]
   },
-
   "correctness": {
-    "independent_correctness": "PENDING",
-    "reason": "Hidden grading has not run against the actual candidate patch. Repository validation passing is NOT evidence of task correctness for this pair.",
-    "expectation": "Likely FAIL, not yet established. The candidate gates structural provenance on phpStanVersion === 'structural-only'; the sealed grader decides whether that matches production behavior.",
-    "expectation_status": "PREDICTION_ONLY. Recorded before grading so that the prediction is auditable against the result."
+    "independent_correctness": "FAIL",
+    "grade": 0,
+    "graded_against": "grader/ at SEAL-3",
+    "graded_on": "2026-08-29",
+    "candidate_digest_verified": true,
+    "failing_check": "G3 - a structural-only fingerprint must never claim an installed PHPStan package",
+    "passing_checks": [
+      "G1",
+      "G2",
+      "G4",
+      "G5"
+    ],
+    "detail": "arms/conventional/GRADE.md",
+    "prediction_was": "FAIL, on this check, for this reason - recorded before grading and held",
+    "candidate_own_tests": "4/4 PASS - the candidate's own test asserts the same wrong sentinel its implementation uses, so it encodes the defect instead of catching it",
+    "second_defect_outside_grader": "InstalledVersions::getReference() throws OutOfBoundsException when phpstan/phpstan is absent; the candidate's '?? unknown' fallback is unreachable, so it throws where the accepted fix returns 'none'. Breaks the base commit's own structural-without-phpstan CI job. Recorded as a finding, NOT added to the sealed grader."
   },
-
-  "repository_validation": "PASS",
+  "repository_validation": {
+    "reported": "PASS",
+    "scope": "composer ci in a PHPStan-installed environment",
+    "not_covered": "the base commit's structural-without-phpstan CI job (composer install --no-dev + bin/agent-map build), which this candidate would fail",
+    "lesson": "the arm's validation step is narrower than the repository's full gate; a green arm is not a green repository"
+  },
   "token_usage": "NOT_OBSERVABLE",
-
   "host_outcome": {
     "codex_ui": "unknown error",
     "classification": "HOST_FINALIZATION_FAILURE_AFTER_EVIDENCE_CAPTURE",
     "not": "EXPERIMENT_FAILURE"
   },
-
   "filed_artifacts": {
-    "task_text": "task-text.txt — recovered from the Coding task section of the pasted Codex transcript and copied into MAP_FIRST/TASK_PACKET.md",
-    "navigation_log": "navigation-log.tsv — full seven-line log recovered verbatim from the pasted Codex transcript",
-    "candidate_patch": "candidate.patch — complete patch recovered from the pasted Codex transcript; expected SHA-256 377abd0d7afbfdca007bd42fd23e6d1f9924d8149300cec33b141ff413ca1742; verify on checkout before grading",
-    "blind_spots": "blind-spots.md — recovered verbatim from the pasted Codex result",
-    "validation_summary": "validation-summary.md — final reported commands/results recovered from the transcript; intentionally not mislabelled as raw composer-ci stdout"
+    "task_text": "task-text.txt \u2014 recovered from the Coding task section of the pasted Codex transcript and copied into MAP_FIRST/TASK_PACKET.md",
+    "navigation_log": "navigation-log.tsv \u2014 full seven-line log recovered verbatim from the pasted Codex transcript",
+    "candidate_patch": "candidate.patch \u2014 complete patch recovered from the pasted Codex transcript; expected SHA-256 377abd0d7afbfdca007bd42fd23e6d1f9924d8149300cec33b141ff413ca1742; verify on checkout before grading",
+    "blind_spots": "blind-spots.md \u2014 recovered verbatim from the pasted Codex result",
+    "validation_summary": "validation-summary.md \u2014 final reported commands/results recovered from the transcript; intentionally not mislabelled as raw composer-ci stdout"
   },
-
   "artifacts_still_blocking_strict_ab": {
-    "composer_lock": "MISSING — the exact generated composer.lock bytes were not present in the transcript. Digest is known but is not reversible. Strict dependency preflight remains blocked.",
+    "composer_lock": "MISSING \u2014 the exact generated composer.lock bytes were not present in the transcript. Digest is known but is not reversible. Strict dependency preflight remains blocked.",
     "model_and_config": "NOT_PROVABLE unless the Codex task page still exposes the exact model/reasoning/configuration. Without it, classify as DIAGNOSTIC_PILOT even if the dependency lock is recovered.",
-    "raw_composer_ci_stdout": "NOT_FILED — transcript establishes successful composer ci and the component validation results, but no separately exported raw stdout artifact was available. Keep this distinction explicit."
+    "raw_composer_ci_stdout": "NOT_FILED \u2014 transcript establishes successful composer ci and the component validation results, but no separately exported raw stdout artifact was available. Keep this distinction explicit."
   }
 }

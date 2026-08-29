@@ -29,7 +29,7 @@ this hole is currently open.
 | 1. Conventional arm frozen | **done, evidence recovered** — `arms/conventional/result.json` |
 | 2. MAP_FIRST arm | **not run — blocked on preflight 1** — `arms/map-first/OPERATOR_CHECKLIST.md` |
 | 3. Integrity gate | prepared — `integrity/GATE.md` |
-| 4. Hidden grading | **prepared and sealed** — `grader/` |
+| 4. Hidden grading | **Conventional graded: GRADE=0** — `arms/conventional/GRADE.md`. MAP_FIRST pending. |
 | 5. Cost comparison | template — `analysis/COST_VIEWS.md` |
 | 6. Map substitution classification | template — `analysis/COST_VIEWS.md` |
 | 7. Freeze conclusion for this shape | pending |

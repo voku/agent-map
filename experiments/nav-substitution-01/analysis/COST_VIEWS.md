@@ -101,6 +101,28 @@ surfaced the class but not which value actually reaches the
 and would then be cheaper *and* wrong. Cost alone will not catch that; the
 grader will.
 
+## Where this pair now sits in the matrix
+
+**Conventional = GRADE 0** (`../arms/conventional/GRADE.md`). So only the bottom
+two live rows remain reachable:
+
+| Conventional | MAP_FIRST | reachable? |
+|---|---|---|
+| wrong | correct | **live** — the flattering cell |
+| wrong | wrong | **live** — shared reasoning/test gap, not a Map result |
+| correct | * | ruled out |
+
+That makes the substitution log decisive rather than supplementary. If MAP_FIRST
+grades 1, the claim only holds if the log shows Map actually carried it to the
+producer relation — that `phpStanVersion` reaching the constructor is `'none'`,
+not the `'structural-only'` backend name sitting three lines away. If it got
+there by rereading the file the Conventional arm also read, that is luck, and
+the honest write-up says so.
+
+Note also that the Conventional arm reached the right *file* and still picked
+the wrong *string*. Locating the class was never the hard part of this task, so
+"Map found the class" is not evidence of anything here.
+
 ## Outcome matrix — read this before reading any byte count
 
 | Conventional | MAP_FIRST | interpretation |
