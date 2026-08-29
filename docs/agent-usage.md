@@ -6,22 +6,71 @@ Build the map before asking a coding agent to inspect broad portions of the repo
 vendor/bin/agent-map build --root=. --paths=src,tests --out=.agent-map/php-symbols.json
 ```
 
-For a planned method edit, use:
+## Known PHP target: resolve before searching
+
+When the coding task already names the class, method, or function to change, do not make the model rediscover it with repository-wide text search. Resolve the exact identity first:
+
+```bash
+vendor/bin/agent-map scope 'App\Service\Foo::bar' --format=toon
+```
+
+`scope` is the cheap exact surface: it resolves one unambiguous PHP target, reports its source range and symbol identity, and inspects calls inside that range. If a short name is ambiguous, retry with the fully qualified target rather than selecting a fuzzy winner.
+
+For a planned method edit, expand only the bounded working set needed for that target:
 
 ```bash
 vendor/bin/agent-map context 'App\Service\Foo::bar' --format=toon
 ```
 
-The context result is deterministic repository evidence. Feed it into `agent-recall-compiler` together with task guidance and tool instructions. Do not ask the model to repeat map discovery unless `blind_spots` says the static result is incomplete.
+The context result is deterministic repository evidence. It can include the primary method, contracts/overrides, direct callers that may need adaptation, direct callees, relevant type definitions, tests, blind spots, omissions, source hashes, and bounded source slices. Feed it into `agent-recall-compiler` together with task guidance and tool instructions. Do not ask the model to repeat map discovery unless the result is incomplete for the requested change.
 
-Useful inspections:
+Use exact relation commands only when the relation itself is needed beyond the context projection:
 
 ```bash
-vendor/bin/agent-map callers 'App\Service\Foo::bar'
-vendor/bin/agent-map callees 'App\Service\Foo::bar'
-vendor/bin/agent-map query Foo
-vendor/bin/agent-map stale
+vendor/bin/agent-map callers 'App\Service\Foo::bar' --format=toon
+vendor/bin/agent-map callees 'App\Service\Foo::bar' --format=toon
 ```
+
+## Unknown target: narrow first
+
+Use broader Map navigation only when the task has not identified an exact target yet:
+
+```bash
+vendor/bin/agent-map query Foo --format=toon
+vendor/bin/agent-map related Foo --format=toon
+```
+
+Ranked Search is a seed generator, not an exact identity oracle. Literal strings, configuration, templates, filenames, and other source shapes outside Map's semantic model remain appropriate native text-search tasks.
+
+## Requested structural changes
+
+The coding agent owns intent. Once it has decided which concrete code identity to change and what the requested result is, prefer a governed Map plan over hand-written repository-wide replacement:
+
+```bash
+vendor/bin/agent-map rename-plan 'App\Service\Foo::bar' 'renamedBar' --format=toon
+vendor/bin/agent-map function-rename-plan 'App\helper' 'renamedHelper' --format=toon
+vendor/bin/agent-map property-rename-plan 'App\Service\Foo::$value' 'renamedValue' --format=toon
+vendor/bin/agent-map class-rename-plan 'App\Service\Foo' 'RenamedFoo' --format=toon
+vendor/bin/agent-map class-constant-rename-plan 'App\Service\Foo::VALUE' 'RENAMED_VALUE' --format=toon
+vendor/bin/agent-map method-removal-plan 'App\Service\Foo::obsolete' --format=toon
+vendor/bin/agent-map property-removal-plan 'App\Service\Foo::$obsolete' --format=toon
+vendor/bin/agent-map class-constant-removal-plan 'App\Service\Foo::OBSOLETE' --format=toon
+```
+
+Plans are read-only evidence, not edit authority. The mutation host must re-check status, provenance, hashes/ranges, expected source, blockers, review-required evidence, and move preconditions before writing.
+
+The intended coding-agent path is therefore:
+
+```text
+known intent
+→ scope
+→ context
+→ callers/callees only when needed
+→ specific governed change plan when available
+→ host-owned mutation and validation
+```
+
+Do not add or consume Map as a refactoring recommendation engine. Map should make an already-requested code change cheaper, smaller, and more deterministic than repeated `grep`, broad reads, or `sed`-style replacement.
 
 Rules:
 
@@ -29,4 +78,5 @@ Rules:
 - use fully qualified class names when target resolution is ambiguous;
 - treat `dynamic` and `multiple_targets` relations as blind spots;
 - do not claim impact analysis is complete when candidates were omitted by the context budget;
-- use the PHP API from `agent-loop`, not CLI-output parsing.
+- use the PHP API from `agent-loop`, not CLI-output parsing;
+- prefer existing exact Map surfaces over adding a parallel command with the same semantics.
