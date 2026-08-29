@@ -20,8 +20,27 @@ Use these already-solved, pre-registered replays rather than inventing Map-frien
    symbol-less PHP data/config; the independently verified location is a language-data array and the
    historical fix added a test.
 
-The hypothesis is not presumed true. The permitted final classifications are `CLEAR_WIN`,
-`MODEST_WIN`, `NEUTRAL`, `MIXED`, `LOSS`, and `INVALID_EXPERIMENT`.
+The hypothesis is not presumed true. Pre-register this classification table before any arm starts:
+
+- `INVALID_EXPERIMENT`: any material integrity breach, unequal conditions, missing required validation
+  contract, or inability to obtain authoritative or consistently estimated model-input tokens.
+- `LOSS`: Map has any correctness regression, or preserves correctness but increases median total input
+  tokens by more than 5% without reducing both navigation calls and delivered source lines by at least 10%.
+- `MIXED`: correctness is preserved but task-level direction differs (at least one task improves and at
+  least one worsens by more than 5% in total input tokens), or token/navigation/source metrics disagree
+  materially and no higher-precedence rule applies.
+- `CLEAR_WIN`: correctness is preserved for every task and Map reduces aggregate median total input
+  tokens by at least 20%, with no task worse by more than 5%, and reduces at least one of aggregate
+  median navigation calls or delivered source lines by at least 20% without worsening the other by
+  more than 5%.
+- `MODEST_WIN`: correctness is preserved, no task is worse by more than 5% in total input tokens, and
+  aggregate median total input tokens improve by more than 5% but less than 20%, or improve by at least
+  20% without satisfying all `CLEAR_WIN` secondary conditions.
+- `NEUTRAL`: correctness is preserved and aggregate median total input-token delta is within ±5%, with
+  no task-level or secondary metric pattern requiring `MIXED` or `LOSS`.
+
+Precedence is exactly `INVALID_EXPERIMENT` > correctness-triggered `LOSS` > `MIXED` > `CLEAR_WIN` >
+`MODEST_WIN` > `NEUTRAL` > cost-triggered `LOSS`. Do not change thresholds after observing arm output.
 
 ## Context
 
@@ -35,10 +54,10 @@ The hypothesis is not presumed true. The permitted final classifications are `CL
 - Before running either arm, a reviewer must freeze, in the experiment manifest, the exact historical
   patch (or reviewed expected diff), required files, acceptance assertions, and executable validation
   commands for every task. A fixture whose `validation` is null may not start until this is done.
-- Available Map surfaces are `query`, `file`, `related`, `scope`, `context`, `callers`, `callees`,
-  `impact`, and the typed rename/removal plans exposed by `vendor/bin/agent-map`. Only the narrowest
-  relevant surface may be used. No typed change plan is applicable to these three tasks, so plan
-  metrics are `NOT_APPLICABLE`, not zero.
+- Available Map surfaces are `query`, `file`, `related`, `discover`, `scope`, `context`, `callers`,
+  `callees`, `impact`, and the typed rename/removal plans exposed by `vendor/bin/agent-map`. Only the
+  narrowest relevant surface may be used. Count `discover` as `other_navigation_calls`. No typed change
+  plan is applicable to these three tasks, so plan metrics are `NOT_APPLICABLE`, not zero.
 - Use structural and PHPStan backend trials separately where feasible. A requested backend must match
   the map's recorded `analysis_fingerprint`; structural operation is an explicit trial, never a
   fallback after PHPStan fails.
@@ -66,9 +85,10 @@ The hypothesis is not presumed true. The permitted final classifications are `CL
 - **Arm B — Map-first:** for represented PHP facts, require the narrowest progression: exact known
   target to `scope`; method edit needing bounded surroundings to `context`; unresolved exact relation
   to `callers`/`callees`; unknown target to `query`/`related`/`file`. Use `discover` only for genuine
-  orientation. For the data/config control, literals, templates, prose, generated artifacts, an
-  explicit Map blind spot, or post-selection source verification, permit `rg` and bounded reads.
-  Record why every fallback was allowed. Do not force Map ceremony where text search is cheaper.
+  orientation and count it as `other_navigation_calls`. For the data/config control, literals,
+  templates, prose, generated artifacts, an explicit Map blind spot, or post-selection source
+  verification, permit `rg` and bounded reads. Record why every fallback was allowed. Do not force Map
+  ceremony where text search is cheaper.
 - The coding agent owns intent and mutation. Map supplies read-only evidence/plans and must not choose
   work, recommend architecture, apply a change, approve it, or execute validation. The host must
   validate provenance, hashes, backend, blockers, review state, and staleness before using evidence.
@@ -80,13 +100,17 @@ The hypothesis is not presumed true. The permitted final classifications are `CL
 - Persist the smallest auditable evidence: manifest, prompts and their hashes, normalized request
   usage, normalized tool events, final diff hash/diffstat, validation exit codes/output digests,
   grading, per-run JSON, and comparison report. Avoid full transcripts unless needed to audit a
-  disputed count; redact secrets. Use one JSON record per task/arm/trial with `task_id`, `arm`,
+  disputed count; redact secrets. Use one JSON record per task/arm/trial with `task_id`, `arm`, `trial`,
   `repository_sha`, `result`, `correctness`, `tokens`, `navigation`, `source_exposure`, `map_usage`,
   `validation`, and `blind_spots`.
-- Pre-register exclusions. Do not discard inconvenient trials. If authoritative token accounting is
-  unavailable, use one deterministic tokenizer over every input message in both arms and label all
-  token values `ESTIMATED`; otherwise use only provider counts. Never mix authoritative and estimated
-  values. Unobservable categories are the string `NOT_OBSERVABLE`.
+- Pre-register exclusions. Token-accounting precedence is fixed: use provider counts when available;
+  otherwise apply one deterministic tokenizer to every captured input message in both arms and label
+  all values `ESTIMATED`; use `NOT_OBSERVABLE` only when the input messages themselves cannot be
+  captured. Never mix authoritative and estimated values within an experiment.
+- Metric status values are fixed: `NOT_STARTED` means an arm never began, `NOT_OBSERVABLE` means the
+  required raw evidence cannot be captured, `NOT_COMPUTABLE` means raw values exist but a derived value
+  cannot be calculated, `NOT_GRADED` means correctness was not evaluated, and `NOT_APPLICABLE` means
+  the metric does not apply to that task/arm. Do not substitute empty objects for these states.
 
 ## Verification
 
@@ -96,37 +120,56 @@ The hypothesis is not presumed true. The permitted final classifications are `CL
    test "$(git -C /workspace/agent-map rev-parse HEAD)" = dc649961923bfe5fcf42a6833de6c49077caf2f0
    test -z "$(git -C /workspace/agent-map status --porcelain --untracked-files=no)"
    composer --working-dir=/workspace/agent-map ci
-   jq -e '.validation != null' /workspace/agent-map/tools/dogfood/replays/*.json
+   for replay in \
+     portable-ascii-135 \
+     simple-php-code-parser-101 \
+     portable-ascii-62; do
+       jq -e '(.validation | type) == "object" and
+              (.validation.commands | type) == "array" and (.validation.commands | length) > 0 and
+              (.validation.acceptance_assertions | type) == "array" and
+              (.validation.acceptance_assertions | length) > 0' \
+         "/workspace/agent-map/tools/dogfood/replays/${replay}.json" || exit 1
+   done
    ```
 
-   The final command deliberately blocks execution until shared validation contracts have been
-   pre-registered. Record any failure; do not improvise acceptance criteria after seeing an arm.
+   This deliberately blocks execution until every selected fixture has executable validation commands
+   and acceptance assertions. Record any failure; do not improvise acceptance criteria after seeing an
+   arm.
 2. Freeze the model runner command, immutable model/config, prompt SHA-256, tool schema SHA-256, host
    version, PHP/Composer versions, environment digest, upstream SHA, worktree path, trial number, arm
-   order, backend, cache state, and timestamps in `manifest.json`. Prove worktree equality with
-   `git status --porcelain` and `git rev-parse HEAD` immediately before every run.
-3. Export provider request usage as JSONL. Sum exactly the provider's input fields with a checked-in
-   normalization script or, if absent, mark them `NOT_OBSERVABLE`. Partition without overlap into
-   `initial_prompt_tokens`, `navigation_output_tokens`, `source_read_tokens`,
-   `validation_output_tokens`, and `resume_or_compaction_tokens`; assert their sum equals
-   `total_input_tokens`. Record system/repository prompt tokens for both arms even when equal.
+   order, backend, cache state, classification table, and timestamps in `manifest.json`. Prove worktree
+   equality with `git status --porcelain` and `git rev-parse HEAD` immediately before every run.
+3. Export provider request usage as JSONL. Use provider input-token fields when available. Otherwise,
+   if complete input messages are captured, apply the single pre-registered deterministic tokenizer to
+   every input message and mark values `ESTIMATED`; only when complete input messages are unavailable
+   mark tokens `NOT_OBSERVABLE`. Partition without overlap into `initial_prompt_tokens`,
+   `navigation_output_tokens`, `source_read_tokens`, `validation_output_tokens`, and
+   `resume_or_compaction_tokens`; assert their sum equals `total_input_tokens` for numeric values.
+   Record system/repository prompt tokens for both arms even when equal.
 4. Export every tool dispatch as JSONL and classify its pre-mutation purpose as
    `map_query_calls`, `map_scope_calls`, `map_context_calls`, `map_relation_calls`, `map_plan_calls`,
    `text_search_calls`, `file_listing_calls`, `source_read_calls`, or `other_navigation_calls`.
-   Preserve raw command hashes and outputs' byte counts so an independent reviewer can recalculate.
-5. Parse delivered source spans as `(repository_sha,path,start,end,content_hash)`. Calculate
-   `unique_source_files_read`, `total_source_ranges_read`, unioned `unique_source_lines_read`,
-   `total_source_lines_delivered`, repeated intersection as `duplicate_source_lines_delivered`, and
-   `source_bytes_delivered`. Map headers without source count as Map output, not source lines. Record
-   `tool_calls_before_first_correct_edit`, `tokens_before_first_correct_edit`, and
+   `discover` is always `other_navigation_calls`. Preserve raw command hashes and outputs' byte counts
+   so an independent reviewer can recalculate.
+5. Parse delivered source spans as `(repository_sha,path,start,end,content_hash)` using 1-based,
+   inclusive `start` and `end`. For every `(repository_sha,path,line)` identity, let `delivery_count` be
+   the number of times that line was delivered. Calculate `unique_source_files_read`,
+   `total_source_ranges_read`, unioned `unique_source_lines_read`, `total_source_lines_delivered` as the
+   sum of all delivered lines across events, and `duplicate_source_lines_delivered` as
+   `sum(max(delivery_count - 1, 0))`; thus a line delivered three times contributes two duplicates.
+   Also calculate `source_bytes_delivered`. Map headers without source count as Map output, not source
+   lines. Record `tool_calls_before_first_correct_edit`, `tokens_before_first_correct_edit`, and
    `source_lines_before_first_correct_edit`; identify the first correct edit only during blinded
    post-run grading.
 6. Grade against the pre-frozen expected patch/tests, never the better arm. Record
    `task_completed`, `acceptance_criteria_passed`, `tests_passed`, `static_analysis_passed`,
-   `required_files_changed`, `unexpected_files_changed`, `incorrect_or_missing_change`,
-   `regressions`, and `manual_review_findings`. Run the exact same task-specific commands in both arms,
-   followed by the upstream repository's frozen Composer CI command. Also run
-   `composer --working-dir=/workspace/agent-map ci` once to validate the controller/harness.
+   `required_files_changed`, `unexpected_files_changed`, `incorrect_or_missing_change`, `regressions`,
+   and `manual_review_findings`. Define `correctness = 1` only when `task_completed`,
+   `acceptance_criteria_passed`, `tests_passed`, and `static_analysis_passed` are all true and no
+   `incorrect_or_missing_change` or regression exists; otherwise `correctness = 0`. Run the exact same
+   task-specific commands in both arms, followed by the upstream repository's frozen Composer CI
+   command. Also run `composer --working-dir=/workspace/agent-map ci` once to validate the
+   controller/harness.
 7. Record independently grounded `required_files_in_ground_truth`,
    `required_files_found_before_edit`, `irrelevant_files_read`, `required_symbols_found`,
    `wrong_candidate_symbols_inspected`, and `navigation_backtracks`. Calculate `file_precision` as
@@ -158,23 +201,22 @@ The hypothesis is not presumed true. The permitted final classifications are `CL
     Handle a zero/unknown denominator as `NOT_COMPUTABLE`. Include a compact table with columns
     `Task | Arm | Input tokens | Navigation calls | Files read | Source lines | Correct | Validation`,
     per-task deltas, aggregate medians, min/max spread, cold/steady views, and time-to-first-correct-edit
-    measures. Do not collapse the evidence to one percentage or claim statistical significance from
-    this case study.
+    measures. Apply the pre-registered classification table verbatim. Do not collapse the evidence to
+    one percentage or claim statistical significance from this case study.
 11. Explain threats from model nondeterminism, warmed caches, task-selection bias, prior repository
     familiarity, prompt-size differences, index construction/amortization, additive Map-plus-identical
-    reads, hidden context, compaction/resume, repair tokens, JSON versus TOON formatting, cached/generated
-    evidence, and out-of-domain tasks.
+    reads, hidden context, compaction/resume, repair tokens, JSON versus TOON formatting,
+    cached/generated evidence, and out-of-domain tasks.
 
 ## Done When
 
 - Every arm/task/trial either meets the identical acceptance contract or has an explicit blocker.
-- Token accounting is present with a single declared method or each unavailable category is
-  `NOT_OBSERVABLE`; navigation and source metrics are captured and raw evidence supports every delta.
-- Correctness is independently graded with the same validation; Map uses are classified; plan
-  non-applicability is explicit; cold-start and steady-state costs are not conflated.
+- Token accounting is present with the pre-registered precedence or explicitly `NOT_OBSERVABLE`;
+  navigation and source metrics are captured and raw evidence supports every delta.
+- Correctness is independently graded with the same validation and fixed binary mapping; Map uses are
+  classified; plan non-applicability is explicit; cold-start and steady-state costs are not conflated.
 - Integrity checks and all required blind spots are recorded. Contamination or unequal conditions
   produce `INVALID_EXPERIMENT`, not a repaired narrative.
-- The final report gives exactly one conservative classification from the allowed set, explains it
-  from raw evidence, and states which tested task shapes Map demonstrably helps, does not help, or
-  cannot represent. No product changes, autonomous backlog items, or architecture recommendations are
-  created from the result.
+- The final report gives exactly one classification using the frozen decision table and states which
+  tested task shapes Map demonstrably helps, does not help, or cannot represent. No product changes,
+  autonomous backlog items, or architecture recommendations are created from the result.
