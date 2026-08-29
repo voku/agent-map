@@ -1,6 +1,6 @@
 # Pre-registration seal — nav-substitution-01
 
-Append-only. Both seals predate the MAP_FIRST arm.
+Append-only. All seals below predate the MAP_FIRST arm.
 
 ## SEAL-1
 
@@ -56,5 +56,35 @@ Unchanged since SEAL-1:
   grader/RUBRIC.md
   pinned/composer.lock.pinned
 
-From this point the grader is frozen. Once MAP_FIRST has been observed, nothing
-in grader/ may change for any reason.
+## SEAL-3 — pre-treatment fairness amendment
+
+Recorded before any MAP_FIRST result was observed.
+
+The actual Conventional candidate patch was recovered from the Codex transcript
+after SEAL-2. That exposed an inconsistency in the sealed grader: the rubric
+said candidate field names were unconstrained, while G1/G2/G4/G5 hard-coded the
+historical accepted fix's serialized key name `phpstan_reference`. The task text
+never prescribed that key. The recovered candidate used
+`phpstan_package_reference`, so the old grader would have introduced an
+incidental naming failure before reaching the intended provenance discriminator.
+
+Because MAP_FIRST had not run, the grading key was amended pre-treatment rather
+than accepting a known unfair oracle. The grader now discovers the candidate's
+persisted provenance field from the required installed-reference value and uses
+that same field for G3/G4/G5. The structural provenance discriminator is
+unchanged. `grade.sh` is unchanged.
+
+This amendment invalidates the claim in SEAL-2 that the grader would remain
+byte-frozen from that point; SEAL-3 records why that promise was superseded
+before treatment observation. From SEAL-3 onward, grader/ is frozen absolutely.
+
+sha256:
+ca06be2cebf50fa5c196e940d49a540467d4150643d36ce254ea20e2ccfa9fed  grader/AnalysisFingerprintGraderTest.php
+7b05314d3f7e786292bc2ee28b03c572a66aa30c5390b2ddcf46041164eb8202  grader/grade.sh
+0036648c9e57c8b2ec87690a9e3c8648b8e3bee14e94b89065dcb53973adeb8f  grader/RUBRIC.md
+
+Amendment rule:
+- field/property/helper names remain outside the correctness contract;
+- persisted exact reference, structural non-claim, historical unknown, and
+  stored-reference round-trip remain the five semantic gates;
+- no further grader change is permitted after any MAP_FIRST output is observed.

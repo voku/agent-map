@@ -1,0 +1,7 @@
+text_search	0	838	8	44	rg -n AnalysisFingerprint src tests 
+source_read	0	1340	42	19	sed -n 1\,240p src/Index/AnalysisFingerprint.php 
+source_read	2	88	1	20	sed -n 1\,260p tests/Unit/Index/AnalysisFingerprintTest.php 
+source_read	0	2759	66	21	sed -n 120\,185p src/Index/AgentMapBuilder.php 
+file_listing	0	90	3	37	sh -c rg\ --files\ tests\ \|\ rg\ \'Fingerprint\|IndexTest\' 
+source_read	0	3594	88	26	sed -n 130\,220p tests/AgentMapIndexTest.php 
+text_search	0	17106	138	37	rg -n InstalledVersions\|getReference\|getPrettyVersion\|phpstan_version\|structural src tests 

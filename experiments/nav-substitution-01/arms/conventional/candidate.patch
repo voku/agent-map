@@ -1,0 +1,114 @@
+diff --git a/src/Index/AnalysisFingerprint.php b/src/Index/AnalysisFingerprint.php
+index ccbe053..38a1cd6 100644
+--- a/src/Index/AnalysisFingerprint.php
++++ b/src/Index/AnalysisFingerprint.php
+@@ -4,23 +4,33 @@ declare(strict_types=1);
+ 
+ namespace voku\AgentMap\Index;
+ 
++use Composer\InstalledVersions;
++
+ final readonly class AnalysisFingerprint
+ {
++    public string $phpStanPackageReference;
++
+     public function __construct(
+         public string $phpStanVersion,
+         public string $phpStanConfigSha256,
+         public string $composerLockSha256,
+         public string $sourceDigest,
++        ?string $phpStanPackageReference = null,
+     ) {
++        $this->phpStanPackageReference = $phpStanPackageReference
++            ?? ($phpStanVersion === 'structural-only'
++                ? 'none'
++                : (InstalledVersions::getReference('phpstan/phpstan') ?? 'unknown'));
+     }
+ 
+     /**
+-     * @return array{phpstan_version: string, phpstan_config_sha256: string, composer_lock_sha256: string, source_digest: string}
++     * @return array{phpstan_version: string, phpstan_package_reference: string, phpstan_config_sha256: string, composer_lock_sha256: string, source_digest: string}
+      */
+     public function toArray(): array
+     {
+         return [
+             'phpstan_version' => $this->phpStanVersion,
++            'phpstan_package_reference' => $this->phpStanPackageReference,
+             'phpstan_config_sha256' => $this->phpStanConfigSha256,
+             'composer_lock_sha256' => $this->composerLockSha256,
+             'source_digest' => $this->sourceDigest,
+@@ -28,7 +38,7 @@ final readonly class AnalysisFingerprint
+     }
+ 
+     /**
+-     * @param array{phpstan_version?: mixed, phpstan_config_sha256?: mixed, composer_lock_sha256?: mixed, source_digest?: mixed} $data
++     * @param array{phpstan_version?: mixed, phpstan_package_reference?: mixed, phpstan_config_sha256?: mixed, composer_lock_sha256?: mixed, source_digest?: mixed} $data
+      */
+     public static function fromArray(array $data): self
+     {
+@@ -37,6 +47,7 @@ final readonly class AnalysisFingerprint
+             phpStanConfigSha256: (string) ($data['phpstan_config_sha256'] ?? ''),
+             composerLockSha256: (string) ($data['composer_lock_sha256'] ?? ''),
+             sourceDigest: (string) ($data['source_digest'] ?? ''),
++            phpStanPackageReference: (string) ($data['phpstan_package_reference'] ?? 'unknown'),
+         );
+     }
+ }
+diff --git a/tests/AnalysisFingerprintTest.php b/tests/AnalysisFingerprintTest.php
+new file mode 100644
+index 0000000..918e4e1
+--- /dev/null
++++ b/tests/AnalysisFingerprintTest.php
+@@ -0,0 +1,52 @@
++<?php
++
++declare(strict_types=1);
++
++namespace voku\AgentMap\Tests;
++
++use Composer\InstalledVersions;
++use PHPUnit\Framework\TestCase;
++use voku\AgentMap\Index\AnalysisFingerprint;
++
++final class AnalysisFingerprintTest extends TestCase
++{
++    public function testNewPhpStanFingerprintRecordsInstalledPackageReference(): void
++    {
++        $fingerprint = new AnalysisFingerprint('2.2.0', 'sha256:config', 'sha256:lock', 'sha256:sources');
++
++        self::assertSame(InstalledVersions::getReference('phpstan/phpstan'), $fingerprint->phpStanPackageReference);
++        self::assertSame(InstalledVersions::getReference('phpstan/phpstan'), $fingerprint->toArray()['phpstan_package_reference']);
++    }
++
++    public function testStructuralFingerprintHasNoPackageReference(): void
++    {
++        $fingerprint = new AnalysisFingerprint('structural-only', 'sha256:none', 'sha256:lock', 'sha256:sources');
++
++        self::assertSame('none', $fingerprint->phpStanPackageReference);
++    }
++
++    public function testHistoricalFingerprintReportsUnknownPackageReference(): void
++    {
++        $fingerprint = AnalysisFingerprint::fromArray([
++            'phpstan_version' => '2.1.0',
++            'phpstan_config_sha256' => 'sha256:config',
++            'composer_lock_sha256' => 'sha256:lock',
++            'source_digest' => 'sha256:sources',
++        ]);
++
++        self::assertSame('unknown', $fingerprint->phpStanPackageReference);
++    }
++
++    public function testSerializedPackageReferenceRoundTripsUnchanged(): void
++    {
++        $serialized = [
++            'phpstan_version' => '2.1.0',
++            'phpstan_package_reference' => 'historical-exact-reference',
++            'phpstan_config_sha256' => 'sha256:config',
++            'composer_lock_sha256' => 'sha256:lock',
++            'source_digest' => 'sha256:sources',
++        ];
++
++        self::assertSame($serialized, AnalysisFingerprint::fromArray($serialized)->toArray());
++    }
++}

@@ -1,109 +1,117 @@
 # Integrity gate — run immediately after the MAP_FIRST arm, before anything else
 
-Do not proceed to grading or cost comparison until every row is settled.
-A gate that is waved through here produces a number that looks like evidence
-and is not.
+Do not proceed to grading or cost interpretation until every row is settled.
+This first pair is currently pre-classified as `DIAGNOSTIC_PILOT`; it may only
+be upgraded to `STRICT_CONTROLLED_AB` if the missing strict-control evidence is
+actually recovered before MAP_FIRST runs.
 
-| # | criterion | how to check | status |
-|---|-----------|--------------|--------|
-| 1 | base SHA identical | both arms report `b8ecad69c6514514b40869e0a643b19fc019ebcf` | |
-| 2 | dependency lock SHA identical | both arms must be `e465a590…` | **PREFLIGHT — currently FAILS, see below** |
-| 3 | different fresh Codex task | not a continuation of the Conventional thread | |
-| 4 | same task text | byte-identical; diff against `arms/conventional/task-text.txt` | **PENDING FILING** |
-| 5 | same model and config | recorded per arm | **NOT_PROVABLE unless recovered — see below** |
-| 6 | same validation | `composer ci`, run exactly once per arm | |
-| 7 | Map actually used first | MAP_FIRST log shows a map call before any `source-read` or `text-search` | |
-| 8 | no future-solution leakage | run directory contains no `.git`; `git-history` log category empty | **CLOSED BY CONSTRUCTION — see below** |
-| 9 | no material unlogged navigation | per-call byte counts sum to the reported totals | **PASS for Conventional — see below** |
+| # | criterion | how to check | current status |
+|---|-----------|--------------|----------------|
+| 1 | base SHA identical | both arms report `b8ecad69c6514514b40869e0a643b19fc019ebcf` | pending MAP_FIRST |
+| 2 | dependency lock SHA identical | strict mode requires both arms to be `e465a590…` | **FAIL for strict / allowed only as pilot** |
+| 3 | different fresh Codex task | not a continuation of the Conventional thread | pending MAP_FIRST |
+| 4 | same task text | compare against `arms/conventional/task-text.txt` | **reference filed; pending MAP_FIRST** |
+| 5 | same model and config | recorded per arm | **NOT_PROVABLE unless recovered** |
+| 6 | same acceptance validation | both must pass the repository gate; post-mutation duplicate host validation is not part of navigation cost | pending MAP_FIRST |
+| 7 | Map actually used first | MAP_FIRST log shows a map call before source-read/text-search | pending MAP_FIRST |
+| 8 | no future-solution leakage | MAP_FIRST run directory contains no `.git`; no grading key in pasted packet | **closed by construction for MAP_FIRST** |
+| 9 | no material unlogged navigation | per-call byte counts sum to reported totals | **PASS Conventional; pending MAP_FIRST** |
 
-## Criterion 2 — now a preflight, and it currently fails
+## Criterion 2 — dependency environment
 
-`composer.lock` is `.gitignore`d and all requirements are floating carets, so
-two independently resolved installs do not match. That is the default behaviour
-of this repository, not bad luck.
-
-The Conventional arm's lock is known by digest:
+The Conventional arm's generated lock digest is known:
 
     e465a5906b139b7e585b5428eee721fbca9351883dbb0cbd79272eaf39c17a3e
 
-so this stops being a post-hoc invalidation and becomes a cheap preflight
-(`../arms/map-first/OPERATOR_CHECKLIST.md`, preflight 1). Checked before the
-run, a mismatch costs nothing; checked after, it costs a Codex run.
+but the lock bytes were not preserved in the available transcript. The prepared
+`pinned/composer.lock.pinned` was independently resolved at the same historical
+base and hashes to `2504f36b…`; it therefore cannot establish an identical
+dependency environment for this pair.
 
-**The preflight fails today.** `../pinned/composer.lock.pinned` was resolved
-independently and hashes to `2504f36b…`. A SHA-256 cannot be inverted into a
-lock file, so the digest can only *verify* a lock — it cannot reproduce one.
-The Conventional arm's actual `composer.lock` has to be filed at
-`../arms/conventional/composer.lock`.
+Consequences:
 
-Until it is, the choice is: file the real lock and keep the strict pair, or
-accept a known-different dependency set and drop to diagnostic pilot.
+- if the original lock is recovered and verifies to `e465a590…`, strict mode
+  remains possible;
+- otherwise run MAP_FIRST on the prepared pin only as `DIAGNOSTIC_PILOT`;
+- do not publish a causal byte-reduction percentage for this pair;
+- every future pair must start both arms from the prepared pin.
 
-## Criterion 8 — closed by construction
+## Criterion 4 — task text recovered
 
-The accepted fix `dbbe666` is a direct child of the base and reachable from
-`origin/main`: one `git log -- src/Index/AnalysisFingerprint.php` reaches the
-answer.
+The exact Coding task section from the pasted Conventional transcript is filed
+as `arms/conventional/task-text.txt` and copied into the agent-facing
+`arms/map-first/TASK_PACKET.md`.
 
-Both options were available — strip history, or permit history and audit the
-log. **Stripping is now mandatory** (`OPERATOR_CHECKLIST.md`, preflight 2). The
-run directory is a `git archive` export of the base tree with no `.git`, so the
-descendants are not reachable at all.
+The MAP_FIRST prompt must use that text without paraphrase. This criterion is
+not PASS until the actual MAP_FIRST prompt is checked, but the earlier filing
+blocker is gone.
 
-Auditing would have left the temptation in place and made the criterion depend
-on the arm's own honesty about its logging. Removing the history removes both
-the temptation and the audit burden. The `git-history` log category is retained
-so that an attempt is visible rather than silent.
+## Criterion 5 — model/config
 
-The Conventional arm predates this rule. Its 17,106-byte broad content search
-is consistent with not having taken the shortcut, but that is circumstantial,
-and it is recorded as circumstantial.
+If the Conventional Codex task page still exposes the exact model, reasoning
+setting and configuration, freeze them and use them for MAP_FIRST.
 
-## Criterion 9 — resolved, PASS
+If not, record `NOT_PROVABLE`. That permanently limits this pair to
+`DIAGNOSTIC_PILOT`; do not infer a match.
 
-The 90-byte residual was a missing category, not a measurement error:
+## Criterion 6 — validation scope
 
-    source-read    7,781    4 calls
-    text-search   17,944    2 calls
-    file-listing      90    1 call    rg --files tests | rg 'Fingerprint|IndexTest'
-    ----------------------------------
-    total         25,815    7 calls
+The Conventional transcript shows successful `composer validate`, PHPUnit,
+PHPStan and `composer ci`, with duplicate post-edit validation caused by the
+host workflow. MAP_FIRST intentionally runs the repository gate once.
 
-Both bytes and calls reconcile exactly. The MAP_FIRST packet now logs
-`file-listing` as its own category so the arms stay comparable.
+The measured navigation window ends before the first mutation, so duplicate
+post-mutation validation is excluded from navigation calls/bytes. Criterion 6
+therefore asks whether both candidates pass the same repository acceptance gate,
+not whether the host repeated identical commands the same number of times.
 
-## Criterion 5 — model and config, the one genuinely open field
+This clarification is recorded before observing MAP_FIRST and must not be used
+to hide a MAP_FIRST validation failure.
 
-Everything else about the Conventional arm is recoverable from the Codex run.
-Its model and configuration are recoverable only if the task page still exposes
-them.
+## Criterion 8 — history leakage
 
-If it does: freeze them and use exactly those for MAP_FIRST.
+The accepted fix is reachable from descendants of the historical base. MAP_FIRST
+must therefore receive an exported base tree with no `.git` directory. A
+history breach is `INVALID`, not merely a pilot downgrade.
 
-If it does not: record `NOT_PROVABLE`. Do not assume they matched, and do not
-quietly drop the criterion.
+The Conventional arm predates this rule. Its filed navigation log contains only
+the seven recorded repository-navigation calls and no git-history command. That
+is evidence consistent with no leakage, but the absence of stripped history is
+still a limitation of this first pair and belongs in the final pilot caveats.
 
-## Two classifications, not one
+## Criterion 9 — Conventional reconciled
 
-The original rule collapsed everything into `INVALID_EXPERIMENT`. That is right
-for a *comparative claim* and wrong for the *run*, which still carries real
-information.
+The full filed log now reconciles exactly:
 
-**STRICT_CONTROLLED_AB** — every criterion passes. Cost differences are
-attributable to navigation policy. Comparative claims permitted, scoped to this
-task shape.
+    source-read    7,781 bytes   4 calls
+    text-search   17,944 bytes   2 calls
+    file-listing      90 bytes   1 call
+    -----------------------------------
+    total         25,815 bytes   7 calls
 
-**DIAGNOSTIC_PILOT** — criterion 5 is `NOT_PROVABLE`, or criterion 2 fails.
-Grading results, the substitution classification, and every qualitative finding
-stay valid. Byte-level comparative claims do not. Keep the run as pilot
-evidence; do not erase it, and do not upgrade its claims.
+The earlier 90-byte residual was the `file_listing` call, not missing data.
 
-**INVALID** — criterion 3, 6, 7 or 9 fails, or criterion 8 is breached. The arm
-did not measure what it claims. Repair and repeat the pair.
+## Classification
 
-## Outcome
+`STRICT_CONTROLLED_AB`
+: Criteria 1–9 all pass, including identical dependency lock and provable
+  model/config. Comparative cost claims allowed, scoped to this task shape.
 
-- All rows pass → `STRICT_CONTROLLED_AB`, proceed to grading.
-- Only 2 or 5 fails → `DIAGNOSTIC_PILOT`, proceed to grading, restrict the claims.
-- Anything else fails → `INVALID`. Repair the harness and repeat the pair.
-  Do not grade a broken pair "just to see".
+`DIAGNOSTIC_PILOT`
+: Navigation integrity, task identity, grading and history isolation are sound,
+  but dependency equality and/or model/config equality is not provable. Keep
+  grading and qualitative substitution findings; do not make causal byte-level
+  efficiency claims.
+
+`INVALID`
+: MAP_FIRST is not fresh, does not actually use Map first, leaks future history,
+  has material unlogged navigation, or fails the acceptance task in a way that
+  prevents meaningful grading. Repair the harness before another pair.
+
+## Outcome order
+
+1. classify integrity;
+2. run the sealed grader on both candidate patches;
+3. only then inspect cold/steady costs and Map substitution;
+4. keep any conclusion scoped to this known-symbol local-change task;
+5. use the prepared pin and frozen model/config from the start for the next pair.

@@ -1,33 +1,49 @@
 # MAP_FIRST — operator checklist
 
 **Never paste this file, or any part of it, into the Codex task.**
-It names the grading key. `TASK_PACKET.md` is the only agent-facing document,
-and it is written so the whole file can be pasted safely.
+It names the grading key. `TASK_PACKET.md` is the only agent-facing document.
 
 ---
 
-## Preflight 1 — dependency lock (hard stop)
+## Experiment mode
+
+This first historical pair cannot currently satisfy strict controlled-A/B
+reproducibility because the Conventional arm's generated `composer.lock` bytes
+were not preserved and its exact Codex model/config may no longer be provable.
+
+Use one of these modes deliberately:
+
+- `STRICT_CONTROLLED_AB` — only if the original Conventional `composer.lock`
+  is recovered and hashes to `e465a5906b139b7e585b5428eee721fbca9351883dbb0cbd79272eaf39c17a3e`,
+  and the exact Conventional model/config is recovered.
+- `DIAGNOSTIC_PILOT` — use the prepared pinned lock and preserve grading,
+  navigation logs, and substitution evidence, but make no byte-level causal
+  claim between the two arms.
+
+For the current available evidence, select:
+
+    DIAGNOSTIC_PILOT
+
+Do not silently upgrade it later.
+
+## Preflight 1 — dependencies
 
 The Conventional arm installed a lock hashing to:
 
     e465a5906b139b7e585b5428eee721fbca9351883dbb0cbd79272eaf39c17a3e
 
+The prepared pin hashes differently. In `STRICT_CONTROLLED_AB`, that is a hard
+stop. In `DIAGNOSTIC_PILOT`, install the prepared pin and record the mismatch:
+
 ```bash
 cp experiments/nav-substitution-01/pinned/composer.lock.pinned composer.lock
-test "$(sha256sum composer.lock | cut -d' ' -f1)" \
-  = "e465a5906b139b7e585b5428eee721fbca9351883dbb0cbd79272eaf39c17a3e" \
-  || { echo "STOP - DO NOT RUN MAP_FIRST"; exit 1; }
+sha256sum composer.lock
 composer install
 ```
 
-**This check currently fails.** `pinned/composer.lock.pinned` was resolved
-independently and hashes to `2504f36b…`, not `e465a590…`. A SHA-256 cannot be
-inverted into a lock file, so the Conventional arm's *actual* `composer.lock`
-has to be filed at `arms/conventional/composer.lock` and copied over the pin
-before this preflight can pass. See `../../pinned/README.md`.
-
-Do not run MAP_FIRST until this preflight passes. That is the whole point of
-moving dependency drift from a post-hoc invalidation to a preflight.
+Do not describe this as the same dependency environment. The pin exists so the
+MAP_FIRST run itself is reproducible and so every future pair starts from a
+common dependency snapshot.
 
 ## Preflight 2 — history leakage (hard stop)
 
@@ -40,48 +56,63 @@ hand over a clone:
 
 ```bash
 git archive b8ecad69c6514514b40869e0a643b19fc019ebcf | tar -x -C <run-dir>
-# verify nothing reachable came along
 test ! -e <run-dir>/.git || { echo "STOP - history present"; exit 1; }
 ```
 
-Asking the arm not to peek and auditing afterwards is the weaker option: it
-leaves the temptation in place and puts the burden on the log. Removing the
-descendants removes both.
+History stripping is required in both experiment modes. A breach invalidates
+the run rather than merely downgrading it.
 
 ## Preflight 3 — model and config
 
-Freeze the Conventional task's model, reasoning setting and configuration into
-`arms/conventional/result.json`, then use exactly those for MAP_FIRST.
+If the Conventional task page still exposes its exact model, reasoning setting
+and configuration, record them and use exactly those for MAP_FIRST.
 
-If the Codex task page no longer exposes them, record criterion 5 as
-`NOT_PROVABLE` and classify the pair as **diagnostic pilot**, not strict
-controlled A/B. Do not assume they matched.
+If not, record `NOT_PROVABLE`. This is compatible only with
+`DIAGNOSTIC_PILOT`; do not assume a match.
 
 ## Preflight 4 — task text
 
-`TASK_PACKET.md` §1 is an empty verbatim slot. Fill it from
-`arms/conventional/task-text.txt`, byte-identical. Do not paraphrase and do not
-reconstruct it from the commit message.
+The Conventional task text is filed at `arms/conventional/task-text.txt` and
+copied into `TASK_PACKET.md` §1. Treat the filed text as the source of truth.
+If either file is edited, verify the section remains byte-identical before the
+run. Do not paraphrase or reconstruct it from history.
+
+## Preflight 5 — navigation evidence
+
+The Conventional navigation log is now filed at
+`arms/conventional/navigation-log.tsv` and reconciles exactly:
+
+    source-read    7,781 bytes   4 calls
+    text-search   17,944 bytes   2 calls
+    file-listing      90 bytes   1 call
+    -----------------------------------
+    total         25,815 bytes   7 calls
+
+The MAP_FIRST arm must use the same category boundaries.
 
 ## What the arm must not learn
 
-The discriminating semantics — that the structural analyser reports backend
-identity `structural-only` while emitting `phpStanVersion` `'none'` — must not
-appear anywhere in what is pasted. Finding that distinction through navigation
-is the most interesting thing this pair measures. The grader knows; the arm
-must not.
+The discriminating semantics — that the structural analyser's backend identity
+and the value it emits into `phpStanVersion` are different — must not appear in
+what is pasted. Finding that distinction through navigation is the most
+interesting thing this pair measures. The grader knows; the arm must not.
 
-Before pasting, confirm:
+The task itself legitimately contains the phrase `structural-only`, so the leak
+check must not reject that task-required phrase. Check only discriminating
+implementation details and the grading key:
 
 ```bash
-grep -niE "structural-only|sentinel|phpstan_reference|getReference|StructuralOnly|dbbe666" \
+grep -niE "phpStanVersion.{0,40}none|StructuralOnlySemanticAnalyzer|phpstan_package_reference|getReference|dbbe666" \
   experiments/nav-substitution-01/arms/map-first/TASK_PACKET.md \
   && echo "LEAK - do not paste" || echo "clean"
 ```
 
 ## After the run
 
-1. `integrity/GATE.md` — run the gate before looking at any cost number.
-2. `grader/grade.sh` — grade **both** arms. The grader is sealed; do not edit
-   it now that MAP_FIRST has been observed.
-3. `analysis/COST_VIEWS.md` — cost views and substitution classification.
+1. `integrity/GATE.md` — classify integrity before looking at cost numbers.
+2. `grader/grade.sh` — grade **both** candidates. The grader is sealed.
+3. `analysis/COST_VIEWS.md` — report cold and steady Map views separately and
+   classify every Map operation by substitution.
+4. If this pair is `DIAGNOSTIC_PILOT`, the next pair must start both arms from
+   `pinned/composer.lock.pinned` and a frozen model/config to become the first
+   strict controlled A/B.

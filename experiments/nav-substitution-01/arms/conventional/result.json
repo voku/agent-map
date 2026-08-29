@@ -37,25 +37,23 @@
   },
 
   "navigation_sequence": {
-    "provenance": "RECOVERED_SUMMARY. The ordered steps and the two itemised byte counts come from the Codex run. Per-call attribution marked DERIVED is arithmetic from the category totals, not transcribed from the raw log. The verbatim log is still the authoritative artifact and belongs in navigation-log.tsv.",
+    "provenance": "The authoritative per-call transcript is now filed as navigation-log.tsv. The earlier recovered summary remains useful only as a cross-check.",
     "steps": [
-      {"n": 1, "category": "text-search", "what": "rg AnalysisFingerprint", "bytes": 838, "bytes_provenance": "DERIVED (17944 text-search total minus the itemised 17106)"},
-      {"n": 2, "category": "source-read", "what": "read src/Index/AnalysisFingerprint.php (the target)", "bytes": null},
-      {"n": 3, "category": "source-read", "what": "read a guessed test path that does not exist", "bytes": null, "note": "A miss. Step 5 exists only to recover from it."},
-      {"n": 4, "category": "source-read", "what": "read src/Index/AgentMapBuilder.php", "bytes": null},
-      {"n": 5, "category": "file-listing", "what": "rg --files tests | rg 'Fingerprint|IndexTest'", "bytes": 90, "bytes_provenance": "ITEMISED"},
-      {"n": 6, "category": "source-read", "what": "read tests/AgentMapIndexTest.php", "bytes": null},
-      {"n": 7, "category": "text-search", "what": "broad rg across InstalledVersions / getReference / phpstan_version / structural", "bytes": 17106, "bytes_provenance": "ITEMISED"}
-    ],
-    "unattributed_source_read_bytes": 7781,
-    "unattributed_note": "Steps 2, 3, 4 and 6 sum to 7781. Step 3 read a nonexistent path so its contribution is near zero. The remaining split needs the raw log."
+      {"n": 1, "category": "text-search", "what": "rg AnalysisFingerprint", "bytes": 838},
+      {"n": 2, "category": "source-read", "what": "read src/Index/AnalysisFingerprint.php", "bytes": 1340},
+      {"n": 3, "category": "source-read", "what": "read guessed tests/Unit/Index/AnalysisFingerprintTest.php; path did not exist", "bytes": 88, "exit": 2},
+      {"n": 4, "category": "source-read", "what": "read src/Index/AgentMapBuilder.php", "bytes": 2759},
+      {"n": 5, "category": "file-listing", "what": "rg --files tests | rg 'Fingerprint|IndexTest'", "bytes": 90},
+      {"n": 6, "category": "source-read", "what": "read tests/AgentMapIndexTest.php", "bytes": 3594},
+      {"n": 7, "category": "text-search", "what": "broad rg across InstalledVersions / getReference / getPrettyVersion / phpstan_version / structural", "bytes": 17106}
+    ]
   },
 
   "correctness": {
     "independent_correctness": "PENDING",
     "reason": "Hidden grading has not run against the actual candidate patch. Repository validation passing is NOT evidence of task correctness for this pair.",
-    "expectation": "Likely FAIL, not yet established. The candidate reportedly gates the structural sentinel on phpStanVersion === 'structural-only'; production emits 'none'. See grader/RUBRIC.md.",
-    "expectation_status": "PREDICTION_ONLY. Recorded before grading so that the prediction is auditable against the result. It does not substitute for running grader/grade.sh."
+    "expectation": "Likely FAIL, not yet established. The candidate gates structural provenance on phpStanVersion === 'structural-only'; the sealed grader decides whether that matches production behavior.",
+    "expectation_status": "PREDICTION_ONLY. Recorded before grading so that the prediction is auditable against the result."
   },
 
   "repository_validation": "PASS",
@@ -67,14 +65,17 @@
     "not": "EXPERIMENT_FAILURE"
   },
 
-  "artifacts_still_to_be_filed": {
-    "task_text": "REQUIRED - task-text.txt, byte-identical, for integrity criterion 4 and to fill the verbatim slot in the MAP_FIRST packet",
-    "navigation_log": "REQUIRED - navigation-log.tsv, per-call commands and byte counts",
-    "candidate_patch": "REQUIRED - candidate.patch, must hash to 377abd0d7afbfdca007bd42fd23e6d1f9924d8149300cec33b141ff413ca1742; without it the arm cannot be graded",
-    "composer_lock": "REQUIRED - composer.lock, must hash to e465a5906b139b7e585b5428eee721fbca9351883dbb0cbd79272eaf39c17a3e; the digest alone cannot be replayed, only checked",
-    "validation_output": "REQUIRED - composer-ci.txt, verbatim",
-    "blind_spots": "REQUIRED - blind-spots.md",
-    "model_and_config": "NOT_PROVABLE unless the Codex task page still exposes it; see integrity/GATE.md criterion 5",
-    "note": "These exist in the Codex run but were not carried into the session that wrote this file. They are listed as work, not as loss."
+  "filed_artifacts": {
+    "task_text": "task-text.txt — recovered from the Coding task section of the pasted Codex transcript and copied into MAP_FIRST/TASK_PACKET.md",
+    "navigation_log": "navigation-log.tsv — full seven-line log recovered verbatim from the pasted Codex transcript",
+    "candidate_patch": "candidate.patch — complete patch recovered from the pasted Codex transcript; expected SHA-256 377abd0d7afbfdca007bd42fd23e6d1f9924d8149300cec33b141ff413ca1742; verify on checkout before grading",
+    "blind_spots": "blind-spots.md — recovered verbatim from the pasted Codex result",
+    "validation_summary": "validation-summary.md — final reported commands/results recovered from the transcript; intentionally not mislabelled as raw composer-ci stdout"
+  },
+
+  "artifacts_still_blocking_strict_ab": {
+    "composer_lock": "MISSING — the exact generated composer.lock bytes were not present in the transcript. Digest is known but is not reversible. Strict dependency preflight remains blocked.",
+    "model_and_config": "NOT_PROVABLE unless the Codex task page still exposes the exact model/reasoning/configuration. Without it, classify as DIAGNOSTIC_PILOT even if the dependency lock is recovered.",
+    "raw_composer_ci_stdout": "NOT_FILED — transcript establishes successful composer ci and the component validation results, but no separately exported raw stdout artifact was available. Keep this distinction explicit."
   }
 }

@@ -27,18 +27,28 @@ final class AnalysisFingerprintGraderTest extends TestCase
     private const HISTORICAL_REFERENCE = '0123456789abcdef0123456789abcdef01234567';
 
     /**
-     * G1: the serialized fingerprint exposes a phpstan reference field at all.
+     * @var list<string>
+     */
+    private const BASE_KEYS = [
+        'phpstan_version',
+        'phpstan_config_sha256',
+        'composer_lock_sha256',
+        'source_digest',
+    ];
+
+    /**
+     * G1: serialized provenance adds a persisted field beyond the historical schema.
      */
     public function testSerializedFingerprintExposesPhpStanReference(): void
     {
-        $fingerprint = new AnalysisFingerprint(
-            phpStanVersion: self::installedPhpStanVersion(),
-            phpStanConfigSha256: 'sha256:config',
-            composerLockSha256: 'sha256:lock',
-            sourceDigest: 'sha256:sources',
-        );
+        $serialized = self::newPhpStanFingerprint()->toArray();
+        $extraKeys = array_values(array_diff(array_keys($serialized), self::BASE_KEYS));
 
-        self::assertArrayHasKey('phpstan_reference', $fingerprint->toArray());
+        self::assertNotSame(
+            [],
+            $extraKeys,
+            'The serialized fingerprint must persist PHPStan package provenance beyond the historical schema.',
+        );
     }
 
     /**
@@ -46,16 +56,10 @@ final class AnalysisFingerprintGraderTest extends TestCase
      */
     public function testPhpStanBackedFingerprintCapturesInstalledReference(): void
     {
-        $reference = self::installedPhpStanReference();
+        $serialized = self::newPhpStanFingerprint()->toArray();
+        $key = self::referenceKey($serialized);
 
-        $fingerprint = new AnalysisFingerprint(
-            phpStanVersion: self::installedPhpStanVersion(),
-            phpStanConfigSha256: 'sha256:config',
-            composerLockSha256: 'sha256:lock',
-            sourceDigest: 'sha256:sources',
-        );
-
-        self::assertSame($reference, $fingerprint->toArray()['phpstan_reference']);
+        self::assertSame(self::installedPhpStanReference(), $serialized[$key]);
     }
 
     /**
@@ -63,15 +67,13 @@ final class AnalysisFingerprintGraderTest extends TestCase
      *
      * The structural-only sentinel is taken from the production code path that
      * actually emits it, not from a literal in this test. A candidate that
-     * gated on the analyser's backend() name ('structural-only') instead of the
-     * phpStanVersion it emits ('none') falls through to the installed-package
-     * branch and stamps a structural map with a PHPStan reference it never used.
-     *
-     * That is provenance falsification and it is the failure this task exists
-     * to prevent, so it is graded as a hard failure.
+     * gates on the analyser's backend() name instead of the phpStanVersion it
+     * emits falls through to the installed-package branch and stamps a
+     * structural map with a PHPStan reference it never used.
      */
     public function testStructuralOnlyFingerprintNeverClaimsAnInstalledPhpStanPackage(): void
     {
+        $key = self::referenceKey(self::newPhpStanFingerprint()->toArray());
         $structuralVersion = (new StructuralOnlySemanticAnalyzer())
             ->analyse(sys_get_temp_dir(), [])
             ->phpStanVersion;
@@ -83,7 +85,9 @@ final class AnalysisFingerprintGraderTest extends TestCase
             sourceDigest: 'sha256:sources',
         );
 
-        $recorded = $fingerprint->toArray()['phpstan_reference'];
+        $serialized = $fingerprint->toArray();
+        self::assertArrayHasKey($key, $serialized);
+        $recorded = $serialized[$key];
 
         self::assertIsString($recorded);
         self::assertNotSame(
@@ -109,6 +113,7 @@ final class AnalysisFingerprintGraderTest extends TestCase
      */
     public function testHistoricalFingerprintWithoutReferenceStaysExplicitlyUnknown(): void
     {
+        $key = self::referenceKey(self::newPhpStanFingerprint()->toArray());
         $fingerprint = AnalysisFingerprint::fromArray([
             'phpstan_version' => '2.2.8',
             'phpstan_config_sha256' => 'sha256:config',
@@ -116,7 +121,9 @@ final class AnalysisFingerprintGraderTest extends TestCase
             'source_digest' => 'sha256:sources',
         ]);
 
-        $recorded = $fingerprint->toArray()['phpstan_reference'];
+        $serialized = $fingerprint->toArray();
+        self::assertArrayHasKey($key, $serialized);
+        $recorded = $serialized[$key];
 
         self::assertNotSame(
             self::installedPhpStanReference(),
@@ -131,15 +138,56 @@ final class AnalysisFingerprintGraderTest extends TestCase
      */
     public function testRecordedReferenceRoundTripsWithoutConsultingCurrentRuntime(): void
     {
+        $key = self::referenceKey(self::newPhpStanFingerprint()->toArray());
         $fingerprint = AnalysisFingerprint::fromArray([
             'phpstan_version' => '2.2.8',
-            'phpstan_reference' => self::HISTORICAL_REFERENCE,
+            $key => self::HISTORICAL_REFERENCE,
             'phpstan_config_sha256' => 'sha256:config',
             'composer_lock_sha256' => 'sha256:lock',
             'source_digest' => 'sha256:sources',
         ]);
 
-        self::assertSame(self::HISTORICAL_REFERENCE, $fingerprint->toArray()['phpstan_reference']);
+        self::assertSame(self::HISTORICAL_REFERENCE, $fingerprint->toArray()[$key]);
+    }
+
+    private static function newPhpStanFingerprint(): AnalysisFingerprint
+    {
+        return new AnalysisFingerprint(
+            phpStanVersion: self::installedPhpStanVersion(),
+            phpStanConfigSha256: 'sha256:config',
+            composerLockSha256: 'sha256:lock',
+            sourceDigest: 'sha256:sources',
+        );
+    }
+
+    /**
+     * Find the persisted provenance field by its required semantic value rather
+     * than imposing the historical implementation's key name.
+     *
+     * @param array<string, mixed> $serialized
+     */
+    private static function referenceKey(array $serialized): string
+    {
+        $reference = self::installedPhpStanReference();
+        $matches = [];
+
+        foreach ($serialized as $key => $value) {
+            if (in_array($key, self::BASE_KEYS, true)) {
+                continue;
+            }
+
+            if ($value === $reference) {
+                $matches[] = $key;
+            }
+        }
+
+        self::assertCount(
+            1,
+            $matches,
+            'Exactly one serialized provenance field must contain the installed PHPStan package reference.',
+        );
+
+        return $matches[0];
     }
 
     private static function installedPhpStanVersion(): string

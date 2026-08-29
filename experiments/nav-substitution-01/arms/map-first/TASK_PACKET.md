@@ -16,11 +16,20 @@ policy in §3. Everything else must be byte-identical.
 
 ## 1. Task text
 
-> **VERBATIM SLOT — do not paraphrase.**
-> Paste the Conventional arm's task text here, byte-identical, from
-> `../conventional/task-text.txt`. Reconstructing it from the historical commit
-> message would break the "same task text" integrity criterion, so this is left
-> empty rather than guessed.
+"AnalysisFingerprint" records the PHPStan version used to produce semantic analysis, but the version alone does not establish the exact Composer package revision that supplied the analyser.
+
+Extend the fingerprint provenance contract so that:
+
+1. a newly created PHPStan-backed fingerprint records the exact installed "phpstan/phpstan" package reference;
+2. a structural-only fingerprint records that there is no PHPStan package reference;
+3. historical serialized fingerprints that predate this field remain readable and expose the missing reference explicitly rather than inventing current-runtime provenance;
+4. an already serialized exact package reference round-trips unchanged and must not be replaced with information from the current runtime;
+5. serialization exposes the new provenance;
+6. existing fingerprint behavior remains compatible.
+
+Add focused regression coverage.
+
+Do not change backend selection, ranking, dependency ownership, or unrelated map semantics.
 
 ---
 
