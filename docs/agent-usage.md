@@ -72,6 +72,12 @@ known intent
 
 Do not add or consume Map as a refactoring recommendation engine. Map should make an already-requested code change cheaper, smaller, and more deterministic than repeated `grep`, broad reads, or `sed`-style replacement.
 
+Check freshness explicitly when the working tree may have changed since the map was built:
+
+```bash
+vendor/bin/agent-map stale
+```
+
 Rules:
 
 - rebuild when `stale` reports changed hashes;
