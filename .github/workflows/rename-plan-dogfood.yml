@@ -33,7 +33,7 @@ jobs:
           set -euo pipefail
           root="${RUNNER_TEMP}/agent-map-rename-dogfood"
           rm -rf "$root"
-          mkdir -p "$root/method/src" "$root/function/src" "$root/class/src" "$root/property/src" "$root/class-constant/src" "$root/self"
+          mkdir -p "$root/method/src" "$root/function/src" "$root/class/src" "$root/parameter/src" "$root/property/src" "$root/class-constant/src" "$root/self"
           echo "DOGFOOD_ROOT=$root" >> "$GITHUB_ENV"
 
           cat > "$root/method/src/Greeter.php" <<'PHP'
@@ -120,6 +120,27 @@ jobs:
           }
           PHP
 
+          cat > "$root/parameter/src/ParameterService.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          final class ParameterService
+          {
+              public function run(): string
+              {
+                  return $this->format(value: 'map');
+              }
+
+              private function format(string $value): string
+              {
+                  return strtoupper($value);
+              }
+          }
+          PHP
+
           cat > "$root/property/src/PropertyBox.php" <<'PHP'
           <?php
 
@@ -183,16 +204,19 @@ jobs:
           method_command="$(jq -r '.capabilities[] | select(.plan_type == "method_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
           function_command="$(jq -r '.capabilities[] | select(.plan_type == "function_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
           class_command="$(jq -r '.capabilities[] | select(.plan_type == "class_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
+          parameter_command="$(jq -r '.capabilities[] | select(.plan_type == "parameter_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
           property_command="$(jq -r '.capabilities[] | select(.plan_type == "property_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
           class_constant_command="$(jq -r '.capabilities[] | select(.plan_type == "class_constant_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
           test -n "$method_command" && test "$method_command" != "null"
           test -n "$function_command" && test "$function_command" != "null"
           test -n "$class_command" && test "$class_command" != "null"
+          test -n "$parameter_command" && test "$parameter_command" != "null"
           test -n "$property_command" && test "$property_command" != "null"
           test -n "$class_constant_command" && test "$class_constant_command" != "null"
           echo "METHOD_RENAME_COMMAND=$method_command" >> "$GITHUB_ENV"
           echo "FUNCTION_RENAME_COMMAND=$function_command" >> "$GITHUB_ENV"
           echo "CLASS_RENAME_COMMAND=$class_command" >> "$GITHUB_ENV"
+          echo "PARAMETER_RENAME_COMMAND=$parameter_command" >> "$GITHUB_ENV"
           echo "PROPERTY_RENAME_COMMAND=$property_command" >> "$GITHUB_ENV"
           echo "CLASS_CONSTANT_RENAME_COMMAND=$class_constant_command" >> "$GITHUB_ENV"
 
@@ -232,6 +256,16 @@ jobs:
             --format=json > "$DOGFOOD_ROOT/class/plan.json"
 
           php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/parameter" \
+            --paths=src \
+            --out="$DOGFOOD_ROOT/parameter/map.json" \
+            --phpstan-memory-limit=512M
+          php bin/agent-map "$PARAMETER_RENAME_COMMAND" \
+            'Dogfood\ParameterService::format' '$value' '$text' \
+            --index="$DOGFOOD_ROOT/parameter/map.json" \
+            --format=json > "$DOGFOOD_ROOT/parameter/plan.json"
+
+          php bin/agent-map build \
             --root="$DOGFOOD_ROOT/property" \
             --paths=src \
             --out="$DOGFOOD_ROOT/property/map.json" \
@@ -256,7 +290,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          for kind in method function class property class-constant; do
+          for kind in method function class parameter property class-constant; do
             php tools/dogfood/rename-plan.php \
               "$DOGFOOD_ROOT/$kind" \
               "$DOGFOOD_ROOT/$kind/map.json" \
@@ -282,7 +316,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          self_paths='src/Cli/CliApplication.php,src/Cli/ClassRenameCliApplication.php,src/Cli/ClassConstantRenameCliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/PropertyRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/RenamePlanCapability.php,src/Cli/RenamePlanCliApplication.php,src/Rename/ClassRenamePlanner.php,src/Rename/SourceClassNameLocator.php,src/Rename/ClassConstantRenamePlanner.php,src/Rename/ClassConstantNameLocator.php,src/Rename/PropertyRenamePlanner.php,src/Rename/PropertyNameLocator.php,tests/CliApplicationTest.php,tests/ClassRenamePlannerTest.php,tests/ClassConstantRenamePlannerTest.php,tests/PropertyRenamePlannerTest.php,tools/dogfood/rename-plan.php'
+          self_paths='src/Cli/CliApplication.php,src/Cli/ClassRenameCliApplication.php,src/Cli/ClassConstantRenameCliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/ParameterRenameCliApplication.php,src/Cli/PropertyRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/RenamePlanCapability.php,src/Cli/RenamePlanCliApplication.php,src/Rename/ClassRenamePlanner.php,src/Rename/SourceClassNameLocator.php,src/Rename/ClassConstantRenamePlanner.php,src/Rename/ClassConstantNameLocator.php,src/Rename/ParameterRenamePlanner.php,src/Rename/ParameterNameLocator.php,src/Rename/PropertyRenamePlanner.php,src/Rename/PropertyNameLocator.php,tests/CliApplicationTest.php,tests/ClassRenamePlannerTest.php,tests/ClassConstantRenamePlannerTest.php,tests/ParameterRenamePlannerTest.php,tests/PropertyRenamePlannerTest.php,tools/dogfood/rename-plan.php'
           php bin/agent-map build \
             --root="$GITHUB_WORKSPACE" \
             --paths="$self_paths" \
@@ -316,6 +350,7 @@ jobs:
             src/Cli/ClassRenameCliApplication.php \
             src/Cli/ClassConstantRenameCliApplication.php \
             src/Cli/FunctionRenameCliApplication.php \
+            src/Cli/ParameterRenameCliApplication.php \
             src/Cli/PropertyRenameCliApplication.php \
             src/Cli/RenamePlanCliApplication.php \
             src/Cli/CliApplication.php
@@ -379,6 +414,13 @@ jobs:
           grep -R -n --fixed-strings 'NewService' "$DOGFOOD_ROOT/class/src/NewService.php"
           grep -R -n --fixed-strings 'new NewService()' "$DOGFOOD_ROOT/class/src/ClassConsumer.php"
 
+          if grep -R -n -q --fixed-strings '$value' "$DOGFOOD_ROOT/parameter/src"; then
+            echo 'Leftover $value in rewritten parameter sources.' >&2
+            exit 1
+          fi
+          grep -R -n --fixed-strings '$text' "$DOGFOOD_ROOT/parameter/src/ParameterService.php"
+          grep -R -n --fixed-strings 'format(text:' "$DOGFOOD_ROOT/parameter/src/ParameterService.php"
+
           if grep -R -n -q --fixed-strings '$name' "$DOGFOOD_ROOT/property/src"; then
             echo 'Leftover $name in rewritten property sources.' >&2
             exit 1
@@ -398,6 +440,7 @@ jobs:
           php -l "$DOGFOOD_ROOT/function/src/FunctionCaller.php"
           php -l "$DOGFOOD_ROOT/class/src/NewService.php"
           php -l "$DOGFOOD_ROOT/class/src/ClassConsumer.php"
+          php -l "$DOGFOOD_ROOT/parameter/src/ParameterService.php"
           php -l "$DOGFOOD_ROOT/property/src/PropertyBox.php"
           php -l "$DOGFOOD_ROOT/class-constant/src/Settings.php"
           php -l "$DOGFOOD_ROOT/class-constant/src/ConstantConsumer.php"
@@ -408,6 +451,8 @@ jobs:
             "$DOGFOOD_ROOT/function/report.json" >/dev/null
           jq -e '.status == "passed" and .type == "class_rename_plan" and .kind == "class" and .edit_count >= 3 and .move_count == 1' \
             "$DOGFOOD_ROOT/class/report.json" >/dev/null
+          jq -e '.status == "passed" and .type == "parameter_rename_plan" and .kind == "parameter" and .edit_count >= 2 and .move_count == 0' \
+            "$DOGFOOD_ROOT/parameter/report.json" >/dev/null
           jq -e '.status == "passed" and .type == "property_rename_plan" and .kind == "property" and .edit_count >= 3' \
             "$DOGFOOD_ROOT/property/report.json" >/dev/null
           jq -e '.status == "passed" and .type == "class_constant_rename_plan" and .kind == "class_constant" and .edit_count >= 4 and .move_count == 0' \
