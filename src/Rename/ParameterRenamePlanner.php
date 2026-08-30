@@ -132,14 +132,50 @@ final readonly class ParameterRenamePlanner
                     sourceSha256: $method->file->sha256,
                     startFilePos: $position['start_file_pos'],
                     endFilePos: $position['end_file_pos'],
-                    lineStart: $method->method->lineStart,
-                    lineEnd: $method->method->lineEnd,
+                    lineStart: $position['line'],
+                    lineEnd: $position['line'],
                     expected: $position['actual'],
                     replacement: '$' . $replacementName,
                     role: 'parameter_declaration',
                     symbolId: $method->id,
                     resolution: 'parser_exact',
                 );
+
+                $references = $locator->references(
+                    $method->file->path,
+                    $method->method->lineStart,
+                    $method->method->lineEnd,
+                    $method->method->name,
+                    $originalName,
+                    $replacementName,
+                );
+                if ($references['replacement_references'] !== []) {
+                    $first = $references['replacement_references'][0];
+                    $blockers[] = sprintf(
+                        'Replacement variable $%s already exists in method scope %s at %s:%d; renaming would merge local bindings.',
+                        $replacementName,
+                        $method->id,
+                        $method->file->path,
+                        $first['line'],
+                    );
+                    continue;
+                }
+
+                foreach ($references['references'] as $reference) {
+                    $edits[] = new RenameEdit(
+                        path: $method->file->path,
+                        sourceSha256: $method->file->sha256,
+                        startFilePos: $reference['start_file_pos'],
+                        endFilePos: $reference['end_file_pos'],
+                        lineStart: $reference['line'],
+                        lineEnd: $reference['line'],
+                        expected: $reference['actual'],
+                        replacement: '$' . $replacementName,
+                        role: 'parameter_reference',
+                        symbolId: $method->id,
+                        resolution: 'parser_exact',
+                    );
+                }
             } catch (RuntimeException $exception) {
                 $blockers[] = $exception->getMessage();
             }
@@ -236,8 +272,8 @@ final readonly class ParameterRenamePlanner
                     sourceSha256: $file->sha256,
                     startFilePos: $position['start_file_pos'],
                     endFilePos: $position['end_file_pos'],
-                    lineStart: $relation->lineStart,
-                    lineEnd: $relation->lineEnd,
+                    lineStart: $position['line'],
+                    lineEnd: $position['line'],
                     expected: $position['actual'],
                     replacement: $replacementName,
                     role: 'named_argument',
@@ -369,7 +405,10 @@ final readonly class ParameterRenamePlanner
         return preg_match('/(?<![A-Za-z0-9_\\\\])\\\\?' . $ownerPattern . '(?![A-Za-z0-9_\\\\])/i', $receiverType) === 1;
     }
 
-    /** @param list<RenameEdit> $edits @return list<RenameEdit> */
+    /**
+     * @param list<RenameEdit> $edits
+     * @return list<RenameEdit>
+     */
     private function uniqueSortedEdits(array $edits): array
     {
         $unique = [];
@@ -382,7 +421,10 @@ final readonly class ParameterRenamePlanner
         return $edits;
     }
 
-    /** @param list<RenameEdit> $edits @return list<string> */
+    /**
+     * @param list<RenameEdit> $edits
+     * @return list<string>
+     */
     private function overlapBlockers(array $edits): array
     {
         $blockers = [];
@@ -447,7 +489,10 @@ final readonly class ParameterRenamePlanner
         );
     }
 
-    /** @param list<RenameBlindSpot> $blindSpots @return list<RenameBlindSpot> */
+    /**
+     * @param list<RenameBlindSpot> $blindSpots
+     * @return list<RenameBlindSpot>
+     */
     private function uniqueBlindSpots(array $blindSpots): array
     {
         $unique = [];
