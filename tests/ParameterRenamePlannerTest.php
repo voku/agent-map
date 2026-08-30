@@ -55,7 +55,7 @@ final class ParameterRenamePlannerTest extends TestCase
         self::assertStringContainsString("find(id: 'named')", $rewritten);
         self::assertStringContainsString("find('positional')", $rewritten);
         self::assertStringContainsString('private function find(string $id, int $limit = 10)', $rewritten);
-        self::assertStringContainsString("if ($id === '')", $rewritten);
+        self::assertStringContainsString("if (\$id === '')", $rewritten);
         self::assertStringContainsString('private function other(string $userId)', $rewritten);
         self::assertNotSame([], PhpCodeParser::getAstFromString($rewritten));
     }
