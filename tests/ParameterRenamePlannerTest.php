@@ -413,7 +413,10 @@ PHP);
         );
     }
 
-    /** @param list<RenameEdit> $edits @return array<string, string> */
+    /**
+     * @param list<RenameEdit> $edits
+     * @return array<string, string>
+     */
     private function applyEdits(array $edits): array
     {
         $byPath = [];
@@ -436,7 +439,10 @@ PHP);
         return $rewritten;
     }
 
-    /** @param list<RenameEdit> $edits @return list<string> */
+    /**
+     * @param list<RenameEdit> $edits
+     * @return list<string>
+     */
     private function sortedRoles(array $edits): array
     {
         $roles = array_map(static fn (RenameEdit $edit): string => $edit->role, $edits);
