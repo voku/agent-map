@@ -34,7 +34,7 @@ final class ParameterRenamePlannerTest extends TestCase
         $this->removeDirectory($this->root);
     }
 
-    public function testPlansDeclarationAndNamedArgumentButLeavesPositionalAndUnrelatedParameterUntouched(): void
+    public function testPlansParameterBindingAndNamedArgumentButLeavesPositionalAndUnrelatedParameterUntouched(): void
     {
         $this->writeService();
         $before = (string) file_get_contents($this->root . '/src/Service.php');
@@ -46,7 +46,7 @@ final class ParameterRenamePlannerTest extends TestCase
         self::assertSame('$id', $plan->replacementName);
         self::assertSame(0, $plan->parameterIndex);
         self::assertSame(['method:Demo\\Service::find'], $plan->family);
-        self::assertSame(['named_argument', 'parameter_declaration'], $this->sortedRoles($plan->edits));
+        self::assertSame(['named_argument', 'parameter_declaration', 'parameter_reference'], $this->sortedRoles($plan->edits));
         self::assertSame([], $plan->blindSpots);
         self::assertSame([], $plan->blockers);
         self::assertSame($before, file_get_contents($this->root . '/src/Service.php'));
@@ -55,6 +55,7 @@ final class ParameterRenamePlannerTest extends TestCase
         self::assertStringContainsString("find(id: 'named')", $rewritten);
         self::assertStringContainsString("find('positional')", $rewritten);
         self::assertStringContainsString('private function find(string $id, int $limit = 10)', $rewritten);
+        self::assertStringContainsString("if ($id === '')", $rewritten);
         self::assertStringContainsString('private function other(string $userId)', $rewritten);
         self::assertNotSame([], PhpCodeParser::getAstFromString($rewritten));
     }
@@ -68,6 +69,39 @@ final class ParameterRenamePlannerTest extends TestCase
         self::assertSame(ParameterRenamePlan::STATUS_BLOCKED, $plan->status);
         self::assertSame([], $plan->edits);
         self::assertStringContainsString('collides', implode("\n", $plan->blockers));
+    }
+
+    public function testReplacementLocalVariableCollisionBlocksWithoutMergingBindings(): void
+    {
+        $this->writeService(localCollision: true);
+
+        $plan = (new ParameterRenamePlanner())->plan($this->map(), 'Demo\\Service::find', 'userId', 'id');
+
+        self::assertSame(ParameterRenamePlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('would merge local bindings', implode("\n", $plan->blockers));
+    }
+
+    public function testNestedClosureUseBlocksInsteadOfGuessingBindingSemantics(): void
+    {
+        file_put_contents($this->root . '/src/Service.php', <<<'PHP'
+<?php
+namespace Demo;
+final class Service
+{
+    private function find(string $userId): void
+    {
+        $callback = static fn (): string => $userId;
+        $callback();
+    }
+}
+PHP);
+
+        $plan = (new ParameterRenamePlanner())->plan($this->map([]), 'Demo\\Service::find', 'userId', 'id');
+
+        self::assertSame(ParameterRenamePlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('nested closure/arrow scope', implode("\n", $plan->blockers));
     }
 
     public function testOverrideFamilyParameterMismatchBlocksInsteadOfSilentlySplittingContract(): void
@@ -199,7 +233,7 @@ PHP);
 
         self::assertSame(ParameterRenamePlan::STATUS_REVIEW_REQUIRED, $plan->status);
         self::assertSame('out_of_scope_named_callers', $plan->blindSpots[0]->kind);
-        self::assertCount(2, $plan->edits);
+        self::assertCount(3, $plan->edits);
     }
 
     public function testStaleEvidenceBlocksWithoutPublishingEdits(): void
@@ -263,10 +297,13 @@ PHP);
         self::assertSame($before, file_get_contents($this->root . '/src/Service.php'));
     }
 
-    private function writeService(bool $collision = false, bool $publicTarget = false): void
+    private function writeService(bool $collision = false, bool $publicTarget = false, bool $localCollision = false): void
     {
         $visibility = $publicTarget ? 'public' : 'private';
         $secondParameter = $collision ? 'int $id = 10' : 'int $limit = 10';
+        $body = $localCollision
+            ? "        \$id = 'existing';\n        if (\$userId === \$id) {\n            return;\n        }"
+            : "        if (\$userId === '') {\n            return;\n        }";
         file_put_contents($this->root . '/src/Service.php', <<<PHP
 <?php
 namespace Demo;
@@ -280,6 +317,7 @@ final class Service
 
     {$visibility} function find(string \$userId, {$secondParameter}): void
     {
+{$body}
     }
 
     private function other(string \$userId): void
