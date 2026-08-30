@@ -231,10 +231,11 @@ Usage: agent-map parameter-rename-plan Class::method $old $new [--index PATH] [-
 
 Build a read-only method-parameter rename plan. The command never modifies source.
 
-The planner edits exact parameter declarations and semantically resolved named-argument labels. Positional
-arguments are intentionally untouched. Public/protected contracts, dynamic dispatch, and observed argument
-unpacking remain explicit review evidence; stale maps, split method-family parameter names, collisions, or
-ambiguous named-call targets block the plan instead of publishing an apparently applicable edit set.
+The planner edits exact parameter declarations, direct lexical method-body references, and semantically resolved
+named-argument labels. Positional arguments are intentionally untouched. Nested closure/arrow binding shapes,
+public/protected contracts, dynamic dispatch, and observed argument unpacking remain fail-closed or explicit
+review evidence; stale maps, split method-family parameter names, collisions, or ambiguous named-call targets
+block the plan instead of publishing an apparently applicable edit set.
 
 Each edit carries the indexed source SHA-256 plus the exact byte range and expected token. A later mutation
 boundary must re-check those values before applying anything.
