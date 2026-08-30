@@ -6,17 +6,21 @@ namespace voku\AgentMap\Rename;
 
 use PhpParser\Node;
 use PhpParser\Node\Arg;
+use PhpParser\Node\Expr\ArrowFunction;
+use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\NullsafeMethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Param;
+use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Function_;
 use RuntimeException;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
-/** Maps one resolved method parameter and its named call arguments to exact current-source tokens. */
+/** Maps one resolved method parameter, its lexical uses, and named call arguments to exact source tokens. */
 final class ParameterNameLocator
 {
     /** @var array<string, array<int, Node>> */
@@ -29,7 +33,7 @@ final class ParameterNameLocator
     {
     }
 
-    /** @return array{start_file_pos: int, end_file_pos: int, actual: string} */
+    /** @return array{start_file_pos: int, end_file_pos: int, actual: string, line: int} */
     public function declaration(
         string $path,
         int $lineStart,
@@ -38,33 +42,50 @@ final class ParameterNameLocator
         string $parameterName,
         int $parameterIndex,
     ): array {
-        $matches = [];
-        foreach ($this->nodes($path) as $node) {
-            if (!$node instanceof ClassMethod || strcasecmp($node->name->toString(), $methodName) !== 0) {
-                continue;
-            }
-            if ($node->getStartLine() !== $lineStart || $node->getEndLine() !== $lineEnd) {
-                continue;
-            }
-
-            $parameter = $node->params[$parameterIndex] ?? null;
-            if (!$parameter instanceof Param || !$parameter->var instanceof Variable || !is_string($parameter->var->name)) {
-                continue;
-            }
-            if ($parameter->var->name !== $parameterName) {
-                continue;
-            }
-
-            $matches[] = $this->variablePosition($path, $parameter->var, $parameterName);
+        $method = $this->method($path, $lineStart, $lineEnd, $methodName);
+        $parameter = $method->params[$parameterIndex] ?? null;
+        if (!$parameter instanceof Param || !$parameter->var instanceof Variable || !is_string($parameter->var->name) || $parameter->var->name !== $parameterName) {
+            throw new RuntimeException(sprintf(
+                'Cannot map parameter declaration "$%s" at index %d on %s:%d-%d.',
+                $parameterName,
+                $parameterIndex,
+                $path,
+                $lineStart,
+                $lineEnd,
+            ));
         }
 
-        return $this->one($matches, $path, $lineStart, $lineEnd, 'parameter declaration', '$' . $parameterName);
+        return $this->variablePosition($path, $parameter->var, $parameterName);
     }
 
     /**
      * @return array{
-     *   named: list<array{start_file_pos: int, end_file_pos: int, actual: string}>,
-     *   replacement_named: list<array{start_file_pos: int, end_file_pos: int, actual: string}>,
+     *   references: list<array{start_file_pos: int, end_file_pos: int, actual: string, line: int}>,
+     *   replacement_references: list<array{start_file_pos: int, end_file_pos: int, actual: string, line: int}>
+     * }
+     */
+    public function references(
+        string $path,
+        int $lineStart,
+        int $lineEnd,
+        string $methodName,
+        string $parameterName,
+        string $replacementName,
+    ): array {
+        $method = $this->method($path, $lineStart, $lineEnd, $methodName);
+        $references = [];
+        $replacementReferences = [];
+        foreach ($method->stmts ?? [] as $statement) {
+            $this->collectMethodVariables($path, $statement, $parameterName, $replacementName, $references, $replacementReferences);
+        }
+
+        return ['references' => $references, 'replacement_references' => $replacementReferences];
+    }
+
+    /**
+     * @return array{
+     *   named: list<array{start_file_pos: int, end_file_pos: int, actual: string, line: int}>,
+     *   replacement_named: list<array{start_file_pos: int, end_file_pos: int, actual: string, line: int}>,
      *   has_unpack: bool
      * }
      */
@@ -117,13 +138,7 @@ final class ParameterNameLocator
         return $inspected[0];
     }
 
-    /**
-     * @return array{
-     *   named: list<array{start_file_pos: int, end_file_pos: int, actual: string}>,
-     *   replacement_named: list<array{start_file_pos: int, end_file_pos: int, actual: string}>,
-     *   has_unpack: bool
-     * }
-     */
+    /** @return array{named: list<array{start_file_pos: int, end_file_pos: int, actual: string, line: int}>, replacement_named: list<array{start_file_pos: int, end_file_pos: int, actual: string, line: int}>, has_unpack: bool} */
     private function inspectCall(
         string $path,
         MethodCall|NullsafeMethodCall|StaticCall $call,
@@ -155,17 +170,21 @@ final class ParameterNameLocator
         return ['named' => $named, 'replacement_named' => $replacementNamed, 'has_unpack' => $hasUnpack];
     }
 
-    /**
-     * @param list<array{start_file_pos: int, end_file_pos: int, actual: string}> $matches
-     * @return array{start_file_pos: int, end_file_pos: int, actual: string}
-     */
-    private function one(array $matches, string $path, int $lineStart, int $lineEnd, string $kind, string $expected): array
+    private function method(string $path, int $lineStart, int $lineEnd, string $methodName): ClassMethod
     {
+        $matches = [];
+        foreach ($this->nodes($path) as $node) {
+            if (!$node instanceof ClassMethod || strcasecmp($node->name->toString(), $methodName) !== 0) {
+                continue;
+            }
+            if ($node->getStartLine() === $lineStart && $node->getEndLine() === $lineEnd) {
+                $matches[] = $node;
+            }
+        }
         if (count($matches) !== 1) {
             throw new RuntimeException(sprintf(
-                'Cannot map %s evidence to exactly one "%s" token at %s:%d-%d; found %d candidate(s).',
-                $kind,
-                $expected,
+                'Cannot map method evidence to exactly one %s at %s:%d-%d; found %d candidate(s).',
+                $methodName,
                 $path,
                 $lineStart,
                 $lineEnd,
@@ -176,7 +195,83 @@ final class ParameterNameLocator
         return $matches[0];
     }
 
-    /** @return array{start_file_pos: int, end_file_pos: int, actual: string} */
+    /**
+     * @param list<array{start_file_pos: int, end_file_pos: int, actual: string, line: int}> $references
+     * @param list<array{start_file_pos: int, end_file_pos: int, actual: string, line: int}> $replacementReferences
+     */
+    private function collectMethodVariables(
+        string $path,
+        Node $node,
+        string $parameterName,
+        string $replacementName,
+        array &$references,
+        array &$replacementReferences,
+    ): void {
+        if ($node instanceof Closure || $node instanceof ArrowFunction) {
+            if ($this->subtreeContainsVariable($node, $parameterName) || $this->subtreeContainsVariable($node, $replacementName)) {
+                throw new RuntimeException(sprintf(
+                    'Parameter rename crosses a nested closure/arrow scope using $%s or $%s in %s:%d-%d.',
+                    $parameterName,
+                    $replacementName,
+                    $path,
+                    $node->getStartLine(),
+                    $node->getEndLine(),
+                ));
+            }
+            return;
+        }
+        if ($node instanceof Function_ || $node instanceof ClassLike) {
+            return;
+        }
+        if ($node instanceof Variable && is_string($node->name)) {
+            if ($node->name === $parameterName) {
+                $references[] = $this->variablePosition($path, $node, $parameterName);
+            } elseif ($node->name === $replacementName) {
+                $replacementReferences[] = $this->variablePosition($path, $node, $replacementName);
+            }
+        }
+
+        foreach ($node->getSubNodeNames() as $name) {
+            $child = $node->{$name};
+            if ($child instanceof Node) {
+                $this->collectMethodVariables($path, $child, $parameterName, $replacementName, $references, $replacementReferences);
+                continue;
+            }
+            if (!is_array($child)) {
+                continue;
+            }
+            foreach ($child as $item) {
+                if ($item instanceof Node) {
+                    $this->collectMethodVariables($path, $item, $parameterName, $replacementName, $references, $replacementReferences);
+                }
+            }
+        }
+    }
+
+    private function subtreeContainsVariable(Node $node, string $name): bool
+    {
+        if ($node instanceof Variable && is_string($node->name) && $node->name === $name) {
+            return true;
+        }
+        foreach ($node->getSubNodeNames() as $subNodeName) {
+            $child = $node->{$subNodeName};
+            if ($child instanceof Node && $this->subtreeContainsVariable($child, $name)) {
+                return true;
+            }
+            if (!is_array($child)) {
+                continue;
+            }
+            foreach ($child as $item) {
+                if ($item instanceof Node && $this->subtreeContainsVariable($item, $name)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /** @return array{start_file_pos: int, end_file_pos: int, actual: string, line: int} */
     private function variablePosition(string $path, Variable $variable, string $expected): array
     {
         $start = $variable->getStartFilePos();
@@ -196,10 +291,10 @@ final class ParameterNameLocator
             ));
         }
 
-        return ['start_file_pos' => $start, 'end_file_pos' => $end, 'actual' => $actual];
+        return ['start_file_pos' => $start, 'end_file_pos' => $end, 'actual' => $actual, 'line' => $variable->getStartLine()];
     }
 
-    /** @return array{start_file_pos: int, end_file_pos: int, actual: string} */
+    /** @return array{start_file_pos: int, end_file_pos: int, actual: string, line: int} */
     private function identifierPosition(string $path, Identifier $identifier, string $expected): array
     {
         $start = $identifier->getStartFilePos();
@@ -219,7 +314,7 @@ final class ParameterNameLocator
             ));
         }
 
-        return ['start_file_pos' => $start, 'end_file_pos' => $end, 'actual' => $actual];
+        return ['start_file_pos' => $start, 'end_file_pos' => $end, 'actual' => $actual, 'line' => $identifier->getStartLine()];
     }
 
     /** @return list<Node> */
