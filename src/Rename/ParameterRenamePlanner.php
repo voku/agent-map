@@ -510,7 +510,7 @@ final readonly class ParameterRenamePlanner
         if (str_starts_with($name, '$')) {
             $name = substr($name, 1);
         }
-        if ($name === '' || preg_match('/^[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*$/D', $name) !== 1) {
+        if ($name === 'this' || $name === '' || preg_match('/^[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*$/D', $name) !== 1) {
             throw new InvalidArgumentException('Invalid PHP parameter name: $' . $name);
         }
 
