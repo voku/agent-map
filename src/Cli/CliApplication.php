@@ -93,6 +93,7 @@ final readonly class CliApplication
             new ClassRenameCliApplication(artifacts: $artifacts),
             new ClassConstantRenameCliApplication(artifacts: $artifacts),
             new FunctionRenameCliApplication(artifacts: $artifacts),
+            new ParameterRenameCliApplication(artifacts: $artifacts),
             new PropertyRenameCliApplication(artifacts: $artifacts),
             new RenameCliApplication(artifacts: $artifacts),
         ];
