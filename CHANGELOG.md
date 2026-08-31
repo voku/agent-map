@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Block a class move when any indexed reference file declares more than one namespace, because imports are namespace-block-local: a file-wide import table made a bare name in one block look import-covered by an import in another, so the plan skipped the edit that name needed and still reported `safe`, leaving the reference bound to the identity the move was taking away.
+- Require `schema_version` to arrive as the declared `major.minor` string. A bare major, or a JSON number that merely casts to one, is a map from another producer; accepting it because its first characters matched was the guess the schema check exists to prevent.
 - Enforce the blocked-publishes-nothing invariant at the plan boundary instead of trusting ten planners to apply it: `Plan\PlanStatus::assertPublishable()` refuses to construct a blocked plan that carries edits or moves, and refuses a status outside the governed vocabulary. Each plan now declares its `PLAN_TYPE` and derives both its machine `type` and its status constants from that single vocabulary.
 - Refuse to plan a class move through a Composer PSR-4 mapping that leaves the project root. `../sibling/src` blocks, and an absolute `/opt/lib` blocks rather than being trimmed into a plausible in-project destination; `Plan\PlanMove` refuses to represent such a path at all, and blockers quote the directory as `composer.json` declares it.
 - Class relocation stays a separate contract from class renaming: `class-move-plan` keeps the class name and changes only the namespace, and a request that would do both is rejected instead of silently widening `class-rename-plan`.
@@ -45,8 +47,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Validation
 
 - PR #56 passed the PHP 8.2-8.5 CI matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood (extended to exercise the registered parameter capability), and removal-plan validation on exact head `9df8b09e2e86c2a625790d6f5da7040af90b80ca` before squash merge to `7973d35f926bdc47a0fbca50888414c33a083af4`.
-- PR #57 passed its complete check set on exact head `6b184d77ac85def9f8ef85568b3703913b95b33a`: the PHP 8.2-8.5 test matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood, removal-plan dogfood, and the new class-move-plan dogfood. Only this changelog entry, which records that result, was added on top of that head.
-- Locally the same head was verified with `composer ci` (Composer metadata validation, 385 PHPUnit tests, PHPStan) and by executing all three plan dogfood workflows step by step, including a class-move publication into a temporary PSR-4 fixture that relocates real PHP and is then re-observed at its new identity by a rebuilt map.
+- The candidate passed its complete check set on head `3d4384e148787ebb5279891bffdf19fdc144c6fe`, under PR #57 and again under its successor PR #58: the PHP 8.2-8.5 test matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood, removal-plan dogfood, and the class-move-plan dogfood.
+- Review on that head then found the cross-namespace-block import leak, the incomplete `schema_version` acceptance, and a stale provenance type name in `UPGRADING.md`. All three are fixed above, each with a regression test. The head carrying those fixes is verified locally with `composer ci` and by executing all three plan dogfood workflows step by step; its exact-head CI record is added once those checks report.
 
 ### Release boundary
 
