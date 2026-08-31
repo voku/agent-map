@@ -45,7 +45,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Validation
 
 - PR #56 passed the PHP 8.2-8.5 CI matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood (extended to exercise the registered parameter capability), and removal-plan validation on exact head `9df8b09e2e86c2a625790d6f5da7040af90b80ca` before squash merge to `7973d35f926bdc47a0fbca50888414c33a083af4`.
-- The 0.9.0 work was verified with `composer ci` (Composer metadata validation, 377 PHPUnit tests, PHPStan) and by executing the class-move dogfood workflow against a temporary PSR-4 fixture, proving the published evidence relocates real PHP and that the rebuilt map observes the relocated identity. The CI matrix, dogfood and review evidence for the release pull request is recorded against its exact head before merge.
+- PR #57 passed its complete check set on exact head `6b184d77ac85def9f8ef85568b3703913b95b33a`: the PHP 8.2-8.5 test matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood, removal-plan dogfood, and the new class-move-plan dogfood. Only this changelog entry, which records that result, was added on top of that head.
+- Locally the same head was verified with `composer ci` (Composer metadata validation, 385 PHPUnit tests, PHPStan) and by executing all three plan dogfood workflows step by step, including a class-move publication into a temporary PSR-4 fixture that relocates real PHP and is then re-observed at its new identity by a rebuilt map.
 
 ### Release boundary
 
