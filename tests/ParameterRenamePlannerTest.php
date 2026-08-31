@@ -16,7 +16,7 @@ use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Rename\ParameterRenamePlan;
 use voku\AgentMap\Rename\ParameterRenamePlanner;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanEdit;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 final class ParameterRenamePlannerTest extends TestCase
@@ -414,7 +414,7 @@ PHP);
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return array<string, string>
      */
     private function applyEdits(array $edits): array
@@ -428,7 +428,7 @@ PHP);
         foreach ($byPath as $path => $pathEdits) {
             $source = file_get_contents($this->root . '/' . $path);
             self::assertIsString($source);
-            usort($pathEdits, static fn (RenameEdit $left, RenameEdit $right): int => $right->startFilePos <=> $left->startFilePos);
+            usort($pathEdits, static fn (PlanEdit $left, PlanEdit $right): int => $right->startFilePos <=> $left->startFilePos);
             foreach ($pathEdits as $edit) {
                 self::assertSame($edit->expected, substr($source, $edit->startFilePos, $edit->endFilePos - $edit->startFilePos + 1));
                 $source = substr($source, 0, $edit->startFilePos) . $edit->replacement . substr($source, $edit->endFilePos + 1);
@@ -440,12 +440,12 @@ PHP);
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return list<string>
      */
     private function sortedRoles(array $edits): array
     {
-        $roles = array_map(static fn (RenameEdit $edit): string => $edit->role, $edits);
+        $roles = array_map(static fn (PlanEdit $edit): string => $edit->role, $edits);
         sort($roles, SORT_STRING);
 
         return $roles;

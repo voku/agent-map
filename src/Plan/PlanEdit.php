@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace voku\AgentMap\Rename;
+namespace voku\AgentMap\Plan;
 
-final readonly class RenameEdit
+final readonly class PlanEdit
 {
     public function __construct(
         public string $path,

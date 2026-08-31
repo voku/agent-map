@@ -13,7 +13,7 @@ use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Rename\MethodRenameDefinition;
 use voku\AgentMap\Rename\MethodRenamePlan;
 use voku\AgentMap\Rename\MethodRenamePlanner;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanEdit;
 
 /**
  * Focused regression scenarios adapted from Rector's method-rename coverage:
@@ -152,7 +152,7 @@ PHP);
     /** @return list<string> */
     private function roles(MethodRenamePlan $plan): array
     {
-        $roles = array_map(static fn (RenameEdit $edit): string => $edit->role, $plan->edits);
+        $roles = array_map(static fn (PlanEdit $edit): string => $edit->role, $plan->edits);
         sort($roles, SORT_STRING);
 
         return $roles;
@@ -161,7 +161,7 @@ PHP);
     /** @return list<string> */
     private function expectedTokens(MethodRenamePlan $plan): array
     {
-        return array_map(static fn (RenameEdit $edit): string => $edit->expected, $plan->edits);
+        return array_map(static fn (PlanEdit $edit): string => $edit->expected, $plan->edits);
     }
 
     private function map(): AgentMapIndex

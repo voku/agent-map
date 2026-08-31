@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace voku\AgentMap\Move;
 
 use voku\AgentMap\Plan\GovernedPlan;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
-use voku\AgentMap\Rename\RenameMove;
-use voku\AgentMap\Rename\RenameProvenance;
-use voku\AgentMap\Rename\RenameStaleEvidence;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanMove;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /** Immutable evidence package for one deterministic PHP class namespace relocation. */
 final readonly class ClassMovePlan implements GovernedPlan
@@ -20,10 +20,10 @@ final readonly class ClassMovePlan implements GovernedPlan
     public const STATUS_BLOCKED = 'blocked';
 
     /**
-     * @param list<RenameEdit> $edits
-     * @param list<RenameMove> $moves
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanMove> $moves
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      * @param list<string> $notObservable
      */
@@ -32,7 +32,7 @@ final readonly class ClassMovePlan implements GovernedPlan
         public string $targetId,
         public string $sourceFqn,
         public string $destinationFqn,
-        public RenameProvenance $provenance,
+        public PlanProvenance $provenance,
         public ?ClassMoveAutoloadEvidence $autoload,
         public array $edits,
         public array $moves,
@@ -60,10 +60,10 @@ final readonly class ClassMovePlan implements GovernedPlan
             'destination_fqn' => $this->destinationFqn,
             'provenance' => $this->provenance->toArray(),
             'autoload' => $this->autoload?->toArray(),
-            'edits' => array_map(static fn (RenameEdit $edit): array => $edit->toArray(), $this->edits),
-            'moves' => array_map(static fn (RenameMove $move): array => $move->toArray(), $this->moves),
-            'blind_spots' => array_map(static fn (RenameBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),
-            'stale_evidence' => array_map(static fn (RenameStaleEvidence $stale): array => $stale->toArray(), $this->staleEvidence),
+            'edits' => array_map(static fn (PlanEdit $edit): array => $edit->toArray(), $this->edits),
+            'moves' => array_map(static fn (PlanMove $move): array => $move->toArray(), $this->moves),
+            'blind_spots' => array_map(static fn (PlanBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),
+            'stale_evidence' => array_map(static fn (PlanStaleEvidence $stale): array => $stale->toArray(), $this->staleEvidence),
             'blockers' => $this->blockers,
             'not_observable' => $this->notObservable,
         ];

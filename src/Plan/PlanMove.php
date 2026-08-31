@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace voku\AgentMap\Rename;
+namespace voku\AgentMap\Plan;
 
 /** One preconditioned file move projected by a read-only rename plan. */
-final readonly class RenameMove
+final readonly class PlanMove
 {
     public function __construct(
         public string $fromPath,

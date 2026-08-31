@@ -7,10 +7,10 @@ namespace voku\AgentMap\Removal;
 use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\MethodEntry;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
-use voku\AgentMap\Rename\RenameProvenance;
-use voku\AgentMap\Rename\RenameStaleEvidence;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /** Builds a fail-closed exact deletion plan, inspired by Rector's Removing rules. */
 final readonly class MethodRemovalPlanner
@@ -48,7 +48,7 @@ final readonly class MethodRemovalPlanner
         $blockers = [];
         $blindSpots = [];
         $stale = array_map(
-            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            static fn (array $entry): PlanStaleEvidence => new PlanStaleEvidence($entry['path'], $entry['reason']),
             $map->staleEntries(),
         );
         if (!str_ends_with($map->backend, '+phpstan')) {
@@ -78,7 +78,7 @@ final readonly class MethodRemovalPlanner
                 $blockers[] = sprintf('Method is called at %s:%d-%d (%s).', $relation->file, $relation->lineStart, $relation->lineEnd, $relation->resolution);
             } elseif ($relation->resolution === 'dynamic' && $relation->receiverType !== null
                 && $this->receiverTypeContainsOwner($relation->receiverType, $method->owner->fqn)) {
-                $blindSpots[] = new RenameBlindSpot(
+                $blindSpots[] = new PlanBlindSpot(
                     'dynamic_method_name',
                     'A dynamic call on the owning type may invoke this method.',
                     $relation->file,
@@ -109,7 +109,7 @@ final readonly class MethodRemovalPlanner
                         $method->method->name,
                     );
                     if ($range['has_attributes']) {
-                        $blindSpots[] = new RenameBlindSpot(
+                        $blindSpots[] = new PlanBlindSpot(
                             'method_attributes',
                             'Method attributes may represent runtime or framework entry points that ordinary call relations do not prove unused.',
                             $method->file->path,
@@ -117,7 +117,7 @@ final readonly class MethodRemovalPlanner
                             $method->method->lineEnd,
                         );
                     }
-                    $edits[] = new RenameEdit(
+                    $edits[] = new PlanEdit(
                         $method->file->path,
                         $method->file->sha256,
                         $range['start'],
@@ -145,7 +145,7 @@ final readonly class MethodRemovalPlanner
         return new MethodRemovalPlan(
             $status,
             $method->id,
-            new RenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
+            new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
             $edits,
             $blindSpots,
             $stale,

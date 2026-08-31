@@ -9,6 +9,10 @@ use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\SymbolEntry;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /** Builds a read-only, fail-closed plan for one PHP function rename. */
 final readonly class FunctionRenamePlanner
@@ -38,7 +42,7 @@ final readonly class FunctionRenamePlanner
         $staleEntries = $map->staleEntries();
         usort($staleEntries, static fn (array $left, array $right): int => $left['path'] <=> $right['path']);
         $staleEvidence = array_map(
-            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            static fn (array $entry): PlanStaleEvidence => new PlanStaleEvidence($entry['path'], $entry['reason']),
             $staleEntries,
         );
         $blockers = [];
@@ -69,7 +73,7 @@ final readonly class FunctionRenamePlanner
         $edits = [];
         try {
             $position = $locator->declaration($file->path, $symbol->lineStart, $symbol->lineEnd, $symbol->name);
-            $edits[] = new RenameEdit(
+            $edits[] = new PlanEdit(
                 path: $file->path,
                 sourceSha256: $file->sha256,
                 startFilePos: $position['start_file_pos'],
@@ -96,7 +100,7 @@ final readonly class FunctionRenamePlanner
                 && $relation->receiverType === null
                 && $locator->isDynamicFunctionCall($relation->file, $relation->lineStart, $relation->lineEnd)
             ) {
-                $blindSpots[] = new RenameBlindSpot(
+                $blindSpots[] = new PlanBlindSpot(
                     kind: 'dynamic_function_name',
                     message: 'A dynamic function call may invoke the renamed function at runtime.',
                     path: $relation->file,
@@ -141,7 +145,7 @@ final readonly class FunctionRenamePlanner
             }
             try {
                 $position = $locator->call($relation->file, $relation->lineStart, $relation->lineEnd, $symbol->name);
-                $edits[] = new RenameEdit(
+                $edits[] = new PlanEdit(
                     path: $relation->file,
                     sourceSha256: $callFile->sha256,
                     startFilePos: $position['start_file_pos'],
@@ -214,8 +218,8 @@ final readonly class FunctionRenamePlanner
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @return list<RenameEdit>
+     * @param list<PlanEdit> $edits
+     * @return list<PlanEdit>
      */
     private function uniqueSortedEdits(array $edits): array
     {
@@ -224,13 +228,13 @@ final readonly class FunctionRenamePlanner
             $unique[$edit->path . ':' . $edit->startFilePos . ':' . $edit->endFilePos] = $edit;
         }
         $edits = array_values($unique);
-        usort($edits, static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
+        usort($edits, static fn (PlanEdit $left, PlanEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
 
         return $edits;
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return list<string>
      */
     private function overlapBlockers(array $edits): array
@@ -238,7 +242,7 @@ final readonly class FunctionRenamePlanner
         $blockers = [];
         $previous = null;
         foreach ($edits as $edit) {
-            if ($previous instanceof RenameEdit && $previous->path === $edit->path && $edit->startFilePos <= $previous->endFilePos) {
+            if ($previous instanceof PlanEdit && $previous->path === $edit->path && $edit->startFilePos <= $previous->endFilePos) {
                 $blockers[] = sprintf(
                     'Function rename edits overlap in %s at byte ranges %d-%d and %d-%d.',
                     $edit->path,
@@ -255,9 +259,9 @@ final readonly class FunctionRenamePlanner
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      */
     private function result(
@@ -280,7 +284,7 @@ final readonly class FunctionRenamePlanner
             targetId: $symbol->id(),
             originalName: $symbol->name,
             replacementName: $replacementName,
-            provenance: new RenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
+            provenance: new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
             edits: $status === FunctionRenamePlan::STATUS_BLOCKED ? [] : $edits,
             blindSpots: $blindSpots,
             staleEvidence: $staleEvidence,
@@ -290,8 +294,8 @@ final readonly class FunctionRenamePlanner
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
-     * @return list<RenameBlindSpot>
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
      */
     private function uniqueBlindSpots(array $blindSpots): array
     {

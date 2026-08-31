@@ -12,9 +12,9 @@ use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Move\ClassMovePlan;
 use voku\AgentMap\Move\ClassMovePlanner;
 use voku\AgentMap\Plan\PlanCapability;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
-use voku\AgentMap\Rename\RenameMove;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanMove;
 
 /** Read-only CLI boundary for deterministic PHP class namespace relocation planning. */
 final readonly class ClassMoveCliApplication implements PlanCliApplication
@@ -206,7 +206,7 @@ TEXT;
         return implode("\n", $lines) . "\n";
     }
 
-    private function editLine(RenameEdit $edit): string
+    private function editLine(PlanEdit $edit): string
     {
         return sprintf(
             '  edit %s:%d-%d bytes %d-%d [%s/%s] %s -> %s',
@@ -222,12 +222,12 @@ TEXT;
         );
     }
 
-    private function moveLine(RenameMove $move): string
+    private function moveLine(PlanMove $move): string
     {
         return sprintf('  move %s -> %s [%s]', $move->fromPath, $move->toPath, $move->sourceSha256);
     }
 
-    private function blindSpotLine(RenameBlindSpot $blindSpot): string
+    private function blindSpotLine(PlanBlindSpot $blindSpot): string
     {
         $location = $blindSpot->path === null
             ? ''

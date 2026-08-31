@@ -20,8 +20,8 @@ use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Use_;
 use PhpParser\Node\UseItem;
 use RuntimeException;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Rename\SourceClassNameLocator;
 
 /**
@@ -124,7 +124,7 @@ final readonly class SourceClassMoveLocator
      * Every observable consequence one namespace move has for a single indexed file.
      *
      * @param array<string, string> $imports
-     * @return array{edits: list<RenameEdit>, blind_spots: list<RenameBlindSpot>, blockers: list<string>, fallback_names: list<array{name: string, line: int}>}
+     * @return array{edits: list<PlanEdit>, blind_spots: list<PlanBlindSpot>, blockers: list<string>, fallback_names: list<array{name: string, line: int}>}
      */
     public function collect(
         string $path,
@@ -153,7 +153,7 @@ final readonly class SourceClassMoveLocator
 
     /**
      * @param array<string, string> $imports
-     * @param array{edits: list<RenameEdit>, blind_spots: list<RenameBlindSpot>, blockers: list<string>, fallback_names: list<array{name: string, line: int}>} $result
+     * @param array{edits: list<PlanEdit>, blind_spots: list<PlanBlindSpot>, blockers: list<string>, fallback_names: list<array{name: string, line: int}>} $result
      */
     private function walk(
         Node $node,
@@ -170,7 +170,7 @@ final readonly class SourceClassMoveLocator
             foreach ($node->uses as $use) {
                 if ($this->isClassUse($use, $node->type) && strcasecmp(ltrim($use->name->toString(), '\\'), $sourceFqn) === 0) {
                     $token = $this->token($path, $use->name);
-                    $result['edits'][] = new RenameEdit(
+                    $result['edits'][] = new PlanEdit(
                         path: $path,
                         sourceSha256: $sourceSha256,
                         startFilePos: $token['start_file_pos'],
@@ -216,7 +216,7 @@ final readonly class SourceClassMoveLocator
         if ($node instanceof String_) {
             // Only the qualified literal changes meaning: the short name survives the move untouched.
             if (strcasecmp(ltrim($node->value, '\\'), $sourceFqn) === 0) {
-                $result['blind_spots'][] = new RenameBlindSpot(
+                $result['blind_spots'][] = new PlanBlindSpot(
                     kind: 'class_string_literal',
                     message: 'String literal may encode the moved class and cannot be rewritten as a proven PHP class-name token.',
                     path: $path,
@@ -227,7 +227,7 @@ final readonly class SourceClassMoveLocator
         }
 
         if ($isMovedFile && $node instanceof MagicConst\Namespace_) {
-            $result['blind_spots'][] = new RenameBlindSpot(
+            $result['blind_spots'][] = new PlanBlindSpot(
                 kind: 'namespace_magic_constant',
                 message: '__NAMESPACE__ changes value with the move; its consumers cannot be proven from PHP source alone.',
                 path: $path,
@@ -237,7 +237,7 @@ final readonly class SourceClassMoveLocator
         }
 
         if ($this->isDynamicClassOperation($node)) {
-            $result['blind_spots'][] = new RenameBlindSpot(
+            $result['blind_spots'][] = new PlanBlindSpot(
                 kind: 'dynamic_class_name',
                 message: 'Dynamic class-name operation may resolve to the moved class at runtime; exact target identity cannot be proven.',
                 path: $path,
@@ -269,7 +269,7 @@ final readonly class SourceClassMoveLocator
 
     /**
      * @param array<string, string> $imports
-     * @param array{edits: list<RenameEdit>, blind_spots: list<RenameBlindSpot>, blockers: list<string>, fallback_names: list<array{name: string, line: int}>} $result
+     * @param array{edits: list<PlanEdit>, blind_spots: list<PlanBlindSpot>, blockers: list<string>, fallback_names: list<array{name: string, line: int}>} $result
      */
     private function collectName(
         Name $node,
@@ -312,7 +312,7 @@ final readonly class SourceClassMoveLocator
 
             $result['edits'][] = $this->edit($path, $sourceSha256, $node, $token, '\\' . $destinationFqn, 'class_reference', $symbolId);
             if ($relative) {
-                $result['blind_spots'][] = new RenameBlindSpot(
+                $result['blind_spots'][] = new PlanBlindSpot(
                     kind: 'namespace_relative_reference',
                     message: 'Reference resolved through the enclosing namespace instead of an import; contract 1.0 projects it as a fully qualified destination name rather than synthesizing a new import.',
                     path: $path,
@@ -328,7 +328,7 @@ final readonly class SourceClassMoveLocator
             // Everything the moved file resolved through its own namespace would silently rebind to
             // the destination namespace, so it has to be pinned to the identity it has today.
             $result['edits'][] = $this->edit($path, $sourceSha256, $node, $token, '\\' . $resolved, 'namespace_dependency', $symbolId);
-            $result['blind_spots'][] = new RenameBlindSpot(
+            $result['blind_spots'][] = new PlanBlindSpot(
                 kind: 'namespace_relative_dependency',
                 message: 'Moved source resolved ' . $resolved . ' through its current namespace; contract 1.0 pins it to the fully qualified identity instead of synthesizing a new import.',
                 path: $path,
@@ -339,9 +339,9 @@ final readonly class SourceClassMoveLocator
     }
 
     /** @param array{start_file_pos: int, end_file_pos: int, expected: string} $token */
-    private function edit(string $path, string $sourceSha256, Name $node, array $token, string $replacement, string $role, string $symbolId): RenameEdit
+    private function edit(string $path, string $sourceSha256, Name $node, array $token, string $replacement, string $role, string $symbolId): PlanEdit
     {
-        return new RenameEdit(
+        return new PlanEdit(
             path: $path,
             sourceSha256: $sourceSha256,
             startFilePos: $token['start_file_pos'],
@@ -423,7 +423,7 @@ final readonly class SourceClassMoveLocator
         return $this->shortName($use->name->toString());
     }
 
-    /** @return list<RenameBlindSpot> */
+    /** @return list<PlanBlindSpot> */
     private function docCommentBlindSpots(string $path, string $sourceFqn): array
     {
         $short = $this->shortName($sourceFqn);
@@ -441,7 +441,7 @@ final readonly class SourceClassMoveLocator
             if (stripos($comment, $sourceFqn) === false && $mentionsShort !== 1) {
                 continue;
             }
-            $blindSpots[] = new RenameBlindSpot(
+            $blindSpots[] = new PlanBlindSpot(
                 kind: 'phpdoc_type_reference',
                 message: 'PHPDoc may reference the moved class; docblock rewriting is not part of the exact-token contract.',
                 path: $path,
@@ -510,8 +510,8 @@ final readonly class SourceClassMoveLocator
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @return list<RenameEdit>
+     * @param list<PlanEdit> $edits
+     * @return list<PlanEdit>
      */
     private function uniqueEdits(array $edits): array
     {
@@ -524,8 +524,8 @@ final readonly class SourceClassMoveLocator
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
-     * @return list<RenameBlindSpot>
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
      */
     private function uniqueBlindSpots(array $blindSpots): array
     {

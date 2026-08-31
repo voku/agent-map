@@ -15,7 +15,7 @@ use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Rename\MethodRenamePlan;
 use voku\AgentMap\Rename\MethodRenamePlanner;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanEdit;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 final class MethodRenamePlannerTest extends TestCase
@@ -369,7 +369,7 @@ PHP);
      * Applies a successful plan only inside the test, in descending byte order per file, so the
      * produced offsets are proven usable without adding a source-mutating product API.
      *
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return array<string, string>
      */
     private function applyEdits(array $edits): array
@@ -388,7 +388,7 @@ PHP);
             foreach ($pathEdits as $edit) {
                 self::assertSame('sha256:' . $hash, $edit->sourceSha256);
             }
-            usort($pathEdits, static fn (RenameEdit $left, RenameEdit $right): int => $right->startFilePos <=> $left->startFilePos);
+            usort($pathEdits, static fn (PlanEdit $left, PlanEdit $right): int => $right->startFilePos <=> $left->startFilePos);
             foreach ($pathEdits as $edit) {
                 self::assertSame($edit->expected, substr($source, $edit->startFilePos, $edit->endFilePos - $edit->startFilePos + 1));
                 $source = substr($source, 0, $edit->startFilePos)
@@ -402,12 +402,12 @@ PHP);
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return list<string>
      */
     private function sortedRoles(array $edits): array
     {
-        $roles = array_map(static fn (RenameEdit $edit): string => $edit->role, $edits);
+        $roles = array_map(static fn (PlanEdit $edit): string => $edit->role, $edits);
         sort($roles, SORT_STRING);
 
         return $roles;

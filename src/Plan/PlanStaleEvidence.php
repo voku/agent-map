@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace voku\AgentMap\Rename;
+namespace voku\AgentMap\Plan;
 
 /** A source snapshot mismatch, kept separate from semantic rename blockers. */
-final readonly class RenameStaleEvidence
+final readonly class PlanStaleEvidence
 {
     public function __construct(
         public string $path,

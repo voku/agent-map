@@ -19,6 +19,8 @@ use PhpParser\Node\Stmt\GroupUse;
 use PhpParser\Node\Stmt\Use_;
 use PhpParser\Node\UseItem;
 use RuntimeException;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 /** Maps one class FQN to exact declaration/import/reference tokens in current PHP source. */
@@ -66,7 +68,7 @@ final class SourceClassNameLocator
     }
 
     /**
-     * @return array{edits: list<RenameEdit>, blind_spots: list<RenameBlindSpot>}
+     * @return array{edits: list<PlanEdit>, blind_spots: list<PlanBlindSpot>}
      */
     public function references(
         string $path,
@@ -118,8 +120,8 @@ final class SourceClassNameLocator
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @param list<RenameBlindSpot> $blindSpots
+     * @param list<PlanEdit> $edits
+     * @param list<PlanBlindSpot> $blindSpots
      */
     private function collectNode(
         Node $node,
@@ -174,7 +176,7 @@ final class SourceClassNameLocator
         if ($node instanceof String_) {
             $value = ltrim($node->value, '\\');
             if (strcasecmp($value, $targetFqn) === 0 || strcasecmp($node->value, $expectedShort) === 0) {
-                $blindSpots[] = new RenameBlindSpot(
+                $blindSpots[] = new PlanBlindSpot(
                     kind: 'class_string_literal',
                     message: 'String literal may encode the renamed class and cannot be rewritten as a proven PHP class-name token.',
                     path: $path,
@@ -185,7 +187,7 @@ final class SourceClassNameLocator
         }
 
         if ($this->isDynamicClassOperation($node)) {
-            $blindSpots[] = new RenameBlindSpot(
+            $blindSpots[] = new PlanBlindSpot(
                 kind: 'dynamic_class_name',
                 message: 'Dynamic class-name operation may resolve to the renamed class at runtime; exact target identity cannot be proven.',
                 path: $path,
@@ -199,7 +201,7 @@ final class SourceClassNameLocator
             if ($resolvedFqn !== null && strcasecmp($resolvedFqn, $targetFqn) === 0) {
                 $token = $this->token($path, $node);
                 if (strcasecmp($this->lastSegment($token['expected']), $expectedShort) === 0) {
-                    $edits[] = new RenameEdit(
+                    $edits[] = new PlanEdit(
                         path: $path,
                         sourceSha256: $sourceSha256,
                         startFilePos: $token['start_file_pos'],
@@ -256,7 +258,7 @@ final class SourceClassNameLocator
         return $effectiveType === Use_::TYPE_NORMAL;
     }
 
-    /** @param list<RenameEdit> $edits */
+    /** @param list<PlanEdit> $edits */
     private function collectImport(
         Name $name,
         string $resolvedImport,
@@ -272,7 +274,7 @@ final class SourceClassNameLocator
         }
 
         $token = $this->token($path, $name);
-        $edits[] = new RenameEdit(
+        $edits[] = new PlanEdit(
             path: $path,
             sourceSha256: $sourceSha256,
             startFilePos: $token['start_file_pos'],
@@ -317,7 +319,7 @@ final class SourceClassNameLocator
         return ['start_file_pos' => $start, 'end_file_pos' => $end, 'expected' => $actual];
     }
 
-    /** @return list<RenameBlindSpot> */
+    /** @return list<PlanBlindSpot> */
     private function docCommentBlindSpots(string $path, string $targetFqn, string $expectedShort): array
     {
         $blindSpots = [];
@@ -330,7 +332,7 @@ final class SourceClassNameLocator
             if (!$this->commentMentionsClass($comment, $targetFqn, $expectedShort)) {
                 continue;
             }
-            $blindSpots[] = new RenameBlindSpot(
+            $blindSpots[] = new PlanBlindSpot(
                 kind: 'phpdoc_type_reference',
                 message: 'PHPDoc may reference the renamed class; docblock rewriting is not yet part of the exact-token contract.',
                 path: $path,
@@ -429,8 +431,8 @@ final class SourceClassNameLocator
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @return list<RenameEdit>
+     * @param list<PlanEdit> $edits
+     * @return list<PlanEdit>
      */
     private function uniqueEdits(array $edits): array
     {
@@ -439,14 +441,14 @@ final class SourceClassNameLocator
             $unique[$edit->path . ':' . $edit->startFilePos . ':' . $edit->endFilePos] = $edit;
         }
         $edits = array_values($unique);
-        usort($edits, static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
+        usort($edits, static fn (PlanEdit $left, PlanEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
 
         return $edits;
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
-     * @return list<RenameBlindSpot>
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
      */
     private function uniqueBlindSpots(array $blindSpots): array
     {

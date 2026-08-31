@@ -12,7 +12,7 @@ use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
 use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Rename\ClassRenamePlan;
 use voku\AgentMap\Rename\ClassRenamePlanner;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanEdit;
 
 /** End-to-end proof that class rename planning is backend-independent for static PHP names. */
 final class ClassRenameDogfoodTest extends TestCase
@@ -106,13 +106,13 @@ PHP);
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return list<array{path: string, start: int, end: int, expected: string, replacement: string, role: string}>
      */
     private function editProjection(array $edits): array
     {
         return array_map(
-            static fn (RenameEdit $edit): array => [
+            static fn (PlanEdit $edit): array => [
                 'path' => $edit->path,
                 'start' => $edit->startFilePos,
                 'end' => $edit->endFilePos,

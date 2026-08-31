@@ -14,8 +14,8 @@ use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Rename\PropertyRenamePlan;
 use voku\AgentMap\Rename\PropertyRenamePlanner;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
 
 /**
  * Behavioral inventory cross-checked against Rector's RenamePropertyRector and focused fixtures:
@@ -141,7 +141,7 @@ PHP);
         $plan = (new PropertyRenamePlanner())->plan($this->map(), 'Demo\\Box::$name', 'label');
 
         self::assertSame(PropertyRenamePlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
-        self::assertContains('dynamic_property_name', array_map(static fn (RenameBlindSpot $spot): string => $spot->kind, $plan->blindSpots));
+        self::assertContains('dynamic_property_name', array_map(static fn (PlanBlindSpot $spot): string => $spot->kind, $plan->blindSpots));
         self::assertNotSame([], $plan->edits);
     }
 
@@ -161,7 +161,7 @@ PHP);
         $plan = (new PropertyRenamePlanner())->plan($this->map(), 'Demo\\Box::$name', 'label');
 
         self::assertSame(PropertyRenamePlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
-        self::assertContains('magic_property_dispatch', array_map(static fn (RenameBlindSpot $spot): string => $spot->kind, $plan->blindSpots));
+        self::assertContains('magic_property_dispatch', array_map(static fn (PlanBlindSpot $spot): string => $spot->kind, $plan->blindSpots));
     }
 
     public function testStructuralOnlyEvidenceBlocksWithZeroEdits(): void
@@ -278,7 +278,7 @@ PHP);
     /** @return list<string> */
     private function roles(PropertyRenamePlan $plan): array
     {
-        $roles = array_map(static fn (RenameEdit $edit): string => $edit->role, $plan->edits);
+        $roles = array_map(static fn (PlanEdit $edit): string => $edit->role, $plan->edits);
         sort($roles, SORT_STRING);
 
         return $roles;

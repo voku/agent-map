@@ -12,8 +12,8 @@ use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Plan\PlanCapability;
 use voku\AgentMap\Rename\ClassConstantRenamePlan;
 use voku\AgentMap\Rename\ClassConstantRenamePlanner;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
 
 /** Read-only CLI boundary for one versioned PHP class-constant rename plan. */
 final readonly class ClassConstantRenameCliApplication implements PlanCliApplication
@@ -197,7 +197,7 @@ TEXT;
     }
 
     /** Formats one exact preconditioned edit for text output. */
-    private function editLine(RenameEdit $edit): string
+    private function editLine(PlanEdit $edit): string
     {
         return sprintf(
             '  edit %s:%d-%d bytes %d-%d [%s/%s] %s -> %s',
@@ -214,7 +214,7 @@ TEXT;
     }
 
     /** Formats one review-required blind spot for text output. */
-    private function blindSpotLine(RenameBlindSpot $blindSpot): string
+    private function blindSpotLine(PlanBlindSpot $blindSpot): string
     {
         $location = $blindSpot->path === null
             ? ''

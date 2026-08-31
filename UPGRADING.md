@@ -45,6 +45,41 @@ union.
 The concrete plans stay separate types on purpose. A class move and a constant removal carry
 genuinely different evidence; only the behaviour a mutation host depends on is shared.
 
+### Shared plan value objects moved to `Plan\`
+
+The value objects the whole plan family uses were named and namespaced as if only renames existed.
+They now live where they belong:
+
+| 0.8 | 0.9 |
+| --- | --- |
+| `voku\AgentMap\Rename\RenameProvenance` | `voku\AgentMap\Plan\PlanProvenance` |
+| `voku\AgentMap\Rename\RenameEdit` | `voku\AgentMap\Plan\PlanEdit` |
+| `voku\AgentMap\Rename\RenameBlindSpot` | `voku\AgentMap\Plan\PlanBlindSpot` |
+| `voku\AgentMap\Rename\RenameStaleEvidence` | `voku\AgentMap\Plan\PlanStaleEvidence` |
+| `voku\AgentMap\Rename\RenameMove` | `voku\AgentMap\Plan\PlanMove` |
+
+Property names, constructor signatures and machine output are unchanged; this is a type rename only.
+
+### `rename-capabilities` is now `plan-capabilities`
+
+Capability discovery covers all ten governed contracts instead of the six rename ones. The payload
+`type` changed from `rename_capabilities` to `plan_capabilities`, and each capability gained a
+`family` field (`rename`, `removal` or `move`):
+
+```bash
+vendor/bin/agent-map plan-capabilities --format=json
+```
+
+`voku\AgentMap\Cli\RenamePlanCapability` became `voku\AgentMap\Plan\PlanCapability` (with the new
+`family` constructor argument first), and `voku\AgentMap\Cli\RenamePlanCliApplication` became
+`voku\AgentMap\Cli\PlanCliApplication`, now implemented by the removal and move boundaries too.
+
+### `rank` is removed
+
+`agent-map rank` had no consumer and its one-hop neighbour count is derivable from `callers` and
+`callees`. Use those, or `discover`, which still ranks internally. `voku\AgentMap\Discovery\GraphRanker`
+remains in the package as an implementation detail of `discover` and is no longer public API.
+
 ### New governed contract
 
 `class_move_plan@1.0` is available through `agent-map class-move-plan` and

@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace voku\AgentMap\Rename;
 
 use voku\AgentMap\Plan\GovernedPlan;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 final readonly class ParameterRenamePlan implements GovernedPlan
 {
@@ -15,9 +19,9 @@ final readonly class ParameterRenamePlan implements GovernedPlan
 
     /**
      * @param list<string> $family
-     * @param list<RenameEdit> $edits
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      * @param list<string> $notObservable
      */
@@ -27,7 +31,7 @@ final readonly class ParameterRenamePlan implements GovernedPlan
         public string $originalName,
         public string $replacementName,
         public int $parameterIndex,
-        public RenameProvenance $provenance,
+        public PlanProvenance $provenance,
         public array $family,
         public array $edits,
         public array $blindSpots,
@@ -55,9 +59,9 @@ final readonly class ParameterRenamePlan implements GovernedPlan
             'parameter_index' => $this->parameterIndex,
             'provenance' => $this->provenance->toArray(),
             'family' => $this->family,
-            'edits' => array_map(static fn (RenameEdit $edit): array => $edit->toArray(), $this->edits),
-            'blind_spots' => array_map(static fn (RenameBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),
-            'stale_evidence' => array_map(static fn (RenameStaleEvidence $stale): array => $stale->toArray(), $this->staleEvidence),
+            'edits' => array_map(static fn (PlanEdit $edit): array => $edit->toArray(), $this->edits),
+            'blind_spots' => array_map(static fn (PlanBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),
+            'stale_evidence' => array_map(static fn (PlanStaleEvidence $stale): array => $stale->toArray(), $this->staleEvidence),
             'blockers' => $this->blockers,
             'not_observable' => $this->notObservable,
         ];

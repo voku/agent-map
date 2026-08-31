@@ -9,6 +9,10 @@ use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\SymbolEntry;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /** Builds a fail-closed plan inspired by Rector's type-aware RenameClassConstFetch rule. */
 final readonly class ClassConstantRenamePlanner
@@ -31,7 +35,7 @@ final readonly class ClassConstantRenamePlanner
 
         [$file, $symbol] = $this->resolveOwner($map, $owner);
         $stale = array_map(
-            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            static fn (array $entry): PlanStaleEvidence => new PlanStaleEvidence($entry['path'], $entry['reason']),
             $map->staleEntries(),
         );
         $blockers = [];
@@ -57,7 +61,7 @@ final readonly class ClassConstantRenamePlanner
                     if ($position['role'] === 'declaration') {
                         ++$declarations;
                     }
-                    $edits[] = new RenameEdit(
+                    $edits[] = new PlanEdit(
                         $candidate->path,
                         $candidate->sha256,
                         $position['start_file_pos'],
@@ -84,7 +88,7 @@ final readonly class ClassConstantRenamePlanner
             $unique[$edit->path . ':' . $edit->startFilePos . ':' . $edit->endFilePos] = $edit;
         }
         $edits = array_values($unique);
-        usort($edits, static fn (RenameEdit $a, RenameEdit $b): int => $a->path <=> $b->path ?: $a->startFilePos <=> $b->startFilePos);
+        usort($edits, static fn (PlanEdit $a, PlanEdit $b): int => $a->path <=> $b->path ?: $a->startFilePos <=> $b->startFilePos);
 
         return $this->result($map, $symbol, $original, $replacement, $edits, $blindSpots, $stale, $blockers);
     }
@@ -132,9 +136,9 @@ final readonly class ClassConstantRenamePlanner
     /**
      * Derives the contract status and suppresses all edits for a blocked plan.
      *
-     * @param list<RenameEdit> $edits
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $stale
+     * @param list<PlanEdit> $edits
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $stale
      * @param list<string> $blockers
      */
     private function result(AgentMapIndex $map, SymbolEntry $owner, string $original, string $replacement, array $edits, array $blindSpots, array $stale, array $blockers): ClassConstantRenamePlan
@@ -150,7 +154,7 @@ final readonly class ClassConstantRenamePlanner
             $owner->fqn,
             $original,
             $replacement,
-            new RenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
+            new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
             $status === ClassConstantRenamePlan::STATUS_BLOCKED ? [] : $edits,
             $blindSpots,
             $stale,

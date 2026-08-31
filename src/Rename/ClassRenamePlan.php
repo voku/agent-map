@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace voku\AgentMap\Rename;
 
 use voku\AgentMap\Plan\GovernedPlan;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanMove;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /** Immutable evidence package for one same-namespace PHP class rename. */
 final readonly class ClassRenamePlan implements GovernedPlan
@@ -15,10 +20,10 @@ final readonly class ClassRenamePlan implements GovernedPlan
     public const STATUS_BLOCKED = 'blocked';
 
     /**
-     * @param list<RenameEdit> $edits
-     * @param list<RenameMove> $moves
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanMove> $moves
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      * @param list<string> $notObservable
      */
@@ -27,7 +32,7 @@ final readonly class ClassRenamePlan implements GovernedPlan
         public string $targetId,
         public string $originalFqn,
         public string $replacementFqn,
-        public RenameProvenance $provenance,
+        public PlanProvenance $provenance,
         public array $edits,
         public array $moves,
         public array $blindSpots,
@@ -53,10 +58,10 @@ final readonly class ClassRenamePlan implements GovernedPlan
             'original_fqn' => $this->originalFqn,
             'replacement_fqn' => $this->replacementFqn,
             'provenance' => $this->provenance->toArray(),
-            'edits' => array_map(static fn (RenameEdit $edit): array => $edit->toArray(), $this->edits),
-            'moves' => array_map(static fn (RenameMove $move): array => $move->toArray(), $this->moves),
-            'blind_spots' => array_map(static fn (RenameBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),
-            'stale_evidence' => array_map(static fn (RenameStaleEvidence $stale): array => $stale->toArray(), $this->staleEvidence),
+            'edits' => array_map(static fn (PlanEdit $edit): array => $edit->toArray(), $this->edits),
+            'moves' => array_map(static fn (PlanMove $move): array => $move->toArray(), $this->moves),
+            'blind_spots' => array_map(static fn (PlanBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),
+            'stale_evidence' => array_map(static fn (PlanStaleEvidence $stale): array => $stale->toArray(), $this->staleEvidence),
             'blockers' => $this->blockers,
             'not_observable' => $this->notObservable,
         ];

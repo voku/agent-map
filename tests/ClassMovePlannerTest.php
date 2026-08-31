@@ -16,8 +16,8 @@ use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Move\ClassMovePlan;
 use voku\AgentMap\Move\ClassMovePlanner;
 use voku\AgentMap\Rename\ClassRenamePlanner;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 final class ClassMovePlannerTest extends TestCase
@@ -56,7 +56,7 @@ final class ClassMovePlannerTest extends TestCase
         self::assertSame('src', $plan->autoload->destinationDirectory);
         self::assertSame('src/Service/UserService.php', $plan->autoload->destinationPath);
 
-        $roles = array_map(static fn (RenameEdit $edit): string => $edit->role, $plan->edits);
+        $roles = array_map(static fn (PlanEdit $edit): string => $edit->role, $plan->edits);
         sort($roles, SORT_STRING);
         self::assertSame(['class_import', 'class_reference', 'namespace_declaration'], $roles);
 
@@ -387,7 +387,7 @@ PHP);
         self::assertSame(ClassMovePlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
         $fallbacks = array_values(array_filter(
             $plan->blindSpots,
-            static fn (RenameBlindSpot $blindSpot): bool => $blindSpot->kind === 'namespace_fallback_reference',
+            static fn (PlanBlindSpot $blindSpot): bool => $blindSpot->kind === 'namespace_fallback_reference',
         ));
         self::assertCount(1, $fallbacks);
         self::assertStringContainsString('project_specific_helper', $fallbacks[0]->message);
@@ -511,12 +511,12 @@ PHP);
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
+     * @param list<PlanBlindSpot> $blindSpots
      * @return list<string>
      */
     private function blindSpotKinds(array $blindSpots): array
     {
-        return array_map(static fn (RenameBlindSpot $blindSpot): string => $blindSpot->kind, $blindSpots);
+        return array_map(static fn (PlanBlindSpot $blindSpot): string => $blindSpot->kind, $blindSpots);
     }
 
     /** @param array<string, mixed> $manifest */
@@ -585,12 +585,12 @@ PHP);
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return array<string, string>
      */
     private function applyEdits(array $edits): array
     {
-        /** @var array<string, list<RenameEdit>> $byPath */
+        /** @var array<string, list<PlanEdit>> $byPath */
         $byPath = [];
         foreach ($edits as $edit) {
             $byPath[$edit->path][] = $edit;
@@ -605,7 +605,7 @@ PHP);
                 self::assertSame($preEditSha256, $edit->sourceSha256);
             }
 
-            usort($pathEdits, static fn (RenameEdit $left, RenameEdit $right): int => $right->startFilePos <=> $left->startFilePos);
+            usort($pathEdits, static fn (PlanEdit $left, PlanEdit $right): int => $right->startFilePos <=> $left->startFilePos);
             foreach ($pathEdits as $edit) {
                 self::assertSame($edit->expected, substr($source, $edit->startFilePos, $edit->endFilePos - $edit->startFilePos + 1));
                 $source = substr($source, 0, $edit->startFilePos)

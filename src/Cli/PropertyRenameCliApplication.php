@@ -12,8 +12,8 @@ use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Plan\PlanCapability;
 use voku\AgentMap\Rename\PropertyRenamePlan;
 use voku\AgentMap\Rename\PropertyRenamePlanner;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
 
 /** Read-only CLI boundary for one versioned PHP property rename plan. */
 final readonly class PropertyRenameCliApplication implements PlanCliApplication
@@ -188,7 +188,7 @@ TEXT;
         return implode("\n", $lines) . "\n";
     }
 
-    private function editLine(RenameEdit $edit): string
+    private function editLine(PlanEdit $edit): string
     {
         return sprintf(
             '  edit %s:%d-%d bytes %d-%d [%s/%s] %s -> %s',
@@ -204,7 +204,7 @@ TEXT;
         );
     }
 
-    private function blindSpotLine(RenameBlindSpot $blindSpot): string
+    private function blindSpotLine(PlanBlindSpot $blindSpot): string
     {
         $location = $blindSpot->path === null
             ? ''

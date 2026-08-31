@@ -10,10 +10,10 @@ use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\SymbolEntry;
 use voku\AgentMap\Rename\ClassConstantNameLocator;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
-use voku\AgentMap\Rename\RenameProvenance;
-use voku\AgentMap\Rename\RenameStaleEvidence;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /**
  * Builds an exact, fail-closed unused-private-class-constant deletion plan.
@@ -39,7 +39,7 @@ final readonly class ClassConstantRemovalPlanner
         $blockers = [];
         $blindSpots = [];
         $stale = array_map(
-            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            static fn (array $entry): PlanStaleEvidence => new PlanStaleEvidence($entry['path'], $entry['reason']),
             $map->staleEntries(),
         );
 
@@ -87,13 +87,13 @@ final readonly class ClassConstantRemovalPlanner
                     $blockers[] = 'Multi-constant declarations are blocked because deleting one constant must not remove neighboring declarations.';
                 }
                 if ($range['has_attributes']) {
-                    $blindSpots[] = new RenameBlindSpot('class_constant_attributes', 'Class-constant attributes may represent runtime or framework metadata.', $file->path, $range['line_start'], $range['line_end']);
+                    $blindSpots[] = new PlanBlindSpot('class_constant_attributes', 'Class-constant attributes may represent runtime or framework metadata.', $file->path, $range['line_start'], $range['line_end']);
                 }
                 if ($range['has_docblock']) {
-                    $blindSpots[] = new RenameBlindSpot('class_constant_phpdoc', 'Class-constant PHPDoc may contain metadata or tooling contracts.', $file->path, $range['line_start'], $range['line_end']);
+                    $blindSpots[] = new PlanBlindSpot('class_constant_phpdoc', 'Class-constant PHPDoc may contain metadata or tooling contracts.', $file->path, $range['line_start'], $range['line_end']);
                 }
                 if ($blockers === []) {
-                    $edits[] = new RenameEdit($file->path, $file->sha256, $range['start'], $range['end'], $range['line_start'], $range['line_end'], $range['expected'], '', 'class_constant_declaration_removal', $targetId, 'parser_resolved');
+                    $edits[] = new PlanEdit($file->path, $file->sha256, $range['start'], $range['end'], $range['line_start'], $range['line_end'], $range['expected'], '', 'class_constant_declaration_removal', $targetId, 'parser_resolved');
                 }
             } catch (RuntimeException $exception) {
                 $blockers[] = $exception->getMessage();
@@ -105,7 +105,7 @@ final readonly class ClassConstantRemovalPlanner
         $status = $stale !== [] || $blockers !== [] ? ClassConstantRemovalPlan::STATUS_BLOCKED
             : ($blindSpots !== [] ? ClassConstantRemovalPlan::STATUS_REVIEW_REQUIRED : ClassConstantRemovalPlan::STATUS_SAFE);
 
-        return new ClassConstantRemovalPlan($status, $targetId, new RenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint), $status === ClassConstantRemovalPlan::STATUS_BLOCKED ? [] : $edits, $blindSpots, $stale, $blockers, self::NOT_OBSERVABLE);
+        return new ClassConstantRemovalPlan($status, $targetId, new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint), $status === ClassConstantRemovalPlan::STATUS_BLOCKED ? [] : $edits, $blindSpots, $stale, $blockers, self::NOT_OBSERVABLE);
     }
 
     /** @return array{0: string, 1: string} */
@@ -148,8 +148,8 @@ final readonly class ClassConstantRemovalPlanner
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
-     * @return list<RenameBlindSpot>
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
      */
     private function uniqueBlindSpots(array $blindSpots): array
     {

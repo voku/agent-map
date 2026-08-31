@@ -9,11 +9,11 @@ use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\SymbolEntry;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
-use voku\AgentMap\Rename\RenameMove;
-use voku\AgentMap\Rename\RenameProvenance;
-use voku\AgentMap\Rename\RenameStaleEvidence;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanMove;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 use voku\AgentMap\Rename\SourceClassNameLocator;
 
 /**
@@ -45,7 +45,7 @@ final readonly class ClassMovePlanner
         $destinationNamespace = $this->namespace($destinationFqn);
 
         $staleEvidence = array_map(
-            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            static fn (array $entry): PlanStaleEvidence => new PlanStaleEvidence($entry['path'], $entry['reason']),
             $map->staleEntries(),
         );
 
@@ -87,7 +87,7 @@ final readonly class ClassMovePlanner
         $edits = [];
         try {
             $declaration = $moveLocator->namespaceDeclaration($file->path, $sourceNamespace);
-            $edits[] = new RenameEdit(
+            $edits[] = new PlanEdit(
                 path: $file->path,
                 sourceSha256: $file->sha256,
                 startFilePos: $declaration['start_file_pos'],
@@ -136,7 +136,7 @@ final readonly class ClassMovePlanner
                 if (is_string($fallbackBlocker)) {
                     $blockers[] = $fallbackBlocker;
                 }
-                if ($fallbackBlindSpot instanceof RenameBlindSpot) {
+                if ($fallbackBlindSpot instanceof PlanBlindSpot) {
                     $blindSpots[] = $fallbackBlindSpot;
                 }
             }
@@ -144,7 +144,7 @@ final readonly class ClassMovePlanner
 
         $moves = [];
         if ($autoload instanceof ClassMoveAutoloadEvidence) {
-            $moves[] = new RenameMove(
+            $moves[] = new PlanMove(
                 fromPath: $file->path,
                 toPath: $autoload->destinationPath,
                 sourceSha256: $file->sha256,
@@ -249,7 +249,7 @@ final readonly class ClassMovePlanner
         return $collisions;
     }
 
-    /** @return array{0: ClassMoveAutoloadEvidence, 1: list<RenameBlindSpot>} */
+    /** @return array{0: ClassMoveAutoloadEvidence, 1: list<PlanBlindSpot>} */
     private function autoloadEvidence(AgentMapIndex $map, FileEntry $file, string $sourceFqn, string $destinationFqn): array
     {
         $autoload = Psr4AutoloadMap::forProject($map->root);
@@ -290,7 +290,7 @@ final readonly class ClassMovePlanner
 
         $blindSpots = [];
         if (count($destinationCandidates) > 1) {
-            $blindSpots[] = new RenameBlindSpot(
+            $blindSpots[] = new PlanBlindSpot(
                 kind: 'shadowed_autoload_prefix',
                 message: sprintf(
                     'Destination %s is also covered by less specific PSR-4 mappings (%s); the plan uses the most specific one.',
@@ -304,7 +304,7 @@ final readonly class ClassMovePlanner
             );
         }
         if ($winner->section !== $sourceMapping->section) {
-            $blindSpots[] = new RenameBlindSpot(
+            $blindSpots[] = new PlanBlindSpot(
                 kind: 'autoload_section_change',
                 message: sprintf(
                     'The move crosses Composer autoload sections (%s -> %s), which changes where the class is available.',
@@ -333,7 +333,7 @@ final readonly class ClassMovePlanner
 
     /**
      * @param array<string, true> $functions
-     * @return array{0: ?string, 1: ?RenameBlindSpot}
+     * @return array{0: ?string, 1: ?PlanBlindSpot}
      */
     private function fallbackEvidence(
         string $name,
@@ -363,7 +363,7 @@ final readonly class ClassMovePlanner
 
         return [
             null,
-            new RenameBlindSpot(
+            new PlanBlindSpot(
                 kind: 'namespace_fallback_reference',
                 message: sprintf('Unqualified %s resolves through namespace fallback; a namespaced declaration outside the indexed map could change its meaning after the move.', $name),
                 path: $path,
@@ -389,8 +389,8 @@ final readonly class ClassMovePlanner
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @return list<RenameEdit>
+     * @param list<PlanEdit> $edits
+     * @return list<PlanEdit>
      */
     private function uniqueSortedEdits(array $edits): array
     {
@@ -399,13 +399,13 @@ final readonly class ClassMovePlanner
             $unique[$edit->path . ':' . $edit->startFilePos . ':' . $edit->endFilePos] = $edit;
         }
         $edits = array_values($unique);
-        usort($edits, static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
+        usort($edits, static fn (PlanEdit $left, PlanEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
 
         return $edits;
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return list<string>
      */
     private function overlapBlockers(array $edits): array
@@ -440,10 +440,10 @@ final readonly class ClassMovePlanner
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @param list<RenameMove> $moves
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanMove> $moves
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      */
     private function result(
@@ -469,7 +469,7 @@ final readonly class ClassMovePlanner
             targetId: $symbol->id(),
             sourceFqn: $sourceFqn,
             destinationFqn: $destinationFqn,
-            provenance: new RenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
+            provenance: new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
             autoload: $autoload,
             edits: $status === ClassMovePlan::STATUS_BLOCKED ? [] : $edits,
             moves: $status === ClassMovePlan::STATUS_BLOCKED ? [] : $moves,
@@ -481,8 +481,8 @@ final readonly class ClassMovePlanner
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
-     * @return list<RenameBlindSpot>
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
      */
     private function uniqueBlindSpots(array $blindSpots): array
     {

@@ -59,8 +59,9 @@ whose per-capability verdicts are the measured basis for anything below marked *
 All ten plans are **stable** contracts at version `1.0`, and share one envelope: `type`,
 `contract_version`, `status`, `target_id`, `provenance`, `edits`, `blind_spots`, `stale_evidence`,
 `blockers`, `not_observable`, plus contract-specific identity and, where it applies, `moves`.
-`voku\AgentMap\Plan\GovernedPlan` declares the shared behaviour; `tests/PlanContractShapeTest.php`
-pins the envelope.
+`voku\AgentMap\Plan\GovernedPlan` declares the shared behaviour, the shared value objects
+(`PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence`, `PlanMove`) live beside it, and
+`tests/PlanContractShapeTest.php` pins the envelope.
 
 | contract | command | needs PHPStan |
 | --- | --- | --- |
@@ -139,10 +140,10 @@ cleanup.
    plan boundary implements one `PlanCliApplication` interface, and the routing list *is* the
    registry, so a contract cannot be reachable while being undiscoverable. Replacing the command
    rather than adding a second one keeps the rule that there is no parallel API.
-4. **Family-wide value objects still live under `Rename\`.** `RenameProvenance`, `RenameEdit`,
-   `RenameBlindSpot`, `RenameStaleEvidence` and `RenameMove` are used by the removal and move
-   families too. Relocating them under `Plan\` would make the boundary honest; it is a wide,
-   mechanical, breaking type migration and should happen before 1.0 or not at all.
+4. ~~**Family-wide value objects still live under `Rename\`.**~~ Resolved in 0.9: they moved to
+   `voku\AgentMap\Plan` as `PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence` and
+   `PlanMove`. Machine output is unchanged; only the PHP type names and namespace moved, which is
+   free before 1.0 and a major version after it.
 5. **Legacy map-read compatibility.** `FileEntry` still accepts a `sha1` field and rewrites it to
    `legacy-sha1:`; `SymbolEntry` and `MethodEntry` still accept a legacy `return_type` and legacy
    string parameters. These were never announced as temporary. Decide whether the persisted schema's

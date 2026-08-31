@@ -19,7 +19,7 @@ use voku\AgentMap\Rename\FunctionRenamePlan;
 use voku\AgentMap\Rename\MethodRenamePlan;
 use voku\AgentMap\Rename\ParameterRenamePlan;
 use voku\AgentMap\Rename\PropertyRenamePlan;
-use voku\AgentMap\Rename\RenameProvenance;
+use voku\AgentMap\Plan\PlanProvenance;
 
 /**
  * The governed plan family is one contract with several concrete shapes.
@@ -100,7 +100,7 @@ final class PlanContractShapeTest extends TestCase
 
             $provenanceType = $parameters['provenance']->getType();
             self::assertInstanceOf(ReflectionNamedType::class, $provenanceType, $planClass);
-            self::assertSame(RenameProvenance::class, $provenanceType->getName(), $planClass . ' must reuse the single provenance type');
+            self::assertSame(PlanProvenance::class, $provenanceType->getName(), $planClass . ' must reuse the single provenance type');
         }
     }
 
@@ -174,7 +174,7 @@ final class PlanContractShapeTest extends TestCase
             'string' => '',
             'int' => 0,
             'array' => [],
-            RenameProvenance::class => new RenameProvenance('sha256:0', 'test-backend', null),
+            PlanProvenance::class => new PlanProvenance('sha256:0', 'test-backend', null),
             default => self::fail($planClass . ' uses an unexpected contract type: ' . $type->getName()),
         };
     }

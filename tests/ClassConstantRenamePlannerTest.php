@@ -13,8 +13,8 @@ use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Rename\ClassConstantRenamePlan;
 use voku\AgentMap\Rename\ClassConstantRenamePlanner;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
 
 /** Behavioral coverage adapted from Rector's RenameClassConstFetch rule. */
 final class ClassConstantRenamePlannerTest extends TestCase
@@ -68,7 +68,7 @@ PHP);
         $plan = (new ClassConstantRenamePlanner())->plan($this->map(), 'Demo\Settings::OLD_NAME', 'NEW_NAME');
 
         self::assertSame(ClassConstantRenamePlan::STATUS_SAFE, $plan->status, implode("\n", $plan->blockers));
-        $roles = array_values(array_unique(array_map(static fn (RenameEdit $edit): string => $edit->role, $plan->edits)));
+        $roles = array_values(array_unique(array_map(static fn (PlanEdit $edit): string => $edit->role, $plan->edits)));
         sort($roles);
         self::assertSame(['class_constant_declaration', 'class_constant_fetch'], $roles);
         self::assertCount(4, $plan->edits);
@@ -153,7 +153,7 @@ PHP);
         self::assertSame(ClassConstantRenamePlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
         self::assertCount(1, $plan->edits);
         self::assertSame('class_constant_declaration', $plan->edits[0]->role);
-        $kinds = array_map(static fn (RenameBlindSpot $blindSpot): string => $blindSpot->kind, $plan->blindSpots);
+        $kinds = array_map(static fn (PlanBlindSpot $blindSpot): string => $blindSpot->kind, $plan->blindSpots);
         self::assertContains('late_static_class_constant_fetch', $kinds);
         self::assertContains('unproven_class_constant_owner', $kinds);
     }
