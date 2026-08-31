@@ -96,16 +96,11 @@ final readonly class SymbolEntry
         }
 
         $parameters = [];
-        $rawParameters = $data['parameters'] ?? $data['params'] ?? [];
-        foreach (is_array($rawParameters) ? $rawParameters : [] as $parameter) {
+        foreach (is_array($data['parameters'] ?? null) ? $data['parameters'] : [] as $parameter) {
             if (is_array($parameter)) {
                 $parameters[] = ParameterEntry::fromArray($parameter);
-            } elseif (is_string($parameter)) {
-                $parameters[] = ParameterEntry::fromLegacyString($parameter);
             }
         }
-
-        $legacyReturnType = self::nullableString($data['return_type'] ?? null);
 
         return new self(
             kind: (string) ($data['kind'] ?? ''),
@@ -117,7 +112,7 @@ final readonly class SymbolEntry
             extends: self::stringList($data['extends'] ?? []),
             implements: self::stringList($data['implements'] ?? []),
             parameters: $parameters,
-            nativeReturnType: self::nullableString($data['native_return_type'] ?? null) ?? $legacyReturnType,
+            nativeReturnType: self::nullableString($data['native_return_type'] ?? null),
             phpDocReturnType: self::nullableString($data['phpdoc_return_type'] ?? null),
             resolvedReturnType: self::nullableString($data['resolved_return_type'] ?? null),
             attributes: self::stringList($data['attributes'] ?? []),

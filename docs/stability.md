@@ -109,6 +109,12 @@ Shared invariants, all of them machine-checkable:
 **Persisted map schema.** `schema_version`, backend identity, the analysis fingerprint, reconciliation
 states, relation kinds and freshness semantics. A map written by 1.0.x is readable by 1.0.y.
 
+The compatibility rule is explicit and enforced: `AgentMapIndex::SCHEMA_VERSION` is what this build
+writes, `AgentMapIndex::SUPPORTED_SCHEMA_MAJOR` is what it reads. A map from any other major - older
+or newer - is rejected on read with a rebuild instruction, because a partially understood map answers
+"no callers" where it should answer "unknown". Additive minor versions within the supported major stay
+readable.
+
 **Plan contracts.** Contract versions, the status vocabulary, the meaning of `review_required` versus
 `blocked`, edit hash/range semantics, JSON/TOON equivalence and exit codes, as listed above.
 
@@ -123,10 +129,11 @@ JSON/TOON projections.
 **Optionality of PHPStan.** Structural-only remains a supported explicit backend. A selected PHPStan
 backend that turns out to be unavailable fails explicitly rather than downgrading silently.
 
-## Open 0.9 decisions
+## 0.9 surface decisions
 
-These are named on purpose. Each one changes a public surface, so each is a decision rather than a
-cleanup.
+These each changed a public surface, so each was a decision rather than a cleanup. All six were
+settled in 0.9; the reasoning is kept because the 1.0 gate asks whether every surface has a stated
+reason to exist.
 
 1. ~~**`search` / `search-index` are routable but undocumented.**~~ Resolved in 0.9: they were
    routable public commands listed in neither `agent-map help` nor the README. Documenting an
@@ -144,14 +151,16 @@ cleanup.
    `voku\AgentMap\Plan` as `PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence` and
    `PlanMove`. Machine output is unchanged; only the PHP type names and namespace moved, which is
    free before 1.0 and a major version after it.
-5. **Legacy map-read compatibility.** `FileEntry` still accepts a `sha1` field and rewrites it to
-   `legacy-sha1:`; `SymbolEntry` and `MethodEntry` still accept a legacy `return_type` and legacy
-   string parameters. These were never announced as temporary. Decide whether the persisted schema's
-   compatibility window is a stated rule or dead code, and write the answer into the schema section
-   above.
-6. **`markdown` coverage is uneven.** Navigation, discovery and temporal commands emit it; plans do
-   not. The reasoning above (markdown is a human projection, plans are machine contracts) is the
-   proposed answer, but it should be a stated rule rather than an accident of implementation.
+5. ~~**Legacy map-read compatibility.**~~ Resolved in 0.9: it was dead code with a silent failure
+   mode. `IndexReader` never checked `schema_version`, so a schema-1.x map was reconstructed from
+   whichever fields happened to match. The supported schema range is now enforced on read, and the
+   1.x-only readers it made unreachable (`sha1`, the legacy `return_type`, the `params` alias and
+   string parameter entries) are gone.
+6. ~~**`markdown` coverage is uneven.**~~ Resolved in 0.9 as a stated rule rather than a code
+   change: `text` and `markdown` are human projections and are offered where a human reads the
+   output (navigation, discovery, temporal); `json` and `toon` are the machine boundary and are
+   offered everywhere. Governed plans emit `text`, `json` and `toon` and deliberately not
+   `markdown` - a plan is consumed by a mutation host, not pasted into a report.
 
 ## The 1.0 gate
 

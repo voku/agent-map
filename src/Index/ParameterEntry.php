@@ -59,22 +59,6 @@ final readonly class ParameterEntry
         );
     }
 
-    public static function fromLegacyString(string $parameter, ?string $fallbackName = null): self
-    {
-        $name = $fallbackName ?? '';
-        if (preg_match('/\$([A-Za-z_][A-Za-z0-9_]*)/', $parameter, $match) === 1) {
-            $name = $match[1];
-        }
-        $type = trim((string) preg_replace('/(?:&|\.\.\.)?\$[A-Za-z_][A-Za-z0-9_]*.*/', '', $parameter));
-
-        return new self(
-            name: $name,
-            nativeType: $type !== '' ? $type : null,
-            byReference: str_contains($parameter, '&$'),
-            variadic: str_contains($parameter, '...$'),
-        );
-    }
-
     private static function nullableString(mixed $value): ?string
     {
         return is_string($value) && $value !== '' ? $value : null;

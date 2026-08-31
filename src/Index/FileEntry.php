@@ -44,14 +44,9 @@ final readonly class FileEntry
             }
         }
 
-        $sha256 = (string) ($data['sha256'] ?? '');
-        if ($sha256 === '' && is_string($data['sha1'] ?? null)) {
-            $sha256 = 'legacy-sha1:' . $data['sha1'];
-        }
-
         return new self(
             path: (string) ($data['path'] ?? ''),
-            sha256: $sha256,
+            sha256: (string) ($data['sha256'] ?? ''),
             namespace: (string) ($data['namespace'] ?? ''),
             symbols: $symbols,
             semanticStatus: (string) ($data['semantic_status'] ?? 'unknown'),
