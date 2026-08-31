@@ -97,6 +97,20 @@ final readonly class SourceClassMoveLocator
      */
     public function classImports(string $path): array
     {
+        $namespaceStatements = 0;
+        foreach ($this->locator->astFor($path) as $node) {
+            if ($node instanceof Namespace_) {
+                ++$namespaceStatements;
+            }
+        }
+        if ($namespaceStatements > 1) {
+            throw new RuntimeException(sprintf(
+                'Cannot safely plan class move references in %s: the file declares %d namespace statements and imports are namespace-block-local.',
+                $path,
+                $namespaceStatements,
+            ));
+        }
+
         $imports = [];
         foreach ($this->flatten($path) as $node) {
             if ($node instanceof Use_) {
@@ -214,7 +228,6 @@ final readonly class SourceClassMoveLocator
         }
 
         if ($node instanceof String_) {
-            // Only the qualified literal changes meaning: the short name survives the move untouched.
             if (strcasecmp(ltrim($node->value, '\\'), $sourceFqn) === 0) {
                 $result['blind_spots'][] = new PlanBlindSpot(
                     kind: 'class_string_literal',
@@ -287,9 +300,6 @@ final readonly class SourceClassMoveLocator
         $written = $token['expected'];
 
         if ($resolved === null) {
-            // Unresolved bare names are function/constant lookups that fall back to the global
-            // namespace. Their meaning depends on the enclosing namespace, so the moved file has to
-            // account for them; other files are unaffected.
             if ($isMovedFile && !str_contains($written, '\\') && !$this->isReservedConstant($written)) {
                 $result['fallback_names'][] = ['name' => $written, 'line' => $node->getStartLine()];
             }
@@ -301,12 +311,9 @@ final readonly class SourceClassMoveLocator
 
         if (strcasecmp($resolved, $sourceFqn) === 0) {
             if ($isMovedFile && $relative && !str_contains($written, '\\')) {
-                // The declaration travels with the file, so an unqualified self-reference keeps
-                // resolving to the same class after the namespace edit.
                 return;
             }
             if (!$relative && !str_contains($written, '\\')) {
-                // An alias imported from the moved class; the import edit already carries it.
                 return;
             }
 
@@ -325,8 +332,6 @@ final readonly class SourceClassMoveLocator
         }
 
         if ($isMovedFile && $relative) {
-            // Everything the moved file resolved through its own namespace would silently rebind to
-            // the destination namespace, so it has to be pinned to the identity it has today.
             $result['edits'][] = $this->edit($path, $sourceSha256, $node, $token, '\\' . $resolved, 'namespace_dependency', $symbolId);
             $result['blind_spots'][] = new PlanBlindSpot(
                 kind: 'namespace_relative_dependency',
