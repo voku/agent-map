@@ -57,7 +57,7 @@ final readonly class RenameCliApplication implements PlanCliApplication
     {
         return <<<'TEXT'
 
-Refactoring evidence:
+Method refactoring evidence:
   rename-plan Build a read-only, fail-closed method rename plan from current map evidence
 
 Run `agent-map help rename-plan` for details.

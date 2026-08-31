@@ -32,6 +32,7 @@ final class CliApplicationTest extends TestCase
         self::assertSame(1, substr_count($output, 'class-move-plan Build a read-only class namespace move plan with PSR-4 destination evidence'));
         self::assertSame(1, substr_count($output, 'Plan capability discovery:'));
         self::assertSame(1, substr_count($output, 'plan-capabilities List every governed rename, removal and move contract'));
+        self::assertSame(1, substr_count($output, 'Method refactoring evidence:'));
         self::assertSame(1, substr_count($output, 'Parameter refactoring evidence:'));
         self::assertSame(1, substr_count($output, 'Property refactoring evidence:'));
         self::assertSame(1, substr_count($output, 'Method removal evidence:'));

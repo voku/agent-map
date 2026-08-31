@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.9.0 - 2026-08-31
+
 ### Added
 
 - Publish the versioned, read-only `class_move_plan@1.0` contract for relocating one class into another namespace, with Composer PSR-4 destination evidence, the namespace declaration edit, exact hash-bound import and reference edits, one preconditioned file move, blockers, review-required evidence, stale evidence, and explicit non-observable boundaries.
@@ -41,6 +43,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Validation
 
 - PR #56 passed the PHP 8.2-8.5 CI matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood (extended to exercise the registered parameter capability), and removal-plan validation on exact head `9df8b09e2e86c2a625790d6f5da7040af90b80ca` before squash merge to `7973d35f926bdc47a0fbca50888414c33a083af4`.
+- The 0.9.0 work was verified with `composer ci` (Composer metadata validation, 377 PHPUnit tests, PHPStan) and by executing the class-move dogfood workflow against a temporary PSR-4 fixture, proving the published evidence relocates real PHP and that the rebuilt map observes the relocated identity. The CI matrix, dogfood and review evidence for the release pull request is recorded against its exact head before merge.
+
+### Release boundary
+
+- 0.9.0 is the feature- and boundary-complete candidate for 1.0, not another feature release. [docs/stability.md](docs/stability.md) records the tier of every public surface, what 1.0 freezes, the six surface decisions settled here, and the 1.0 gate. 0.9.x hardens consumers and compatibility rather than adding capabilities; `method_move_plan` ([#52](https://github.com/voku/agent-map/issues/52)) is explicitly post-1.0.
 
 ## 0.8.8 - 2026-08-23
 
