@@ -68,21 +68,17 @@ final readonly class Psr4AutoloadMap
                     if (!is_string($directory)) {
                         continue;
                     }
-                    $prefixes[] = new Psr4Mapping(
-                        prefix: self::normalizePrefix($prefix),
-                        directory: self::normalizeDirectory($directory),
-                        section: $section,
-                    );
+                    $prefixes[] = Psr4Mapping::fromDeclaration($prefix, $directory, $section);
                 }
             }
             foreach (is_array($block['classmap'] ?? null) ? $block['classmap'] : [] as $entry) {
                 if (is_string($entry)) {
-                    $classmap[] = self::normalizeDirectory($entry);
+                    $classmap[] = self::normalizeEntry($entry);
                 }
             }
             foreach (is_array($block['files'] ?? null) ? $block['files'] : [] as $entry) {
                 if (is_string($entry)) {
-                    $files[] = self::normalizeDirectory($entry);
+                    $files[] = self::normalizeEntry($entry);
                 }
             }
         }
@@ -145,20 +141,19 @@ final readonly class Psr4AutoloadMap
         return in_array($path, $this->files, true);
     }
 
-    private static function normalizePrefix(string $prefix): string
+    /**
+     * Normalizes a classmap/files entry for prefix comparison only.
+     *
+     * A leading slash is deliberately kept: an absolute entry must fail to match a project-relative
+     * path rather than being trimmed into one that matches something else.
+     */
+    private static function normalizeEntry(string $entry): string
     {
-        $prefix = trim($prefix, '\\');
-
-        return $prefix === '' ? '' : $prefix . '\\';
-    }
-
-    private static function normalizeDirectory(string $directory): string
-    {
-        $directory = str_replace('\\', '/', $directory);
-        if (str_starts_with($directory, './')) {
-            $directory = substr($directory, 2);
+        $entry = str_replace('\\', '/', $entry);
+        if (str_starts_with($entry, './')) {
+            $entry = substr($entry, 2);
         }
 
-        return trim($directory, '/');
+        return rtrim($entry, '/');
     }
 }

@@ -42,13 +42,15 @@ The destination path is **derived**, not guessed. The planner reads the analysed
 
 Exactly one declared PSR-4 mapping has to explain the file's current location, and the destination identity has to be covered by one most-specific mapping with one directory. Anything else - a missing manifest, an uncovered destination prefix, equally specific competing mappings, or a classmap/files layout covering either end - blocks instead of inventing a path.
 
+A declared directory that leaves the project root blocks too. `../sibling/src` is an obvious case; `/opt/lib` is the dangerous one, because trimming its leading slash would turn it into a plausible in-project `opt/lib` and publish a move nobody declared. The mapping is therefore judged exactly as `composer.json` writes it, blockers quote that declaration verbatim, and `PlanMove` refuses to represent a path outside the project root at all.
+
 Composer configuration is evidence here, never a mutation target.
 
 ## Plan states
 
 - `safe`: the namespace declaration, every affected import and every affected reference map to exact byte ranges, the destination identity and path are free, and the derived move is deterministic.
 - `review_required`: exact edits are available, but bounded evidence remains that PHP source alone cannot settle - namespace-relative references, `__NAMESPACE__`, unqualified function or constant fallbacks, PHPDoc, exact class-name string literals, dynamic class names, a shadowed PSR-4 prefix, or a move that crosses `autoload`/`autoload-dev`.
-- `blocked`: no edit or move is published at all. Stale source, an ambiguous target, a destination identity or file collision, a grouped import of the moved class, a file declaring more than one symbol, more than one namespace, a braced namespace, a global-namespace source, an unprovable autoload layout, or a namespaced function the move would rebind.
+- `blocked`: no edit or move is published at all. Stale source, an ambiguous target, a destination identity or file collision, a grouped import of the moved class, a file declaring more than one symbol, more than one namespace, a braced namespace, a global-namespace source, an unprovable or project-escaping autoload layout, or a namespaced function the move would rebind.
 
 ## Exact edits
 

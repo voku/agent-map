@@ -9,13 +9,15 @@ use voku\AgentMap\Plan\PlanBlindSpot;
 use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Plan\PlanProvenance;
 use voku\AgentMap\Plan\PlanStaleEvidence;
+use voku\AgentMap\Plan\PlanStatus;
 
 final readonly class MethodRenamePlan implements GovernedPlan
 {
+    public const PLAN_TYPE = 'method_rename_plan';
     public const CONTRACT_VERSION = '1.0';
-    public const STATUS_SAFE = 'safe';
-    public const STATUS_REVIEW_REQUIRED = 'review_required';
-    public const STATUS_BLOCKED = 'blocked';
+    public const STATUS_SAFE = PlanStatus::SAFE;
+    public const STATUS_REVIEW_REQUIRED = PlanStatus::REVIEW_REQUIRED;
+    public const STATUS_BLOCKED = PlanStatus::BLOCKED;
 
     /**
      * @param list<string> $family
@@ -38,6 +40,7 @@ final readonly class MethodRenamePlan implements GovernedPlan
         public array $blockers,
         public array $notObservable,
     ) {
+        PlanStatus::assertPublishable(self::PLAN_TYPE, $status, $edits);
     }
 
     public function isBlocked(): bool
@@ -49,7 +52,7 @@ final readonly class MethodRenamePlan implements GovernedPlan
     public function toArray(): array
     {
         return [
-            'type' => 'method_rename_plan',
+            'type' => self::PLAN_TYPE,
             'contract_version' => self::CONTRACT_VERSION,
             'status' => $this->status,
             'target_id' => $this->targetId,

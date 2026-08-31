@@ -14,6 +14,7 @@ use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Plan\PlanMove;
 use voku\AgentMap\Plan\PlanProvenance;
 use voku\AgentMap\Plan\PlanStaleEvidence;
+use voku\AgentMap\Plan\ProjectRelativePath;
 use voku\AgentMap\Rename\SourceClassNameLocator;
 
 /**
@@ -264,6 +265,7 @@ final readonly class ClassMovePlanner
         // Nested prefixes that derive the same path are redundant, not ambiguous: the candidates are
         // already filtered to the file's actual location, so the most specific one is the evidence.
         $sourceMapping = $sourceMappings[0];
+        $this->assertMappingInsideProject($sourceMapping, 'Source');
 
         $destinationCandidates = $autoload->candidates($destinationFqn);
         if ($destinationCandidates === []) {
@@ -283,7 +285,16 @@ final readonly class ClassMovePlanner
             ));
         }
 
+        $this->assertMappingInsideProject($winner, 'Destination');
+
         $destinationPath = $winner->pathFor($destinationFqn);
+        if (!ProjectRelativePath::isSafe($destinationPath)) {
+            throw new RuntimeException(sprintf(
+                'Destination path %s derived from PSR-4 mapping %s leaves the project root; the move is not this project\'s to make.',
+                $destinationPath,
+                $winner->label(),
+            ));
+        }
         if ($autoload->isCoveredByClassmap($destinationPath)) {
             throw new RuntimeException('Destination path is covered by a Composer classmap/files entry; the move is not deterministic.');
         }
@@ -329,6 +340,24 @@ final readonly class ClassMovePlanner
             ),
             $blindSpots,
         ];
+    }
+
+    /**
+     * A PSR-4 directory outside the project root is a real autoload answer and an unusable move
+     * destination: agent-map maps one repository, and it cannot prove anything about what already
+     * lives beside or above it.
+     */
+    private function assertMappingInsideProject(Psr4Mapping $mapping, string $role): void
+    {
+        if ($mapping->insideProject) {
+            return;
+        }
+
+        throw new RuntimeException(sprintf(
+            '%s PSR-4 mapping %s points outside the project root; contract 1.0 does not plan moves across it.',
+            $role,
+            $mapping->label(),
+        ));
     }
 
     /**

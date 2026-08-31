@@ -81,8 +81,13 @@ one real consumer task before it is claimed as proven rather than merely covered
 
 Shared invariants, all of them machine-checkable:
 
-- `status` is exactly one of `safe`, `review_required`, `blocked`.
+- `status` is exactly one of `safe`, `review_required`, `blocked`, and a plan carrying anything else
+  cannot be constructed.
 - A `blocked` plan publishes **no** edits and **no** moves. There is no partial mutation evidence.
+  This is enforced in the constructor of every plan, not left to each planner's discretion: a blocked
+  plan holding an edit or a move is not representable.
+- Every path a plan names stays inside the project root. `PlanMove` refuses absolute paths, `..`
+  segments and Windows drive paths rather than normalizing them into something that looks local.
 - Evidence identity lives in `provenance` (map digest, effective backend, analysis fingerprint) and
   nowhere else. The pre-0.9 top-level `backend` / `map_digest` aliases were removed in 0.9.
 - Stale source evidence is machine-distinct from semantic blockers, because the recovery differs.

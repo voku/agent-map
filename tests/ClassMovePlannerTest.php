@@ -280,6 +280,53 @@ PHP);
         self::assertStringContainsString('No declared PSR-4 mapping explains the current location', implode("\n", $plan->blockers));
     }
 
+    /**
+     * A declared directory outside the project root is a real autoload answer and an unusable move
+     * destination. The absolute case matters most: trimming its leading slash would turn it into a
+     * plausible in-project path and publish a move nobody declared.
+     */
+    public function testMappingsThatLeaveTheProjectRootBlockWithoutPublishingAMove(): void
+    {
+        foreach (['../outside/src/', '/etc/agent-map-escape/', 'C:/agent-map/src/'] as $directory) {
+            $this->writeBaseFixture();
+            $this->writeComposer(['autoload' => ['psr-4' => ['App\\' => 'src/', 'App\\Service\\' => $directory]]]);
+
+            $plan = (new ClassMovePlanner())->plan($this->map(), 'App\\Legacy\\UserService', 'App\\Service\\UserService');
+
+            self::assertSame(ClassMovePlan::STATUS_BLOCKED, $plan->status, $directory);
+            self::assertSame([], $plan->edits, $directory);
+            self::assertSame([], $plan->moves, $directory);
+            $blockers = implode("\n", $plan->blockers);
+            self::assertStringContainsString('points outside the project root', $blockers, $directory);
+            // The blocker has to name what composer.json actually declares, not a tidied version.
+            self::assertStringContainsString($directory, $blockers, $directory);
+        }
+    }
+
+    public function testAnEscapingShadowPrefixDoesNotHijackAProvableDestination(): void
+    {
+        $this->writeBaseFixture();
+        $this->writeComposer(['autoload' => ['psr-4' => [
+            'App\\' => '../outside/',
+            'App\\Legacy\\' => 'src/Legacy/',
+            'App\\Service\\' => 'src/Service/',
+        ]]]);
+
+        $plan = (new ClassMovePlanner())->plan($this->map(), 'App\\Legacy\\UserService', 'App\\Service\\UserService');
+
+        // The most specific mapping decides the destination; the escaping one Composer would fall
+        // back to is reported for review rather than becoming the move.
+        self::assertSame(ClassMovePlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
+        self::assertNotNull($plan->autoload);
+        self::assertSame('src/Service/UserService.php', $plan->autoload->destinationPath);
+        self::assertSame('src/Service/UserService.php', $plan->moves[0]->toPath);
+        self::assertContains('shadowed_autoload_prefix', $this->blindSpotKinds($plan->blindSpots));
+        self::assertStringContainsString('../outside/', implode("\n", array_map(
+            static fn (PlanBlindSpot $blindSpot): string => $blindSpot->message,
+            $plan->blindSpots,
+        )));
+    }
+
     public function testClassmapLayoutBlocksInsteadOfDerivingAPath(): void
     {
         $this->writeBaseFixture();

@@ -9,14 +9,16 @@ use voku\AgentMap\Plan\PlanBlindSpot;
 use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Plan\PlanProvenance;
 use voku\AgentMap\Plan\PlanStaleEvidence;
+use voku\AgentMap\Plan\PlanStatus;
 
 /** Versioned read-only plan for one proven PHP property rename. */
 final readonly class PropertyRenamePlan implements GovernedPlan
 {
+    public const PLAN_TYPE = 'property_rename_plan';
     public const CONTRACT_VERSION = '1.0';
-    public const STATUS_SAFE = 'safe';
-    public const STATUS_REVIEW_REQUIRED = 'review_required';
-    public const STATUS_BLOCKED = 'blocked';
+    public const STATUS_SAFE = PlanStatus::SAFE;
+    public const STATUS_REVIEW_REQUIRED = PlanStatus::REVIEW_REQUIRED;
+    public const STATUS_BLOCKED = PlanStatus::BLOCKED;
 
     /**
      * @param list<PlanEdit> $edits
@@ -38,6 +40,7 @@ final readonly class PropertyRenamePlan implements GovernedPlan
         public array $blockers,
         public array $notObservable,
     ) {
+        PlanStatus::assertPublishable(self::PLAN_TYPE, $status, $edits);
     }
 
     public function isBlocked(): bool
@@ -49,7 +52,7 @@ final readonly class PropertyRenamePlan implements GovernedPlan
     public function toArray(): array
     {
         return [
-            'type' => 'property_rename_plan',
+            'type' => self::PLAN_TYPE,
             'contract_version' => self::CONTRACT_VERSION,
             'status' => $this->status,
             'target_id' => $this->targetId,

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Plan;
 
-/** One preconditioned file move projected by a read-only rename plan. */
+/** One preconditioned file move projected by a read-only governed plan. */
 final readonly class PlanMove
 {
     public function __construct(
@@ -14,6 +14,8 @@ final readonly class PlanMove
         public string $reason,
         public bool $destinationMustBeAbsent = true,
     ) {
+        ProjectRelativePath::assertSafe($fromPath, 'Plan move source');
+        ProjectRelativePath::assertSafe($toPath, 'Plan move destination');
     }
 
     /** @return array{from_path: string, to_path: string, source_sha256: string, destination_must_be_absent: bool, reason: string} */

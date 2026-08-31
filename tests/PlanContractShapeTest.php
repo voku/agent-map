@@ -9,7 +9,11 @@ use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionParameter;
 use voku\AgentMap\Move\ClassMovePlan;
+use InvalidArgumentException;
 use voku\AgentMap\Plan\GovernedPlan;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanMove;
+use voku\AgentMap\Plan\PlanStatus;
 use voku\AgentMap\Removal\ClassConstantRemovalPlan;
 use voku\AgentMap\Removal\MethodRemovalPlan;
 use voku\AgentMap\Removal\PropertyRemovalPlan;
@@ -107,7 +111,7 @@ final class PlanContractShapeTest extends TestCase
     public function testMachineProjectionsShareOneEnvelopeAndNoDuplicatedProvenance(): void
     {
         foreach (self::PLAN_CLASSES as $planClass) {
-            $plan = $this->emptyPlan($planClass);
+            $plan = $this->plan($planClass);
             $payload = $plan->toArray();
 
             foreach (self::REQUIRED_MACHINE_KEYS as $key) {
@@ -131,18 +135,118 @@ final class PlanContractShapeTest extends TestCase
     public function testBlockedIsTheOneStatusThatSuppressesMutationEvidence(): void
     {
         foreach (self::PLAN_CLASSES as $planClass) {
-            $plan = $this->emptyPlan($planClass, ClassRenamePlan::STATUS_BLOCKED);
+            $plan = $this->plan($planClass, PlanStatus::BLOCKED);
             self::assertTrue($plan->isBlocked(), $planClass);
 
-            $safe = $this->emptyPlan($planClass, ClassRenamePlan::STATUS_SAFE);
+            $safe = $this->plan($planClass, PlanStatus::SAFE);
             self::assertFalse($safe->isBlocked(), $planClass);
+        }
+    }
+
+    public function testABlockedPlanCannotBeConstructedWithEditsAtAll(): void
+    {
+        foreach (self::PLAN_CLASSES as $planClass) {
+            try {
+                $this->plan($planClass, PlanStatus::BLOCKED, [$this->edit()]);
+                self::fail($planClass . ' constructed a blocked plan carrying an edit.');
+            } catch (InvalidArgumentException $exception) {
+                self::assertStringContainsString('must publish no applicable mutation', $exception->getMessage(), $planClass);
+            }
+        }
+    }
+
+    public function testABlockedPlanCannotBeConstructedWithMovesEither(): void
+    {
+        $withMoves = array_values(array_filter(
+            self::PLAN_CLASSES,
+            fn (string $planClass): bool => $this->acceptsMoves($planClass),
+        ));
+        self::assertNotSame([], $withMoves, 'At least one contract must carry moves for this to mean anything.');
+
+        foreach ($withMoves as $planClass) {
+            try {
+                $this->plan($planClass, PlanStatus::BLOCKED, [], [$this->move()]);
+                self::fail($planClass . ' constructed a blocked plan carrying a move.');
+            } catch (InvalidArgumentException $exception) {
+                self::assertStringContainsString('must publish no applicable mutation', $exception->getMessage(), $planClass);
+            }
+        }
+    }
+
+    public function testTheGuardOnlyRejectsBlockedPlans(): void
+    {
+        // Without this, a guard that rejected everything would pass the two tests above.
+        foreach (self::PLAN_CLASSES as $planClass) {
+            foreach ([PlanStatus::SAFE, PlanStatus::REVIEW_REQUIRED] as $status) {
+                $moves = $this->acceptsMoves($planClass) ? [$this->move()] : [];
+                $plan = $this->plan($planClass, $status, [$this->edit()], $moves);
+
+                $payload = $plan->toArray();
+                self::assertSame($status, $payload['status'], $planClass);
+                self::assertCount(1, (array) $payload['edits'], $planClass);
+                if ($moves !== []) {
+                    self::assertCount(1, (array) $payload['moves'], $planClass);
+                }
+            }
+        }
+    }
+
+    public function testAMoveCannotNameAPathOutsideTheProjectRoot(): void
+    {
+        $escapes = [
+            '../outside/Target.php',
+            '/etc/agent-map/Target.php',
+            'C:/agent-map/Target.php',
+            'src/../../Target.php',
+            '',
+        ];
+
+        foreach ($escapes as $toPath) {
+            try {
+                new PlanMove(
+                    fromPath: 'src/Target.php',
+                    toPath: $toPath,
+                    sourceSha256: 'sha256:0',
+                    reason: 'escape probe',
+                );
+                self::fail('PlanMove represented a destination outside the project root: ' . $toPath);
+            } catch (InvalidArgumentException $exception) {
+                self::assertStringContainsString('must stay inside the project root', $exception->getMessage(), $toPath);
+            }
+        }
+
+        // A backslash-separated path is the same path, so it cannot be a way around the rule.
+        $this->expectException(InvalidArgumentException::class);
+        new PlanMove(fromPath: 'src/Target.php', toPath: '..\\outside\\Target.php', sourceSha256: 'sha256:0', reason: 'escape probe');
+    }
+
+    public function testAnUnknownStatusIsRejectedRatherThanCarried(): void
+    {
+        foreach (self::PLAN_CLASSES as $planClass) {
+            try {
+                $this->plan($planClass, 'probably_fine');
+                self::fail($planClass . ' accepted a status outside the governed vocabulary.');
+            } catch (InvalidArgumentException $exception) {
+                self::assertStringContainsString('unknown plan status', $exception->getMessage(), $planClass);
+            }
+        }
+    }
+
+    public function testTheProjectedTypeComesFromTheDeclaredContractIdentity(): void
+    {
+        foreach (self::PLAN_CLASSES as $planClass) {
+            $declared = (new ReflectionClass($planClass))->getConstant('PLAN_TYPE');
+            self::assertIsString($declared, $planClass);
+            self::assertSame($declared, $this->plan($planClass, PlanStatus::SAFE)->toArray()['type'], $planClass);
         }
     }
 
     /**
      * @param class-string<GovernedPlan> $planClass
+     * @param list<PlanEdit> $edits
+     * @param list<PlanMove> $moves
      */
-    private function emptyPlan(string $planClass, string $status = 'safe'): GovernedPlan
+    private function plan(string $planClass, string $status = PlanStatus::SAFE, array $edits = [], array $moves = []): GovernedPlan
     {
         $reflection = new ReflectionClass($planClass);
         $constructor = $reflection->getConstructor();
@@ -150,15 +254,60 @@ final class PlanContractShapeTest extends TestCase
 
         $arguments = [];
         foreach ($constructor->getParameters() as $parameter) {
-            $arguments[] = $parameter->getName() === 'status'
-                ? $status
-                : $this->emptyArgument($parameter, $planClass);
+            $arguments[] = match ($parameter->getName()) {
+                'status' => $status,
+                'edits' => $edits,
+                'moves' => $moves,
+                default => $this->emptyArgument($parameter, $planClass),
+            };
         }
 
         $plan = $reflection->newInstanceArgs($arguments);
         self::assertInstanceOf(GovernedPlan::class, $plan, $planClass);
 
         return $plan;
+    }
+
+    /** @param class-string<GovernedPlan> $planClass */
+    private function acceptsMoves(string $planClass): bool
+    {
+        $constructor = (new ReflectionClass($planClass))->getConstructor();
+        self::assertNotNull($constructor, $planClass);
+
+        foreach ($constructor->getParameters() as $parameter) {
+            if ($parameter->getName() === 'moves') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function edit(): PlanEdit
+    {
+        return new PlanEdit(
+            path: 'src/Target.php',
+            sourceSha256: 'sha256:0',
+            startFilePos: 10,
+            endFilePos: 15,
+            lineStart: 2,
+            lineEnd: 2,
+            expected: 'oldName',
+            replacement: 'newName',
+            role: 'contract_shape_probe',
+            symbolId: 'class:Demo\\Target',
+            resolution: 'parser_resolved',
+        );
+    }
+
+    private function move(): PlanMove
+    {
+        return new PlanMove(
+            fromPath: 'src/Target.php',
+            toPath: 'src/Moved/Target.php',
+            sourceSha256: 'sha256:0',
+            reason: 'contract shape probe',
+        );
     }
 
     private function emptyArgument(ReflectionParameter $parameter, string $planClass): mixed
