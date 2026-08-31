@@ -27,12 +27,12 @@ that already reads it needs no change.
 
 ### One provenance type for the whole plan family
 
-`MethodRenameProvenance` was a duplicate of `RenameProvenance` with an identical shape. It has been
-removed; `MethodRenamePlan` and `ParameterRenamePlan` now expose `RenameProvenance` like every other
-governed rename, removal and move plan. Machine output is unchanged.
+`MethodRenameProvenance` was a duplicate of the shared provenance type with an identical shape. It
+has been removed; `MethodRenamePlan` and `ParameterRenamePlan` now expose `PlanProvenance` like every
+other governed rename, removal and move plan. Machine output is unchanged.
 
 Type hints referring to `voku\AgentMap\Rename\MethodRenameProvenance` must be updated to
-`voku\AgentMap\Rename\RenameProvenance`.
+`voku\AgentMap\Plan\PlanProvenance`.
 
 ### One behaviour contract for the plan family
 
