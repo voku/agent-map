@@ -1,5 +1,52 @@
 # Upgrading
 
+## 0.8 to 0.9
+
+### Removed pre-0.9 compatibility aliases
+
+`MethodRenamePlan::$backend` and `MethodRenamePlan::$mapDigest`, together with the duplicated
+top-level `backend` and `map_digest` keys in `method_rename_plan` JSON/TOON output, were announced in
+0.8.4 as pre-0.9 compatibility aliases. They are gone. Read the evidence identity from `provenance`:
+
+```php
+$plan->provenance->backend;
+$plan->provenance->mapDigest;
+$plan->provenance->analysisFingerprint;
+```
+
+```jq
+.provenance.backend, .provenance.map_digest
+```
+
+The contract version is unchanged: `provenance` already carried the same values in 0.8, so a consumer
+that already reads it needs no change.
+
+### One provenance type for the whole plan family
+
+`MethodRenameProvenance` was a duplicate of `RenameProvenance` with an identical shape. It has been
+removed; `MethodRenamePlan` and `ParameterRenamePlan` now expose `RenameProvenance` like every other
+governed rename, removal and move plan. Machine output is unchanged.
+
+Type hints referring to `voku\AgentMap\Rename\MethodRenameProvenance` must be updated to
+`voku\AgentMap\Rename\RenameProvenance`.
+
+### One behaviour contract for the plan family
+
+Every governed rename, removal and move plan now implements
+`voku\AgentMap\Plan\GovernedPlan`, which declares `isBlocked(): bool` and `toArray(): array`. This is
+additive: the concrete plan classes, their constructor signatures and their machine output are
+unchanged. Consumers that handle several plan types can now type against the interface instead of a
+union.
+
+The concrete plans stay separate types on purpose. A class move and a constant removal carry
+genuinely different evidence; only the behaviour a mutation host depends on is shared.
+
+### New governed contract
+
+`class_move_plan@1.0` is available through `agent-map class-move-plan` and
+`voku\AgentMap\Move\ClassMovePlanner`. It is additive; nothing existing changes behaviour. See
+[docs/class-move.md](docs/class-move.md).
+
 ## Optional semantic backends
 
 `SemanticAnalyzer` now exposes `backend(): string`. Custom analyzer implementations must return a stable backend identity so generated maps can record which semantic capability produced their relations and incremental builds can reject cross-backend merges.

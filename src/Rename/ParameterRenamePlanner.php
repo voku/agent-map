@@ -479,7 +479,7 @@ final readonly class ParameterRenamePlanner
             originalName: '$' . $originalName,
             replacementName: '$' . $replacementName,
             parameterIndex: $parameterIndex,
-            provenance: new MethodRenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
+            provenance: new RenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
             family: $familyIds,
             edits: $status === ParameterRenamePlan::STATUS_BLOCKED ? [] : $edits,
             blindSpots: $blindSpots,

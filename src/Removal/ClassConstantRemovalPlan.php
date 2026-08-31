@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Removal;
 
+use voku\AgentMap\Plan\GovernedPlan;
 use voku\AgentMap\Rename\RenameBlindSpot;
 use voku\AgentMap\Rename\RenameEdit;
 use voku\AgentMap\Rename\RenameProvenance;
 use voku\AgentMap\Rename\RenameStaleEvidence;
 
 /** Versioned, read-only plan for removing one provably unused private class constant. */
-final readonly class ClassConstantRemovalPlan
+final readonly class ClassConstantRemovalPlan implements GovernedPlan
 {
     public const CONTRACT_VERSION = '1.0';
     public const STATUS_SAFE = 'safe';

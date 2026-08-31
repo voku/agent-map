@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Rename;
 
+use voku\AgentMap\Plan\GovernedPlan;
+
 /** Versioned read-only plan for one class-constant rename. */
-final readonly class ClassConstantRenamePlan
+final readonly class ClassConstantRenamePlan implements GovernedPlan
 {
     public const CONTRACT_VERSION = '1.0';
     public const STATUS_SAFE = 'safe';

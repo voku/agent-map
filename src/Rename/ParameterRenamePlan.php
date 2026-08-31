@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Rename;
 
-final readonly class ParameterRenamePlan
+use voku\AgentMap\Plan\GovernedPlan;
+
+final readonly class ParameterRenamePlan implements GovernedPlan
 {
     public const CONTRACT_VERSION = '1.0';
     public const STATUS_SAFE = 'safe';
@@ -25,7 +27,7 @@ final readonly class ParameterRenamePlan
         public string $originalName,
         public string $replacementName,
         public int $parameterIndex,
-        public MethodRenameProvenance $provenance,
+        public RenameProvenance $provenance,
         public array $family,
         public array $edits,
         public array $blindSpots,

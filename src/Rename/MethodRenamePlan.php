@@ -4,18 +4,14 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Rename;
 
-final readonly class MethodRenamePlan
+use voku\AgentMap\Plan\GovernedPlan;
+
+final readonly class MethodRenamePlan implements GovernedPlan
 {
     public const CONTRACT_VERSION = '1.0';
     public const STATUS_SAFE = 'safe';
     public const STATUS_REVIEW_REQUIRED = 'review_required';
     public const STATUS_BLOCKED = 'blocked';
-
-    /** @deprecated Consume provenance->backend. Retained for the pre-0.9 typed API. */
-    public string $backend;
-
-    /** @deprecated Consume provenance->mapDigest. Retained for the pre-0.9 typed API. */
-    public string $mapDigest;
 
     /**
      * @param list<string> $family
@@ -30,7 +26,7 @@ final readonly class MethodRenamePlan
         public string $targetId,
         public string $originalName,
         public string $replacementName,
-        public MethodRenameProvenance $provenance,
+        public RenameProvenance $provenance,
         public array $family,
         public array $edits,
         public array $blindSpots,
@@ -38,8 +34,6 @@ final readonly class MethodRenamePlan
         public array $blockers,
         public array $notObservable,
     ) {
-        $this->backend = $this->provenance->backend;
-        $this->mapDigest = $this->provenance->mapDigest;
     }
 
     public function isBlocked(): bool
@@ -58,8 +52,6 @@ final readonly class MethodRenamePlan
             'original_name' => $this->originalName,
             'replacement_name' => $this->replacementName,
             'provenance' => $this->provenance->toArray(),
-            'backend' => $this->backend,
-            'map_digest' => $this->mapDigest,
             'family' => $this->family,
             'edits' => array_map(static fn (RenameEdit $edit): array => $edit->toArray(), $this->edits),
             'blind_spots' => array_map(static fn (RenameBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),

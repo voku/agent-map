@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Move;
 
+use voku\AgentMap\Plan\GovernedPlan;
 use voku\AgentMap\Rename\RenameBlindSpot;
 use voku\AgentMap\Rename\RenameEdit;
 use voku\AgentMap\Rename\RenameMove;
@@ -11,7 +12,7 @@ use voku\AgentMap\Rename\RenameProvenance;
 use voku\AgentMap\Rename\RenameStaleEvidence;
 
 /** Immutable evidence package for one deterministic PHP class namespace relocation. */
-final readonly class ClassMovePlan
+final readonly class ClassMovePlan implements GovernedPlan
 {
     public const CONTRACT_VERSION = '1.0';
     public const STATUS_SAFE = 'safe';

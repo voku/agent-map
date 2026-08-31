@@ -424,9 +424,9 @@ final readonly class MethodRenamePlanner
         );
     }
 
-    private function provenance(AgentMapIndex $map): MethodRenameProvenance
+    private function provenance(AgentMapIndex $map): RenameProvenance
     {
-        return new MethodRenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint);
+        return new RenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint);
     }
 
     /**

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Rename;
 
+use voku\AgentMap\Plan\GovernedPlan;
+
 /** Immutable evidence package for one same-namespace PHP class rename. */
-final readonly class ClassRenamePlan
+final readonly class ClassRenamePlan implements GovernedPlan
 {
     public const CONTRACT_VERSION = '1.0';
     public const STATUS_SAFE = 'safe';
