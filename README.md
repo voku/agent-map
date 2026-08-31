@@ -43,6 +43,27 @@ Those responsibilities belong to the surrounding `agent-*` packages.
 experimental, diagnostic or subtraction candidate - and states what 1.0 freezes. Read it before
 depending on a command.
 
+### When to use it
+
+- The PHP identity to change is already known and you want its exact location, contracts, callers and
+  dependencies without reading whole files.
+- A change is mechanical - a rename, a removal, a namespace move - and you want exact byte-range
+  edits with preconditions instead of a text substitution that half-works.
+- A question is about PHP structure: what calls this, what does this depend on, what breaks.
+
+### When not to use it
+
+- The answer is a literal string, a config key, a template, or a file name. That is a text-search
+  shape, and `grep` wins; the map has nothing to add and costs a build.
+- The repository has no map yet and the task touches one obvious file. Building a map to edit one
+  known line is the expensive path.
+- The question is about intent, design or history rather than structure. Map reports what the source
+  says, not what it should have said.
+
+Silence from a scoped query is scoped silence. "The map has no callers for this" is not "this has no
+callers" - a structural-only map has no call edges at all, and every surface says so rather than
+implying absence.
+
 ## Requirements
 
 - PHP 8.2 or newer
@@ -393,7 +414,36 @@ markdown
 toon
 ```
 
-Text is the compact human/agent default. JSON is the normal integration format. TOON is useful when the result will be inserted into model context.
+`text` and `markdown` are human projections. `json` and `toon` are the machine boundary and are two
+serializers of one model, never two semantic implementations. Governed plans therefore emit `text`,
+`json` and `toon` and deliberately not `markdown`: a plan is consumed by a mutation host, not pasted
+into a report.
+
+## Plan status semantics
+
+Every governed plan - rename, removal, move - reports exactly one status, and a host must branch on
+it before doing anything:
+
+| status | meaning | edits and moves | exit code |
+| --- | --- | --- | --- |
+| `safe` | Every consequence agent-map can observe maps to an exact byte range. | published | `0` |
+| `review_required` | The exact edits are published, and bounded evidence remains that PHP source alone cannot settle - listed in `blind_spots`. | published | `0` |
+| `blocked` | The plan cannot be proven. | **none** | `1` |
+
+A blocked plan never publishes apparently applicable edits. That is the single rule the whole family
+is built around: a partial mutation is worse than no mutation.
+
+Alongside the status, every plan carries:
+
+- `provenance` - map digest, effective backend, analysis fingerprint;
+- `stale_evidence` - source that moved since the map was built, kept machine-distinct from semantic
+  blockers because the recovery differs (refresh the map, versus rethink the change);
+- `blockers` - why the plan is not safe;
+- `not_observable` - what the contract structurally cannot see, stated rather than implied.
+
+Every edit carries the pre-edit source SHA-256 and an exact byte range; every move carries the same
+hash and requires the destination to be absent. Validate the complete precondition set against one
+pre-edit snapshot before applying anything.
 
 ## Library API
 
@@ -411,6 +461,18 @@ $plan = (new EditContextPlanner())->plan(
 ```
 
 `agent-loop` should not shell out to `agent-map` and scrape formatted text. Humans have invented enough avoidable protocols already.
+
+The supported consumer boundary is:
+
+- `Index\IndexReader` / `Index\AgentMapIndex` for map reads and exact identity resolution;
+- `Context\EditContextPlanner` for bounded edit context;
+- the planners under `Rename\`, `Removal\` and `Move\`, all returning a `Plan\GovernedPlan`;
+- `Plan\PlanCapability` via `agent-map plan-capabilities` to discover which contracts this version
+  proves and which map backend each needs;
+- `Cli\CliApplication` when a host genuinely needs to embed the command line.
+
+Files below `.agent-map/` are package-owned state, not an interface. A consumer that reads them, or
+parses CLI text, is depending on something that is free to change in a patch release.
 
 ## Generated files
 

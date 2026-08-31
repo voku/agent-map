@@ -9,6 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Publish the versioned, read-only `class_move_plan@1.0` contract for relocating one class into another namespace, with Composer PSR-4 destination evidence, the namespace declaration edit, exact hash-bound import and reference edits, one preconditioned file move, blockers, review-required evidence, stale evidence, and explicit non-observable boundaries.
+- Publish `plan-capabilities`, a family-wide governed-contract registry covering all ten rename, removal and move contracts with a `family` field, backed by one `PlanCliApplication` interface that every plan boundary implements so routing and discovery cannot drift apart.
+- Declare the persisted map schema contract on `AgentMapIndex` (`SCHEMA_VERSION`, `SUPPORTED_SCHEMA_MAJOR`) and reject a map from any other schema major on read, with a rebuild instruction instead of a partially reconstructed map.
+- Document what agent-map is for and what it is not for, the governed plan status semantics, and the supported consumer API boundary in the README.
 - Document `search` and `search-index` in `agent-map help` and the README. They were routable public commands listed in neither, including their FTS5/search-database activation preconditions and their seed-generator rather than location-oracle role.
 - Publish `docs/stability.md`: the pre-1.0 contract audit. It classifies every public surface into stable, supported-conditional, experimental, diagnostic or subtraction candidate, states what 1.0 freezes (persisted map schema, plan contract semantics, artifact ownership, library-over-CLI, PHPStan optionality), names the six open 0.9 surface decisions, and records the 1.0 gate.
 - Declare the shared `voku\AgentMap\Plan\GovernedPlan` behaviour contract (`isBlocked()`, `toArray()`) and implement it on every governed rename, removal and move plan, so a mutation host can consume the family through one type without the concrete evidence shapes being collapsed into one.
@@ -18,6 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
+- Delete `rank`. It had no consumer, appeared in no skill and its one-hop neighbour count is derivable from `callers`/`callees`; `GraphRanker` survives as an internal collaborator of `discover` rather than as public API.
+- Delete `rename-capabilities`, superseded by `plan-capabilities`. Replacing the command rather than adding a second one keeps the rule that there is no parallel API.
+- Delete the schema-1.x-only map readers the new schema check makes unreachable: the `sha1` fallback on `FileEntry`, the legacy `return_type` on `SymbolEntry` and `MethodEntry`, the `params` alias, and `ParameterEntry::fromLegacyString()`.
 - Delete the `MethodRenamePlan::$backend` / `::$mapDigest` properties and the duplicated top-level `backend` / `map_digest` keys in `method_rename_plan` output. They were announced in 0.8.4 as pre-0.9 compatibility aliases; `provenance` is now the single evidence identity across the whole plan family.
 - Delete `MethodRenameProvenance`, an exact duplicate of `RenameProvenance`. `MethodRenamePlan` and `ParameterRenamePlan` now use the same provenance type as every other governed plan; machine output is unchanged.
 
@@ -26,6 +32,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Class relocation stays a separate contract from class renaming: `class-move-plan` keeps the class name and changes only the namespace, and a request that would do both is rejected instead of silently widening `class-rename-plan`.
 - The destination file path is derived from declared PSR-4 mappings rather than guessed. A missing manifest, an uncovered destination prefix, equally specific competing mappings, or a classmap layout covering either end fails closed, as do destination identity/file collisions, grouped imports of the moved class, multi-symbol or multi-namespace files, braced namespaces, global-namespace sources, and namespaced function fallbacks the move would rebind.
 - References that resolved through the enclosing namespace are pinned to fully qualified identities and reported as review evidence; contract 1.0 does not synthesize new `use` statements.
+- Move the value objects the whole plan family shares out of `Rename\`: `RenameProvenance`, `RenameEdit`, `RenameBlindSpot`, `RenameStaleEvidence` and `RenameMove` are now `voku\AgentMap\Plan\PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence` and `PlanMove`. Machine output is unchanged.
+- Rename `Cli\RenamePlanCapability` to `Plan\PlanCapability` (with a leading `family` argument) and `Cli\RenamePlanCliApplication` to `Cli\PlanCliApplication`, now implemented by the removal and move boundaries too.
+- State the output-format rule rather than leaving it implicit: `text` and `markdown` are human projections, `json` and `toon` are the machine boundary, and governed plans deliberately do not emit `markdown`.
 - Pin the shared plan envelope in regression coverage: every governed plan agrees on the `safe` / `review_required` / `blocked` vocabulary, one `RenameProvenance`, and the same `type` / `contract_version` / `status` / `target_id` / `provenance` / `edits` / `blind_spots` / `stale_evidence` / `blockers` / `not_observable` machine keys.
 - Parameter renaming treats one parameter as a single binding: positional arguments and unrelated same-name parameters are deliberately left untouched, while split family parameter names, replacement parameter/local-variable collisions, nested closure/arrow binding ambiguity, mixed-target named calls, and ambiguous source mapping fail closed without publishing edits.
 

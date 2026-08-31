@@ -45,6 +45,25 @@ union.
 The concrete plans stay separate types on purpose. A class move and a constant removal carry
 genuinely different evidence; only the behaviour a mutation host depends on is shared.
 
+### A map from another schema major is now rejected
+
+`IndexReader` never checked `schema_version`. A map written by a schema-1.x agent-map was read
+anyway, reconstructed from whichever fields happened to match, and then answered structural questions
+with silence. Reading a map this build does not understand now fails:
+
+```text
+Unsupported agent map schema version 1.0; this build reads 2.x. Rebuild the map with agent-map build.
+```
+
+`AgentMapIndex::SCHEMA_VERSION` is what this build writes and `AgentMapIndex::SUPPORTED_SCHEMA_MAJOR`
+is what it reads. Minor versions inside the supported major stay readable. If a project still has a
+pre-2.0 map on disk, run `agent-map build` once; there is no migration path and there should not be
+one, because a rebuild is cheap and a half-understood map is not.
+
+The 1.x-only field readers this makes unreachable were removed with it: the `sha1` fallback on
+`FileEntry`, the legacy `return_type` on `SymbolEntry` and `MethodEntry`, the `params` alias, and
+`ParameterEntry::fromLegacyString()`.
+
 ### Shared plan value objects moved to `Plan\`
 
 The value objects the whole plan family uses were named and namespaced as if only renames existed.
@@ -85,6 +104,18 @@ remains in the package as an implementation detail of `discover` and is no longe
 `class_move_plan@1.0` is available through `agent-map class-move-plan` and
 `voku\AgentMap\Move\ClassMovePlanner`. It is additive; nothing existing changes behaviour. See
 [docs/class-move.md](docs/class-move.md).
+
+### CLI changes at a glance
+
+| 0.8 | 0.9 |
+| --- | --- |
+| `rename-capabilities` | `plan-capabilities` (all ten contracts, `family` field, payload `type` renamed) |
+| `rank` | removed; use `callers`, `callees` or `discover` |
+| - | `class-move-plan` (new) |
+| `search`, `search-index` (undocumented) | documented in `agent-map help` and the README |
+
+Exit codes are unchanged and uniform: a governed plan command exits `1` when the plan is `blocked`
+and `0` otherwise.
 
 ## Optional semantic backends
 
