@@ -249,6 +249,58 @@ The resulting `EditContextPlan` contains:
 
 The default traversal is intentionally one hop. Context selection is deterministic and methods are never truncated halfway through.
 
+### Plan safe PHP renames
+
+Renaming a declaration with `sed` is how a repository acquires a half-renamed identity. The governed
+rename family resolves one explicitly requested target and publishes exact, hash-bound byte edits
+instead:
+
+```bash
+vendor/bin/agent-map class-rename-plan 'App\Service\OldName' NewName --format=json
+vendor/bin/agent-map rename-plan 'App\Service\UserService::save' store --format=json
+vendor/bin/agent-map parameter-rename-plan 'App\Service\UserService::save' '$old' '$new' --format=json
+vendor/bin/agent-map property-rename-plan 'App\Service\UserService::$old' '$new' --format=json
+vendor/bin/agent-map class-constant-rename-plan 'App\Service\UserService::OLD' NEW --format=json
+vendor/bin/agent-map function-rename-plan 'App\old_helper' new_helper --format=json
+```
+
+Every plan in the family shares the same shape: a versioned contract type, a `safe` /
+`review_required` / `blocked` status, `provenance` (map digest, effective backend, analysis
+fingerprint), exact edits, blind spots, stale evidence, blockers, and an explicit `not_observable`
+boundary. A `blocked` plan publishes no edits.
+
+Which map a contract needs differs. Static class-name tokens are name-resolvable, so class and
+class-constant renaming work on a structural-only map. Method, parameter, property and function
+renaming need semantic evidence and therefore a PHPStan-backed map. Ask the registry rather than
+guessing:
+
+```bash
+vendor/bin/agent-map rename-capabilities --format=json
+```
+
+See [class rename](docs/class-rename.md) and [method rename](docs/method-rename.md) for the full
+evidence, status and mutation-host validation semantics.
+
+### Plan a class namespace move
+
+Moving a class is not a rename: the file has to land where the autoloader expects the new identity,
+and every reference that resolved through the old namespace changes meaning.
+
+```bash
+vendor/bin/agent-map class-move-plan 'App\Legacy\UserService' 'App\Service\UserService' --format=json
+```
+
+The destination path is derived from the project's declared Composer PSR-4 mappings and the manifest
+identity is recorded as evidence; `composer.json` itself is never rewritten. The plan publishes the
+namespace declaration edit, the affected imports and references, and one preconditioned file move.
+
+References that resolved through the enclosing namespace are pinned to fully qualified names and
+reported for review rather than by synthesizing new imports. Ambiguous autoload layouts, destination
+collisions, grouped imports of the moved class, multi-symbol or multi-namespace files and namespaced
+function fallbacks fail closed.
+
+See [class move](docs/class-move.md) for the complete contract.
+
 ### Plan safe PHP removals
 
 Avoid line-oriented `sed` edits when deleting PHP declarations. A PHPStan-backed map can produce a

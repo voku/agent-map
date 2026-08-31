@@ -8,7 +8,8 @@ use voku\SimplePhpParser\Parsers\PhpCodeParser;
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 if ($argc !== 5) {
-    fwrite(STDERR, "Usage: php tools/dogfood/rename-plan.php PROJECT_ROOT MAP_JSON PLAN_JSON CAPABILITIES_JSON\n");
+    fwrite(STDERR, "Usage: php tools/dogfood/rename-plan.php PROJECT_ROOT MAP_JSON PLAN_JSON CONTRACT_JSON\n");
+    fwrite(STDERR, "CONTRACT_JSON is either a `rename-capabilities` registry or one capability object.\n");
     exit(2);
 }
 
@@ -32,15 +33,26 @@ if (!is_string($capabilitiesJson)) {
     throw new \RuntimeException('Unable to read rename capabilities: ' . $argv[4]);
 }
 $registry = json_decode($capabilitiesJson, true, 512, JSON_THROW_ON_ERROR);
-if (!is_array($registry) || ($registry['type'] ?? null) !== 'rename_capabilities' || !is_array($registry['capabilities'] ?? null)) {
-    throw new \RuntimeException('Rename capability registry has an unsupported shape.');
+if (!is_array($registry)) {
+    throw new \RuntimeException('Plan contract evidence must decode to an object.');
+}
+
+// Only the rename family is discoverable through `rename-capabilities`; the removal and move
+// families are routed like the other governed plans, so a single declared capability object is
+// accepted as well. Either way the published plan has to match the declared contract identity.
+if (($registry['type'] ?? null) === 'rename_capabilities' && is_array($registry['capabilities'] ?? null)) {
+    $declaredCapabilities = $registry['capabilities'];
+} elseif (isset($registry['plan_type'], $registry['contract_version'])) {
+    $declaredCapabilities = [$registry];
+} else {
+    throw new \RuntimeException('Plan contract evidence has an unsupported shape.');
 }
 
 /** @var array<string, array{kind: string, command: string, plan_type: string, contract_version: string, semantic_backend: string}> $capabilitiesByPlanType */
 $capabilitiesByPlanType = [];
-foreach ($registry['capabilities'] as $capability) {
+foreach ($declaredCapabilities as $capability) {
     if (!is_array($capability)) {
-        throw new \RuntimeException('Rename capability must be an object.');
+        throw new \RuntimeException('Plan capability must be an object.');
     }
     $kind = $capability['kind'] ?? null;
     $command = $capability['command'] ?? null;
@@ -52,10 +64,10 @@ foreach ($registry['capabilities'] as $capability) {
         || !is_string($planType) || $planType === ''
         || !is_string($contractVersion) || $contractVersion === ''
         || !is_string($semanticBackend) || $semanticBackend === '') {
-        throw new \RuntimeException('Rename capability contains incomplete identity.');
+        throw new \RuntimeException('Plan capability contains incomplete identity.');
     }
     if (isset($capabilitiesByPlanType[$planType])) {
-        throw new \RuntimeException('Rename capability registry contains duplicate plan type: ' . $planType);
+        throw new \RuntimeException('Plan contract evidence contains duplicate plan type: ' . $planType);
     }
     $capabilitiesByPlanType[$planType] = [
         'kind' => $kind,

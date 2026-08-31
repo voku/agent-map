@@ -50,6 +50,11 @@ final readonly class CliApplication
             return $classConstantRemoval->run($argv);
         }
 
+        $classMove = new ClassMoveCliApplication(artifacts: $artifacts);
+        if ($classMove->supports($argv)) {
+            return $classMove->run($argv);
+        }
+
         foreach ($renameApplications as $renameApplication) {
             if ($renameApplication->supports($argv)) {
                 return $renameApplication->run($argv);
@@ -73,6 +78,9 @@ final readonly class CliApplication
         }
         if ($temporal->shouldAppendToGeneralHelp($argv)) {
             echo $temporal->helpOverview();
+        }
+        if ($classMove->shouldAppendToGeneralHelp($argv)) {
+            echo $classMove->helpOverview();
         }
         foreach ($renameApplications as $renameApplication) {
             if ($renameApplication->shouldAppendToGeneralHelp($argv)) {

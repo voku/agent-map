@@ -8,11 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Publish the versioned, read-only `class_move_plan@1.0` contract for relocating one class into another namespace, with Composer PSR-4 destination evidence, the namespace declaration edit, exact hash-bound import and reference edits, one preconditioned file move, blockers, review-required evidence, stale evidence, and explicit non-observable boundaries.
+- Add `class-move-plan` to the public CLI routing boundary in `text`, `json` and `toon`, plus a dedicated class-move dogfood that publishes the evidence into a real PSR-4 fixture and rebuilds the map to prove the relocated identity.
 - Publish the versioned, read-only `parameter_rename_plan@1.0` contract for one already-chosen method parameter, with typed provenance, override/interface family evidence, exact hash-bound edits for the declaration, direct lexical method-body references and semantically resolved named-argument labels, blockers, review-required evidence, stale evidence, and explicit non-observable boundaries.
 - Register `parameter-rename-plan` in the governed `rename-capabilities` registry so hosts can discover the contract instead of probing CLI text.
 
 ### Changed
 
+- Class relocation stays a separate contract from class renaming: `class-move-plan` keeps the class name and changes only the namespace, and a request that would do both is rejected instead of silently widening `class-rename-plan`.
+- The destination file path is derived from declared PSR-4 mappings rather than guessed. A missing manifest, an uncovered destination prefix, equally specific competing mappings, or a classmap layout covering either end fails closed, as do destination identity/file collisions, grouped imports of the moved class, multi-symbol or multi-namespace files, braced namespaces, global-namespace sources, and namespaced function fallbacks the move would rebind.
+- References that resolved through the enclosing namespace are pinned to fully qualified identities and reported as review evidence; contract 1.0 does not synthesize new `use` statements.
 - Parameter renaming treats one parameter as a single binding: positional arguments and unrelated same-name parameters are deliberately left untouched, while split family parameter names, replacement parameter/local-variable collisions, nested closure/arrow binding ambiguity, mixed-target named calls, and ambiguous source mapping fail closed without publishing edits.
 
 ### Validation
