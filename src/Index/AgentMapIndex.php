@@ -416,7 +416,17 @@ final readonly class AgentMapIndex
     /** @param array<string, mixed> $data */
     public static function fromArray(array $data): self
     {
-        $schemaVersion = (string) ($data['schema_version'] ?? '');
+        if (!array_key_exists('schema_version', $data)) {
+            throw new RuntimeException(
+                'Agent map has no schema_version; it predates the supported '
+                . self::SUPPORTED_SCHEMA_MAJOR . '.x schema. Rebuild it with agent-map build.',
+            );
+        }
+        $rawSchemaVersion = $data['schema_version'];
+        if (!is_string($rawSchemaVersion) || preg_match('/^[0-9]+\.[0-9]+$/D', $rawSchemaVersion) !== 1) {
+            throw new RuntimeException('Agent map schema_version must be a major.minor string. Rebuild the map with agent-map build.');
+        }
+        $schemaVersion = $rawSchemaVersion;
         self::assertSupportedSchema($schemaVersion);
 
         $files = [];
