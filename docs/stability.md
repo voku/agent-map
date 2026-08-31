@@ -1,0 +1,185 @@
+# Stability policy and public surface classification
+
+This document is the pre-1.0 contract audit for `voku/agent-map`. It says what 1.0 will freeze, what
+each public surface is worth today, and what still has to be decided.
+
+It exists because pre-1.0 is the only cheap moment to delete something. After 1.0 an unused command
+is still API.
+
+## What agent-map is for 1.0
+
+```text
+PHP repository
+    -> deterministic structural + semantic map
+    -> freshness / provenance
+    -> bounded structural navigation
+    -> bounded edit context
+    -> read-only, fail-closed mechanical refactoring plans
+```
+
+And explicitly not: an architecture advisor, a general repository search engine, an LLM orchestrator,
+a mutation engine, or a generic refactoring framework. Mapping stays read-only with respect to the
+analysed project; every plan is evidence, never authority to mutate.
+
+That boundary is what 1.0 freezes. A capability that only makes sense on the other side of it does
+not become stable by being useful.
+
+## Stability tiers
+
+| tier | meaning |
+| --- | --- |
+| **stable** | Frozen at 1.0. A breaking change needs a major version. |
+| **supported, conditional** | Supported, but availability depends on something outside agent-map (a PHPStan-backed map, an FTS5 search database). Absence is a capability limit that must be reported, never an answer. |
+| **experimental** | Public and usable, but may change or be removed in a minor release until real-task evidence justifies a stronger claim. |
+| **diagnostic** | For humans and operators. The output shape is not a machine contract. |
+| **subtraction candidate** | Scheduled for removal before 1.0 unless a consumer appears first. |
+
+## Classification
+
+Evidence column references [the navigation dogfood report](dogfood/map-navigation-evidence.md),
+whose per-capability verdicts are the measured basis for anything below marked *unused* or
+*unmeasured*.
+
+### Core
+
+| surface | CLI | library | tier | note |
+| --- | --- | --- | --- | --- |
+| map build / incremental refresh | `build`, `refresh` | `AgentMapBuilder`, `IndexWriter`, `IndexReader` | stable | Every consumer runs it. Backends must stay explicit; structural-only is a supported backend, not a silent fallback. |
+| freshness / readiness | `stale` | `MapReadinessInspector`, `AgentMapIndex::staleEntries()` | stable | The precondition every other answer depends on. |
+| exact identity resolution | via other commands | `AgentMapIndex::resolveMethod()`, `symbolById()`, `file()` | stable | The cheapest correct answer agent-map has. |
+| bounded edit context | `context` | `EditContextPlanner`, `EditContextPlan`, `EditContextPolicy` | stable | The productive core: it produced every map range hit in the replay experiment, including the cross-file hit ranking alone missed. |
+| exact callers / callees | `callers`, `callees` | `AgentMapIndex::incoming()/outgoing()` | supported, conditional | `calls` relations need a PHPStan-backed map. A structural-only map has no call edges; that is a capability limit, never evidence of no callers. |
+| symbol / neighbour navigation | `query`, `file`, `related`, `changed` | `AgentMapIndex::query()` | stable | The most-cited commands in consumer skills, even though nothing consumes them automatically. |
+| exact scope inspection | `scope` | `ScopeSelector`, `ScopeInspector` | stable | Unconsumed, and kept anyway: 1.3 KB for one method is the cheapest exact call listing in the package. Cheap exact primitives are not the same kind of surface as unproven derived ones. |
+| artifact layout | `--out`, `--index`, `--database`, map artifact root | `MapArtifactPaths` | stable | `.agent-map/` is package-owned. An embedding host may remount the root; explicit paths stay authoritative. |
+| embedding boundary | - | `Cli\CliApplication` | stable | The supported way to embed the CLI with a project root and map root. |
+
+### Governed plan family
+
+All ten plans are **stable** contracts at version `1.0`, and share one envelope: `type`,
+`contract_version`, `status`, `target_id`, `provenance`, `edits`, `blind_spots`, `stale_evidence`,
+`blockers`, `not_observable`, plus contract-specific identity and, where it applies, `moves`.
+`voku\AgentMap\Plan\GovernedPlan` declares the shared behaviour; `tests/PlanContractShapeTest.php`
+pins the envelope.
+
+| contract | command | needs PHPStan |
+| --- | --- | --- |
+| `class_rename_plan@1.0` | `class-rename-plan` | no |
+| `class_constant_rename_plan@1.0` | `class-constant-rename-plan` | no |
+| `function_rename_plan@1.0` | `function-rename-plan` | yes |
+| `method_rename_plan@1.0` | `rename-plan` | yes |
+| `parameter_rename_plan@1.0` | `parameter-rename-plan` | yes |
+| `property_rename_plan@1.0` | `property-rename-plan` | yes |
+| `method_removal_plan@1.0` | `method-removal-plan` | yes |
+| `property_removal_plan@1.0` | `property-removal-plan` | yes |
+| `class_constant_removal_plan@1.0` | `class-constant-removal-plan` | yes |
+| `class_move_plan@1.0` | `class-move-plan` | no |
+
+`class_move_plan` is the newest member. Its contract is frozen, but the 1.0 gate below still requires
+one real consumer task before it is claimed as proven rather than merely covered.
+
+Shared invariants, all of them machine-checkable:
+
+- `status` is exactly one of `safe`, `review_required`, `blocked`.
+- A `blocked` plan publishes **no** edits and **no** moves. There is no partial mutation evidence.
+- Evidence identity lives in `provenance` (map digest, effective backend, analysis fingerprint) and
+  nowhere else. The pre-0.9 top-level `backend` / `map_digest` aliases were removed in 0.9.
+- Stale source evidence is machine-distinct from semantic blockers, because the recovery differs.
+- Every edit carries the pre-edit source SHA-256 and an exact byte range; every move carries the same
+  hash and requires an absent destination.
+- CLI exit code is `1` for a blocked plan and `0` otherwise, uniformly across all ten commands.
+- `text` is a human projection; `json` and `toon` are two serializers of one model, never two
+  semantic implementations. Plans deliberately do not emit `markdown`.
+
+### Conditional, experimental and diagnostic
+
+| surface | CLI | tier | why |
+| --- | --- | --- | --- |
+| ranked hybrid search | `search`, `search-index` | supported, conditional | Needs a configured search database and FTS5. Proven useful as a *seed generator*, not as a location oracle. Literal, config, template and filename questions remain native text-search shapes. **Not currently listed in `agent-map help` or the README** - see open decision 1. |
+| architecture discovery | `discover` | experimental | Real output, unmeasured benefit: it activates only when a task names no files and no targets, and no replay measured whether it helped. |
+| bounded reverse impact | `impact` | experimental | No automated consumer; model-invoked only. 15.6 KB text / 53 KB JSON at depth 2 is a real prompt cost with no measured payoff yet. |
+| graph ranking | `rank` | **subtraction candidate** | No consumer, in no skill, never automatic. See open decision 2. |
+| temporal history | `history diff/coupling/claims/observe/show` | experimental | Derived evidence by [ADR 0002](adr/0002-temporal-history-is-derived-evidence.md); no automated consumer. |
+| repository status | `summary`, `stats`, `changed` | diagnostic | Human orientation. The output shape is not a machine contract. |
+| plan capability discovery | `rename-capabilities` | stable, incomplete | Covers the rename family only. See open decision 3. |
+
+## What 1.0 freezes
+
+**Persisted map schema.** `schema_version`, backend identity, the analysis fingerprint, reconciliation
+states, relation kinds and freshness semantics. A map written by 1.0.x is readable by 1.0.y.
+
+**Plan contracts.** Contract versions, the status vocabulary, the meaning of `review_required` versus
+`blocked`, edit hash/range semantics, JSON/TOON equivalence and exit codes, as listed above.
+
+**Artifact ownership.** Generated state stays below the package-owned `.agent-map/` root, or below an
+explicitly mounted artifact root. agent-map does not learn the layout policy of an embedding package.
+
+**Library over CLI.** The PHP API is the canonical machine boundary. Other packages should consume
+typed APIs, not scrape CLI text or read private map files. CLI output is a projection of the library
+result, and the CLI's *human* text rendering is deliberately not frozen at the same strength as the
+JSON/TOON projections.
+
+**Optionality of PHPStan.** Structural-only remains a supported explicit backend. A selected PHPStan
+backend that turns out to be unavailable fails explicitly rather than downgrading silently.
+
+## Open 0.9 decisions
+
+These are named on purpose. Each one changes a public surface, so each is a decision rather than a
+cleanup.
+
+1. **`search` / `search-index` are routable but undocumented.** They appear in neither
+   `agent-map help` nor the README, while being a real supported capability with real activation
+   preconditions. Either document them as *supported, conditional*, or make the omission deliberate
+   and say why. Shipping 1.0 with an undocumented public command is the worst of the three.
+2. **`rank`.** Delete it, or find the consumer that justifies it. It has no consumer, appears in no
+   skill, and its one-hop neighbour count is derivable from `callers`/`callees`. Deleting it before
+   1.0 costs nothing; deleting it after costs a major version.
+3. **Capability discovery covers only renames.** `rename-capabilities` cannot describe the removal or
+   move contracts, so the shared dogfood publisher has to be handed a declared contract identity for
+   them instead of discovering one. A family-wide registry would let a host discover all ten
+   contracts and would remove that asymmetry - at the cost of either renaming a public command or
+   adding a second one.
+4. **Family-wide value objects still live under `Rename\`.** `RenameProvenance`, `RenameEdit`,
+   `RenameBlindSpot`, `RenameStaleEvidence` and `RenameMove` are used by the removal and move
+   families too. Relocating them under `Plan\` would make the boundary honest; it is a wide,
+   mechanical, breaking type migration and should happen before 1.0 or not at all.
+5. **Legacy map-read compatibility.** `FileEntry` still accepts a `sha1` field and rewrites it to
+   `legacy-sha1:`; `SymbolEntry` and `MethodEntry` still accept a legacy `return_type` and legacy
+   string parameters. These were never announced as temporary. Decide whether the persisted schema's
+   compatibility window is a stated rule or dead code, and write the answer into the schema section
+   above.
+6. **`markdown` coverage is uneven.** Navigation, discovery and temporal commands emit it; plans do
+   not. The reasoning above (markdown is a human projection, plans are machine contracts) is the
+   proposed answer, but it should be a stated rule rather than an accident of implementation.
+
+## The 1.0 gate
+
+1.0 ships when all of these are true:
+
+- [ ] no known temporary compatibility aliases remain;
+- [ ] every public surface has an owner, a tier, and a stated reason to exist;
+- [ ] the persisted map schema has explicit compatibility rules;
+- [ ] every stable plan contract is versioned and shares the frozen envelope;
+- [ ] a blocked plan provably never exposes applicable edits or moves;
+- [ ] provenance and freshness semantics are consistent across every surface that reports them;
+- [ ] structural-only and PHPStan-backed modes fail predictably rather than silently differing;
+- [ ] the library API is the supported machine boundary, and no consumer reconstructs private paths;
+- [ ] real dogfood exists for navigation, edit context, and each refactoring family, including moves;
+- [ ] `agent-loop` and `agent-recall-compiler` consume a released agent-map, not a path repository or
+      a development branch;
+- [ ] one full 0.9.x cycle produced no required architectural rewrite;
+- [ ] README, UPGRADING and CHANGELOG describe what the code actually does.
+
+## Release shape
+
+`0.9.0` is the feature- and boundary-complete candidate for 1.0, not another feature release. After
+it, `0.9.x` hardens: consumer and dogfood fixes first, then an adversarial and compatibility pass
+(fresh install, upgrade from 0.8.8, structural-only projects, PHPStan projects, legacy non-namespaced
+PHP, large repositories, partial `--paths`, changed Composer autoload, source changed after a plan was
+published, JSON/TOON parity, Windows paths where relevant).
+
+New capabilities are out of scope for 0.9.x. `method_move_plan` in particular
+([#52](https://github.com/voku/agent-map/issues/52)) stays post-1.0: `$this`, `self`/`static`/`parent`,
+private dependencies, visibility, overrides and state transfer make it a different order of problem
+from a namespace relocation, and 1.0 does not require agent-map to support every conceivable PHP
+refactoring.

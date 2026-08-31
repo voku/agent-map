@@ -1,5 +1,9 @@
 # Upgrading
 
+See [docs/stability.md](docs/stability.md) for the tier of every public surface and for what 1.0
+freezes. Anything classified there as *experimental* or *subtraction candidate* may still change in a
+0.9.x release.
+
 ## 0.8 to 0.9
 
 ### Removed pre-0.9 compatibility aliases

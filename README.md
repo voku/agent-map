@@ -39,6 +39,10 @@ It does not:
 
 Those responsibilities belong to the surrounding `agent-*` packages.
 
+[Stability policy](docs/stability.md) classifies every public surface - stable, supported-conditional,
+experimental, diagnostic or subtraction candidate - and states what 1.0 freezes. Read it before
+depending on a command.
+
 ## Requirements
 
 - PHP 8.2 or newer
@@ -401,6 +405,9 @@ Commit a map only when a repository explicitly wants a versioned snapshot.
 three already-solved PHP issues against a grep/read baseline, the projection from pinned `agent-loop`
 revision `3b7190d`, and agent-map's existing exact surfaces, and records where each one helps, where it
 costs more than it returns, and which capabilities nothing consumes. The harness is in `tools/dogfood/`.
+
+Those per-capability verdicts feed the [stability policy](docs/stability.md), which is where a
+capability's tier and its 1.0 direction are recorded.
 
 ## Development
 
