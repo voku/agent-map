@@ -11,6 +11,7 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\ClassConst;
 use PhpParser\Node\Stmt\ClassLike;
 use RuntimeException;
+use voku\AgentMap\Plan\PlanBlindSpot;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 /** Locates class-constant declarations and statically named fetches in current source. */
@@ -30,7 +31,7 @@ final class ClassConstantNameLocator
     /**
      * Locates exact declaration/fetch tokens and emits review evidence whenever owner identity is not proven.
      *
-     * @return array{edits: list<array{start_file_pos: int, end_file_pos: int, line_start: int, line_end: int, role: string}>, blind_spots: list<RenameBlindSpot>, collision: bool}
+     * @return array{edits: list<array{start_file_pos: int, end_file_pos: int, line_start: int, line_end: int, role: string}>, blind_spots: list<PlanBlindSpot>, collision: bool}
      */
     public function locate(string $path, string $ownerFqn, string $original, string $replacement): array
     {
@@ -58,7 +59,7 @@ final class ClassConstantNameLocator
             }
 
             if (!$node->name instanceof Identifier) {
-                $blindSpots[] = new RenameBlindSpot(
+                $blindSpots[] = new PlanBlindSpot(
                     'dynamic_class_constant_name',
                     'A dynamic class-constant name may resolve to the renamed constant at runtime.',
                     $path,
@@ -73,7 +74,7 @@ final class ClassConstantNameLocator
             }
 
             if (!$node->class instanceof Name) {
-                $blindSpots[] = new RenameBlindSpot(
+                $blindSpots[] = new PlanBlindSpot(
                     'dynamic_class_constant_fetch',
                     'A dynamic class-constant owner may resolve to the renamed constant at runtime.',
                     $path,
@@ -85,7 +86,7 @@ final class ClassConstantNameLocator
 
             $spelling = strtolower($node->class->toString());
             if ($spelling === 'static') {
-                $blindSpots[] = new RenameBlindSpot(
+                $blindSpots[] = new PlanBlindSpot(
                     'late_static_class_constant_fetch',
                     'static:: class-constant lookup is late-bound and cannot be assigned to one declaring class without inheritance evidence.',
                     $path,
@@ -101,7 +102,7 @@ final class ClassConstantNameLocator
                 continue;
             }
 
-            $blindSpots[] = new RenameBlindSpot(
+            $blindSpots[] = new PlanBlindSpot(
                 'unproven_class_constant_owner',
                 'A same-name class-constant fetch has no proven declaring-owner identity; inherited and parent lookups require review.',
                 $path,

@@ -100,24 +100,6 @@ The region view reports:
 
 Ambiguous labels or ID prefixes fail rather than choosing an arbitrary region.
 
-### `rank`
-
-```bash
-vendor/bin/agent-map rank --by=dependents --top=20
-vendor/bin/agent-map rank --by=callers --kind=method --top=20
-vendor/bin/agent-map rank --by=callees --format=toon
-```
-
-Supported metrics are:
-
-- `dependents`: unique incoming dependency neighbours;
-- `callers`: unique incoming `calls` neighbours;
-- `dependencies`: unique outgoing dependency neighbours;
-- `callees`: unique outgoing `calls` neighbours;
-- `members`: contained members such as declared methods.
-
-Scores count unique one-hop graph neighbours rather than raw relation rows. Repeated call sites between the same nodes therefore do not inflate the result.
-
 ### `impact`
 
 ```bash
@@ -158,7 +140,7 @@ Repository paths are normalized before grouping, so path-based discovery is not 
 
 ## Freshness
 
-`discover`, `rank`, and `impact` require a fresh canonical map. If indexed source hashes no longer match the repository, the command fails and asks for a refresh instead of combining current source with stale architecture data.
+`discover` and `impact` require a fresh canonical map. If indexed source hashes no longer match the repository, the command fails and asks for a refresh instead of combining current source with stale architecture data.
 
 ```bash
 vendor/bin/agent-map refresh
@@ -187,8 +169,6 @@ Consumers inside the `agent-*` stack should prefer the PHP API over parsing form
 ```php
 use voku\AgentMap\Discovery\ArchitectureDiscovery;
 use voku\AgentMap\Discovery\ArchitectureImpactAnalyzer;
-use voku\AgentMap\Discovery\GraphMetric;
-use voku\AgentMap\Discovery\GraphRanker;
 use voku\AgentMap\Discovery\ImpactAnalyzer;
 use voku\AgentMap\Index\IndexReader;
 
@@ -196,7 +176,6 @@ $map = (new IndexReader())->read('.agent-map/php-symbols.json');
 
 $discovery = (new ArchitectureDiscovery())->discover($map, limit: 10);
 $billing = $discovery->architecture->resolveRegion('Billing');
-$ranked = (new GraphRanker())->rank($map, GraphMetric::DEPENDENTS, limit: 10);
 
 // Pure evidence traversal, unchanged for existing consumers.
 $impact = (new ImpactAnalyzer())->forMethod(

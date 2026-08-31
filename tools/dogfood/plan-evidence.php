@@ -8,7 +8,8 @@ use voku\SimplePhpParser\Parsers\PhpCodeParser;
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 if ($argc !== 5) {
-    fwrite(STDERR, "Usage: php tools/dogfood/rename-plan.php PROJECT_ROOT MAP_JSON PLAN_JSON CAPABILITIES_JSON\n");
+    fwrite(STDERR, "Usage: php tools/dogfood/plan-evidence.php PROJECT_ROOT MAP_JSON PLAN_JSON CAPABILITIES_JSON\n");
+    fwrite(STDERR, "CAPABILITIES_JSON is the `agent-map plan-capabilities --format=json` registry.\n");
     exit(2);
 }
 
@@ -29,18 +30,25 @@ if (!is_array($plan)) {
 
 $capabilitiesJson = file_get_contents($argv[4]);
 if (!is_string($capabilitiesJson)) {
-    throw new \RuntimeException('Unable to read rename capabilities: ' . $argv[4]);
+    throw new \RuntimeException('Unable to read plan capabilities: ' . $argv[4]);
 }
 $registry = json_decode($capabilitiesJson, true, 512, JSON_THROW_ON_ERROR);
-if (!is_array($registry) || ($registry['type'] ?? null) !== 'rename_capabilities' || !is_array($registry['capabilities'] ?? null)) {
-    throw new \RuntimeException('Rename capability registry has an unsupported shape.');
+if (!is_array($registry)) {
+    throw new \RuntimeException('Plan contract evidence must decode to an object.');
 }
+
+// The registry is the only accepted source of contract identity: a plan whose type agent-map does
+// not advertise is exactly the drift this dogfood exists to catch.
+if (($registry['type'] ?? null) !== 'plan_capabilities' || !is_array($registry['capabilities'] ?? null)) {
+    throw new \RuntimeException('Plan capability registry has an unsupported shape.');
+}
+$declaredCapabilities = $registry['capabilities'];
 
 /** @var array<string, array{kind: string, command: string, plan_type: string, contract_version: string, semantic_backend: string}> $capabilitiesByPlanType */
 $capabilitiesByPlanType = [];
-foreach ($registry['capabilities'] as $capability) {
+foreach ($declaredCapabilities as $capability) {
     if (!is_array($capability)) {
-        throw new \RuntimeException('Rename capability must be an object.');
+        throw new \RuntimeException('Plan capability must be an object.');
     }
     $kind = $capability['kind'] ?? null;
     $command = $capability['command'] ?? null;
@@ -52,10 +60,10 @@ foreach ($registry['capabilities'] as $capability) {
         || !is_string($planType) || $planType === ''
         || !is_string($contractVersion) || $contractVersion === ''
         || !is_string($semanticBackend) || $semanticBackend === '') {
-        throw new \RuntimeException('Rename capability contains incomplete identity.');
+        throw new \RuntimeException('Plan capability contains incomplete identity.');
     }
     if (isset($capabilitiesByPlanType[$planType])) {
-        throw new \RuntimeException('Rename capability registry contains duplicate plan type: ' . $planType);
+        throw new \RuntimeException('Plan contract evidence contains duplicate plan type: ' . $planType);
     }
     $capabilitiesByPlanType[$planType] = [
         'kind' => $kind,
@@ -68,18 +76,18 @@ foreach ($registry['capabilities'] as $capability) {
 
 $type = $plan['type'] ?? null;
 if (!is_string($type) || !isset($capabilitiesByPlanType[$type])) {
-    throw new \RuntimeException('Rename plan type is not registered by agent-map: ' . (is_scalar($type) ? (string) $type : get_debug_type($type)));
+    throw new \RuntimeException('Plan type is not registered by agent-map: ' . (is_scalar($type) ? (string) $type : get_debug_type($type)));
 }
 $capability = $capabilitiesByPlanType[$type];
 if (($plan['contract_version'] ?? null) !== $capability['contract_version']) {
     throw new \RuntimeException(sprintf(
-        'Rename plan contract does not match registered %s capability version %s.',
+        'Plan contract does not match registered %s capability version %s.',
         $capability['kind'],
         $capability['contract_version'],
     ));
 }
 if (($plan['status'] ?? null) !== 'safe') {
-    throw new \RuntimeException('Dogfood requires a safe rename plan.');
+    throw new \RuntimeException('Dogfood requires a safe plan.');
 }
 foreach (['blockers', 'blind_spots', 'stale_evidence'] as $field) {
     if (($plan[$field] ?? null) !== []) {

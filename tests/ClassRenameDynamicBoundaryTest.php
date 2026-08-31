@@ -11,7 +11,7 @@ use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
 use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Rename\ClassRenamePlan;
 use voku\AgentMap\Rename\ClassRenamePlanner;
-use voku\AgentMap\Rename\RenameBlindSpot;
+use voku\AgentMap\Plan\PlanBlindSpot;
 
 final class ClassRenameDynamicBoundaryTest extends TestCase
 {
@@ -61,7 +61,7 @@ PHP);
         self::assertSame([], $plan->blockers);
         $dynamic = array_values(array_filter(
             $plan->blindSpots,
-            static fn (RenameBlindSpot $blindSpot): bool => $blindSpot->kind === 'dynamic_class_name',
+            static fn (PlanBlindSpot $blindSpot): bool => $blindSpot->kind === 'dynamic_class_name',
         ));
         self::assertCount(5, $dynamic);
     }

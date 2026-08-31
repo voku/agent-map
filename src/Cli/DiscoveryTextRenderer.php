@@ -7,7 +7,6 @@ namespace voku\AgentMap\Cli;
 use voku\AgentMap\Discovery\ArchitectureImpactReport;
 use voku\AgentMap\Discovery\ArchitectureMapReport;
 use voku\AgentMap\Discovery\ArchitectureRegion;
-use voku\AgentMap\Discovery\GraphMetric;
 use voku\AgentMap\Discovery\ImpactRegionBucket;
 use voku\AgentMap\Discovery\RankedNode;
 use voku\AgentMap\Discovery\RepositoryDiscoveryReport;
@@ -76,11 +75,6 @@ final readonly class DiscoveryTextRenderer
         return $out;
     }
 
-    /** @param list<RankedNode> $ranked */
-    public function rank(GraphMetric $metric, array $ranked): string
-    {
-        return $this->rankedSection('Rank by ' . $metric->value, $ranked);
-    }
 
     public function impact(ArchitectureImpactReport $report): string
     {

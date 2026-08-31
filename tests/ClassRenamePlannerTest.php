@@ -15,8 +15,8 @@ use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Rename\ClassRenamePlan;
 use voku\AgentMap\Rename\ClassRenamePlanner;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 final class ClassRenamePlannerTest extends TestCase
@@ -79,7 +79,7 @@ PHP);
 
         self::assertSame(ClassRenamePlan::STATUS_SAFE, $plan->status, implode("\n", $plan->blockers));
         self::assertCount(2, $plan->edits);
-        $roles = array_map(static fn (RenameEdit $edit): string => $edit->role, $plan->edits);
+        $roles = array_map(static fn (PlanEdit $edit): string => $edit->role, $plan->edits);
         sort($roles, SORT_STRING);
         self::assertSame(['class_declaration', 'class_import'], $roles);
         $rewritten = $this->applyEdits($plan->edits);
@@ -156,7 +156,7 @@ PHP);
 
         self::assertSame(ClassRenamePlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
         self::assertNotSame([], $plan->edits);
-        $kinds = array_map(static fn (RenameBlindSpot $blindSpot): string => $blindSpot->kind, $plan->blindSpots);
+        $kinds = array_map(static fn (PlanBlindSpot $blindSpot): string => $blindSpot->kind, $plan->blindSpots);
         self::assertContains('phpdoc_type_reference', $kinds);
         self::assertContains('class_string_literal', $kinds);
         self::assertSame([], $plan->blockers);
@@ -215,7 +215,7 @@ PHP);
 
         self::assertSame(ClassRenamePlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
         self::assertCount(1, $plan->moves);
-        self::assertContains('multi_symbol_file_move', array_map(static fn (RenameBlindSpot $spot): string => $spot->kind, $plan->blindSpots));
+        self::assertContains('multi_symbol_file_move', array_map(static fn (PlanBlindSpot $spot): string => $spot->kind, $plan->blindSpots));
     }
 
     public function testUnconventionalClassFilenameRequiresReviewInsteadOfInventingMove(): void
@@ -333,12 +333,12 @@ PHP);
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return array<string, string>
      */
     private function applyEdits(array $edits): array
     {
-        /** @var array<string, list<RenameEdit>> $byPath */
+        /** @var array<string, list<PlanEdit>> $byPath */
         $byPath = [];
         foreach ($edits as $edit) {
             $byPath[$edit->path][] = $edit;
@@ -353,7 +353,7 @@ PHP);
                 self::assertSame($preEditSha256, $edit->sourceSha256);
             }
 
-            usort($pathEdits, static fn (RenameEdit $left, RenameEdit $right): int => $right->startFilePos <=> $left->startFilePos);
+            usort($pathEdits, static fn (PlanEdit $left, PlanEdit $right): int => $right->startFilePos <=> $left->startFilePos);
             foreach ($pathEdits as $edit) {
                 self::assertSame($edit->expected, substr($source, $edit->startFilePos, $edit->endFilePos - $edit->startFilePos + 1));
                 $source = substr($source, 0, $edit->startFilePos)

@@ -9,13 +9,14 @@ use InvalidArgumentException;
 use Throwable;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
+use voku\AgentMap\Plan\PlanCapability;
 use voku\AgentMap\Rename\MethodRenamePlan;
 use voku\AgentMap\Rename\MethodRenamePlanner;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
 
 /** Read-only CLI boundary for deterministic source rename planning. */
-final readonly class RenameCliApplication implements RenamePlanCliApplication
+final readonly class RenameCliApplication implements PlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
@@ -24,9 +25,10 @@ final readonly class RenameCliApplication implements RenamePlanCliApplication
         $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
     }
 
-    public function capability(): RenamePlanCapability
+    public function capability(): PlanCapability
     {
-        return new RenamePlanCapability(
+        return new PlanCapability(
+            family: PlanCapability::FAMILY_RENAME,
             kind: 'method',
             command: 'rename-plan',
             planType: 'method_rename_plan',
@@ -55,7 +57,7 @@ final readonly class RenameCliApplication implements RenamePlanCliApplication
     {
         return <<<'TEXT'
 
-Refactoring evidence:
+Method refactoring evidence:
   rename-plan Build a read-only, fail-closed method rename plan from current map evidence
 
 Run `agent-map help rename-plan` for details.
@@ -194,7 +196,7 @@ TEXT;
         return implode("\n", $lines) . "\n";
     }
 
-    private function editLine(RenameEdit $edit): string
+    private function editLine(PlanEdit $edit): string
     {
         return sprintf(
             '  edit %s:%d-%d bytes %d-%d [%s/%s] %s -> %s',
@@ -210,7 +212,7 @@ TEXT;
         );
     }
 
-    private function blindSpotLine(RenameBlindSpot $blindSpot): string
+    private function blindSpotLine(PlanBlindSpot $blindSpot): string
     {
         $location = $blindSpot->path === null
             ? ''

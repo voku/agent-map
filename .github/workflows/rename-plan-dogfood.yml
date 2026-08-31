@@ -197,8 +197,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          php bin/agent-map rename-capabilities --format=json > "$DOGFOOD_ROOT/capabilities.json"
-          jq -e '.type == "rename_capabilities" and (.capabilities | length) > 0' \
+          php bin/agent-map plan-capabilities --format=json > "$DOGFOOD_ROOT/capabilities.json"
+          jq -e '.type == "plan_capabilities" and ([.capabilities[] | select(.family == "rename")] | length) > 0' \
             "$DOGFOOD_ROOT/capabilities.json" >/dev/null
 
           method_command="$(jq -r '.capabilities[] | select(.plan_type == "method_rename_plan") | .command' "$DOGFOOD_ROOT/capabilities.json")"
@@ -291,7 +291,7 @@ jobs:
           set -euo pipefail
 
           for kind in method function class parameter property class-constant; do
-            php tools/dogfood/rename-plan.php \
+            php tools/dogfood/plan-evidence.php \
               "$DOGFOOD_ROOT/$kind" \
               "$DOGFOOD_ROOT/$kind/map.json" \
               "$DOGFOOD_ROOT/$kind/plan.json" \
@@ -299,12 +299,14 @@ jobs:
               > "$DOGFOOD_ROOT/$kind/report.json"
           done
 
-      - name: Prove every registered capability is dogfooded
+      - name: Prove every registered rename capability is dogfooded
         shell: bash
         run: |
           set -euo pipefail
 
-          jq -r '.capabilities[].plan_type' "$DOGFOOD_ROOT/capabilities.json" \
+          # This job owns the rename family; the removal and move families have their own dogfood,
+          # so filtering by family keeps the check exhaustive without claiming their coverage.
+          jq -r '.capabilities[] | select(.family == "rename") | .plan_type' "$DOGFOOD_ROOT/capabilities.json" \
             | sort > "$DOGFOOD_ROOT/registered-plan-types.txt"
           find "$DOGFOOD_ROOT" -mindepth 2 -maxdepth 2 -name report.json -print0 \
             | xargs -0 -r jq -r '.type' \
@@ -316,7 +318,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          self_paths='src/Cli/CliApplication.php,src/Cli/ClassRenameCliApplication.php,src/Cli/ClassConstantRenameCliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/ParameterRenameCliApplication.php,src/Cli/PropertyRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/RenamePlanCapability.php,src/Cli/RenamePlanCliApplication.php,src/Rename/ClassRenamePlanner.php,src/Rename/SourceClassNameLocator.php,src/Rename/ClassConstantRenamePlanner.php,src/Rename/ClassConstantNameLocator.php,src/Rename/ParameterRenamePlanner.php,src/Rename/ParameterNameLocator.php,src/Rename/PropertyRenamePlanner.php,src/Rename/PropertyNameLocator.php,tests/CliApplicationTest.php,tests/ClassRenamePlannerTest.php,tests/ClassConstantRenamePlannerTest.php,tests/ParameterRenamePlannerTest.php,tests/PropertyRenamePlannerTest.php,tools/dogfood/rename-plan.php'
+          self_paths='src/Cli/CliApplication.php,src/Cli/ClassRenameCliApplication.php,src/Cli/ClassConstantRenameCliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/ParameterRenameCliApplication.php,src/Cli/PropertyRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/PlanCliApplication.php,src/Plan/PlanCapability.php,src/Rename/ClassRenamePlanner.php,src/Rename/SourceClassNameLocator.php,src/Rename/ClassConstantRenamePlanner.php,src/Rename/ClassConstantNameLocator.php,src/Rename/ParameterRenamePlanner.php,src/Rename/ParameterNameLocator.php,src/Rename/PropertyRenamePlanner.php,src/Rename/PropertyNameLocator.php,tests/CliApplicationTest.php,tests/ClassRenamePlannerTest.php,tests/ClassConstantRenamePlannerTest.php,tests/ParameterRenamePlannerTest.php,tests/PropertyRenamePlannerTest.php,tools/dogfood/plan-evidence.php'
           php bin/agent-map build \
             --root="$GITHUB_WORKSPACE" \
             --paths="$self_paths" \
@@ -327,19 +329,19 @@ jobs:
             --index="$DOGFOOD_ROOT/self/map.json" \
             --database="$DOGFOOD_ROOT/self/search.sqlite"
 
-          php bin/agent-map related RenamePlanCliApplication \
+          php bin/agent-map related PlanCliApplication \
             --root="$GITHUB_WORKSPACE" \
             --index="$DOGFOOD_ROOT/self/map.json" \
             --format=json \
             --limit=25 > "$DOGFOOD_ROOT/self/related-capability.json"
-          jq -e '.primary | map(.path) | index("src/Cli/RenamePlanCliApplication.php") != null' \
+          jq -e '.primary | map(.path) | index("src/Cli/PlanCliApplication.php") != null' \
             "$DOGFOOD_ROOT/self/related-capability.json" >/dev/null
           jq -e '.likely_tests | map(.path) | index("tests/CliApplicationTest.php") != null' \
             "$DOGFOOD_ROOT/self/related-capability.json" >/dev/null
           jq -e '.mentions | map(.path) | index("src/Cli/CliApplication.php") != null' \
             "$DOGFOOD_ROOT/self/related-capability.json" >/dev/null
 
-          php bin/agent-map search 'rename capability registration' \
+          php bin/agent-map search 'plan capability registration' \
             --root="$GITHUB_WORKSPACE" \
             --index="$DOGFOOD_ROOT/self/map.json" \
             --database="$DOGFOOD_ROOT/self/search.sqlite" \
@@ -352,7 +354,7 @@ jobs:
             src/Cli/FunctionRenameCliApplication.php \
             src/Cli/ParameterRenameCliApplication.php \
             src/Cli/PropertyRenameCliApplication.php \
-            src/Cli/RenamePlanCliApplication.php \
+            src/Cli/PlanCliApplication.php \
             src/Cli/CliApplication.php
           do
             jq -e --arg path "$path" '[.results[].file_path] | index($path) != null' \
@@ -383,7 +385,7 @@ jobs:
             --database="$DOGFOOD_ROOT/self/search.sqlite" \
             --format=json \
             --limit=25 > "$DOGFOOD_ROOT/self/search-dogfood.json"
-          jq -e '[.results[].file_path] | index("tools/dogfood/rename-plan.php") != null' \
+          jq -e '[.results[].file_path] | index("tools/dogfood/plan-evidence.php") != null' \
             "$DOGFOOD_ROOT/self/search-dogfood.json" >/dev/null
 
       - name: Prove rewritten dummy PHP is complete and valid

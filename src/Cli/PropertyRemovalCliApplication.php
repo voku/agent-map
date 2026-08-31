@@ -9,17 +9,47 @@ use InvalidArgumentException;
 use Throwable;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
+use voku\AgentMap\Plan\PlanCapability;
 use voku\AgentMap\Removal\PropertyRemovalPlan;
 use voku\AgentMap\Removal\PropertyRemovalPlanner;
 
 /** Read-only CLI boundary for exact unused-private-property removal evidence. */
-final readonly class PropertyRemovalCliApplication
+final readonly class PropertyRemovalCliApplication implements PlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
     public function __construct(?MapArtifactPaths $artifacts = null)
     {
         $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
+    }
+
+    public function capability(): PlanCapability
+    {
+        return new PlanCapability(
+            family: PlanCapability::FAMILY_REMOVAL,
+            kind: 'property',
+            command: 'property-removal-plan',
+            planType: 'property_removal_plan',
+            contractVersion: PropertyRemovalPlan::CONTRACT_VERSION,
+            semanticBackend: 'phpstan',
+        );
+    }
+
+    /** @param list<string> $argv */
+    public function shouldAppendToGeneralHelp(array $argv): bool
+    {
+        return count($argv) === 2 && in_array($argv[1], ['help', '-h', '--help'], true);
+    }
+
+    public function helpOverview(): string
+    {
+        return <<<'TEXT'
+
+Property removal evidence:
+  property-removal-plan Build an exact unused-private-property deletion plan
+
+Run `agent-map help property-removal-plan` for details.
+TEXT;
     }
 
     /** @param list<string> $argv */

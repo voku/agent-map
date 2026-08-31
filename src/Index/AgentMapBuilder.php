@@ -145,7 +145,7 @@ final readonly class AgentMapBuilder
         $composerLockHash = is_file($realRoot . '/composer.lock') ? hash_file('sha256', $realRoot . '/composer.lock') : false;
 
         return new AgentMapIndex(
-            schemaVersion: '2.0',
+            schemaVersion: AgentMapIndex::SCHEMA_VERSION,
             root: $realRoot,
             backend: $backend,
             files: $reconciled['files'],

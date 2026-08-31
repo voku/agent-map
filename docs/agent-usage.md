@@ -48,6 +48,7 @@ The coding agent owns intent. Once it has decided which concrete code identity t
 
 ```bash
 vendor/bin/agent-map rename-plan 'App\Service\Foo::bar' 'renamedBar' --format=toon
+vendor/bin/agent-map parameter-rename-plan 'App\Service\Foo::bar' '$old' '$new' --format=toon
 vendor/bin/agent-map function-rename-plan 'App\helper' 'renamedHelper' --format=toon
 vendor/bin/agent-map property-rename-plan 'App\Service\Foo::$value' 'renamedValue' --format=toon
 vendor/bin/agent-map class-rename-plan 'App\Service\Foo' 'RenamedFoo' --format=toon
@@ -55,9 +56,27 @@ vendor/bin/agent-map class-constant-rename-plan 'App\Service\Foo::VALUE' 'RENAME
 vendor/bin/agent-map method-removal-plan 'App\Service\Foo::obsolete' --format=toon
 vendor/bin/agent-map property-removal-plan 'App\Service\Foo::$obsolete' --format=toon
 vendor/bin/agent-map class-constant-removal-plan 'App\Service\Foo::OBSOLETE' --format=toon
+vendor/bin/agent-map class-move-plan 'App\Legacy\Foo' 'App\Service\Foo' --format=toon
+```
+
+Renaming and relocating are separate contracts on purpose. `class-rename-plan` changes the name inside
+the current namespace; `class-move-plan` keeps the name and changes only the namespace, deriving the
+destination path from the project's declared Composer PSR-4 mappings. A request that would do both is
+rejected rather than silently widened - rename first, then move the result.
+
+Do not hard-code this list. Ask which contracts the installed version proves, and which map backend
+each needs:
+
+```bash
+vendor/bin/agent-map plan-capabilities --format=json
 ```
 
 Plans are read-only evidence, not edit authority. The mutation host must re-check status, provenance, hashes/ranges, expected source, blockers, review-required evidence, and move preconditions before writing.
+
+Branch on the status before anything else. `blocked` publishes no edits and no moves at all and exits
+`1`; `review_required` publishes exact edits alongside evidence PHP source cannot settle; only `safe`
+means every consequence agent-map can observe is covered. A blocked plan is never a partially
+applicable one.
 
 The intended coding-agent path is therefore:
 
@@ -66,7 +85,7 @@ known intent
 → scope
 → context
 → callers/callees only when needed
-→ specific governed change plan when available
+→ specific governed change plan when available (discovered, not assumed)
 → host-owned mutation and validation
 ```
 
@@ -85,4 +104,5 @@ Rules:
 - treat `dynamic` and `multiple_targets` relations as blind spots;
 - do not claim impact analysis is complete when candidates were omitted by the context budget;
 - use the PHP API from `agent-loop`, not CLI-output parsing;
-- prefer existing exact Map surfaces over adding a parallel command with the same semantics.
+- prefer existing exact Map surfaces over adding a parallel command with the same semantics;
+- discover governed contracts through `plan-capabilities` instead of assuming a command exists.

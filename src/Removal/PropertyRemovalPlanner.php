@@ -11,10 +11,10 @@ use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\MethodEntry;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\SymbolEntry;
-use voku\AgentMap\Rename\RenameBlindSpot;
-use voku\AgentMap\Rename\RenameEdit;
-use voku\AgentMap\Rename\RenameProvenance;
-use voku\AgentMap\Rename\RenameStaleEvidence;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /**
  * Builds an exact, fail-closed unused-private-property deletion plan.
@@ -46,13 +46,13 @@ final readonly class PropertyRemovalPlanner
 
         /** @var list<string> $blockers */
         $blockers = [];
-        /** @var list<RenameBlindSpot> $blindSpots */
+        /** @var list<PlanBlindSpot> $blindSpots */
         $blindSpots = [];
         $staleEntries = $map->staleEntries();
         usort($staleEntries, static fn (array $left, array $right): int => $left['path'] <=> $right['path']);
-        /** @var list<RenameStaleEvidence> $stale */
+        /** @var list<PlanStaleEvidence> $stale */
         $stale = array_map(
-            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            static fn (array $entry): PlanStaleEvidence => new PlanStaleEvidence($entry['path'], $entry['reason']),
             $staleEntries,
         );
 
@@ -96,7 +96,7 @@ final readonly class PropertyRemovalPlanner
                 && $relation->receiverType !== null
                 && $this->receiverTypeContainsOwner($relation->receiverType, $ownerFqn)
             ) {
-                $blindSpots[] = new RenameBlindSpot(
+                $blindSpots[] = new PlanBlindSpot(
                     'dynamic_property_name',
                     'A dynamic property access on the owning type may resolve to this property at runtime.',
                     $relation->file,
@@ -107,7 +107,7 @@ final readonly class PropertyRemovalPlanner
         }
 
         if ($this->ownerHasMagicPropertyDispatch($owner->methods)) {
-            $blindSpots[] = new RenameBlindSpot(
+            $blindSpots[] = new PlanBlindSpot(
                 'magic_property_dispatch',
                 'The owner defines magic property dispatch; runtime property-name strings may overlap this private property.',
                 $file->path,
@@ -116,7 +116,7 @@ final readonly class PropertyRemovalPlanner
             );
         }
 
-        /** @var list<RenameEdit> $edits */
+        /** @var list<PlanEdit> $edits */
         $edits = [];
         if ($stale === [] && $blockers === []) {
             try {
@@ -140,7 +140,7 @@ final readonly class PropertyRemovalPlanner
                     $blockers[] = 'Classes defining loadMetadata() are blocked because Doctrine static metadata may refer to private properties indirectly.';
                 }
                 if ($range['has_attributes']) {
-                    $blindSpots[] = new RenameBlindSpot(
+                    $blindSpots[] = new PlanBlindSpot(
                         'property_attributes',
                         'Property attributes may represent runtime or framework metadata that semantic property-access relations do not prove unused.',
                         $file->path,
@@ -149,7 +149,7 @@ final readonly class PropertyRemovalPlanner
                     );
                 }
                 if ($range['has_docblock']) {
-                    $blindSpots[] = new RenameBlindSpot(
+                    $blindSpots[] = new PlanBlindSpot(
                         'property_phpdoc',
                         'Property PHPDoc may contain metadata or tooling contracts outside semantic property-access evidence.',
                         $file->path,
@@ -159,7 +159,7 @@ final readonly class PropertyRemovalPlanner
                 }
 
                 if ($blockers === []) {
-                    $edits[] = new RenameEdit(
+                    $edits[] = new PlanEdit(
                         $file->path,
                         $file->sha256,
                         $range['start'],
@@ -190,7 +190,7 @@ final readonly class PropertyRemovalPlanner
         return new PropertyRemovalPlan(
             $status,
             $targetId,
-            new RenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
+            new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
             $edits,
             $blindSpots,
             $stale,
@@ -270,12 +270,12 @@ final readonly class PropertyRemovalPlanner
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
-     * @return list<RenameBlindSpot>
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
      */
     private function uniqueBlindSpots(array $blindSpots): array
     {
-        /** @var array<string, RenameBlindSpot> $unique */
+        /** @var array<string, PlanBlindSpot> $unique */
         $unique = [];
         foreach ($blindSpots as $blindSpot) {
             $unique[implode(':', [

@@ -4,24 +4,26 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Rename;
 
-final readonly class MethodRenamePlan
+use voku\AgentMap\Plan\GovernedPlan;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
+use voku\AgentMap\Plan\PlanStatus;
+
+final readonly class MethodRenamePlan implements GovernedPlan
 {
+    public const PLAN_TYPE = 'method_rename_plan';
     public const CONTRACT_VERSION = '1.0';
-    public const STATUS_SAFE = 'safe';
-    public const STATUS_REVIEW_REQUIRED = 'review_required';
-    public const STATUS_BLOCKED = 'blocked';
-
-    /** @deprecated Consume provenance->backend. Retained for the pre-0.9 typed API. */
-    public string $backend;
-
-    /** @deprecated Consume provenance->mapDigest. Retained for the pre-0.9 typed API. */
-    public string $mapDigest;
+    public const STATUS_SAFE = PlanStatus::SAFE;
+    public const STATUS_REVIEW_REQUIRED = PlanStatus::REVIEW_REQUIRED;
+    public const STATUS_BLOCKED = PlanStatus::BLOCKED;
 
     /**
      * @param list<string> $family
-     * @param list<RenameEdit> $edits
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      * @param list<string> $notObservable
      */
@@ -30,7 +32,7 @@ final readonly class MethodRenamePlan
         public string $targetId,
         public string $originalName,
         public string $replacementName,
-        public MethodRenameProvenance $provenance,
+        public PlanProvenance $provenance,
         public array $family,
         public array $edits,
         public array $blindSpots,
@@ -38,8 +40,7 @@ final readonly class MethodRenamePlan
         public array $blockers,
         public array $notObservable,
     ) {
-        $this->backend = $this->provenance->backend;
-        $this->mapDigest = $this->provenance->mapDigest;
+        PlanStatus::assertPublishable(self::PLAN_TYPE, $status, $edits);
     }
 
     public function isBlocked(): bool
@@ -51,19 +52,17 @@ final readonly class MethodRenamePlan
     public function toArray(): array
     {
         return [
-            'type' => 'method_rename_plan',
+            'type' => self::PLAN_TYPE,
             'contract_version' => self::CONTRACT_VERSION,
             'status' => $this->status,
             'target_id' => $this->targetId,
             'original_name' => $this->originalName,
             'replacement_name' => $this->replacementName,
             'provenance' => $this->provenance->toArray(),
-            'backend' => $this->backend,
-            'map_digest' => $this->mapDigest,
             'family' => $this->family,
-            'edits' => array_map(static fn (RenameEdit $edit): array => $edit->toArray(), $this->edits),
-            'blind_spots' => array_map(static fn (RenameBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),
-            'stale_evidence' => array_map(static fn (RenameStaleEvidence $stale): array => $stale->toArray(), $this->staleEvidence),
+            'edits' => array_map(static fn (PlanEdit $edit): array => $edit->toArray(), $this->edits),
+            'blind_spots' => array_map(static fn (PlanBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),
+            'stale_evidence' => array_map(static fn (PlanStaleEvidence $stale): array => $stale->toArray(), $this->staleEvidence),
             'blockers' => $this->blockers,
             'not_observable' => $this->notObservable,
         ];

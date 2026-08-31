@@ -9,6 +9,10 @@ use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\ResolvedMethod;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /** Builds a read-only, fail-closed rename plan for one method parameter family. */
 final readonly class ParameterRenamePlanner
@@ -50,7 +54,7 @@ final readonly class ParameterRenamePlanner
         $staleEntries = $map->staleEntries();
         usort($staleEntries, static fn (array $left, array $right): int => $left['path'] <=> $right['path']);
         $staleEvidence = array_map(
-            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            static fn (array $entry): PlanStaleEvidence => new PlanStaleEvidence($entry['path'], $entry['reason']),
             $staleEntries,
         );
         if (!str_ends_with($map->backend, '+phpstan')) {
@@ -109,7 +113,7 @@ final readonly class ParameterRenamePlanner
         }
 
         if ($this->familyIsExternallyCallable($family)) {
-            $blindSpots[] = new RenameBlindSpot(
+            $blindSpots[] = new PlanBlindSpot(
                 kind: 'out_of_scope_named_callers',
                 message: 'Public/protected method-family callers outside the indexed PHP scope may use this parameter name.',
             );
@@ -127,7 +131,7 @@ final readonly class ParameterRenamePlanner
                     $originalName,
                     $parameterIndex,
                 );
-                $edits[] = new RenameEdit(
+                $edits[] = new PlanEdit(
                     path: $method->file->path,
                     sourceSha256: $method->file->sha256,
                     startFilePos: $position['start_file_pos'],
@@ -162,7 +166,7 @@ final readonly class ParameterRenamePlanner
                 }
 
                 foreach ($references['references'] as $reference) {
-                    $edits[] = new RenameEdit(
+                    $edits[] = new PlanEdit(
                         path: $method->file->path,
                         sourceSha256: $method->file->sha256,
                         startFilePos: $reference['start_file_pos'],
@@ -257,7 +261,7 @@ final readonly class ParameterRenamePlanner
                 continue;
             }
             if ($call['has_unpack']) {
-                $blindSpots[] = new RenameBlindSpot(
+                $blindSpots[] = new PlanBlindSpot(
                     kind: 'argument_unpacking',
                     message: 'Argument unpacking may supply the renamed parameter as a runtime string key.',
                     path: $relation->file,
@@ -267,7 +271,7 @@ final readonly class ParameterRenamePlanner
             }
 
             foreach ($call['named'] as $position) {
-                $edits[] = new RenameEdit(
+                $edits[] = new PlanEdit(
                     path: $relation->file,
                     sourceSha256: $file->sha256,
                     startFilePos: $position['start_file_pos'],
@@ -345,7 +349,7 @@ final readonly class ParameterRenamePlanner
 
     /**
      * @param array<string, ResolvedMethod> $family
-     * @param list<RenameBlindSpot> $blindSpots
+     * @param list<PlanBlindSpot> $blindSpots
      * @param list<string> $blockers
      */
     private function recordDynamicBlindSpot(
@@ -389,7 +393,7 @@ final readonly class ParameterRenamePlanner
             return;
         }
 
-        $blindSpots[] = new RenameBlindSpot(
+        $blindSpots[] = new PlanBlindSpot(
             kind: 'dynamic_parameter_call',
             message: 'Dynamic dispatch on a parameter-family receiver cannot prove which callable contract owns the named/unpacked argument.',
             path: $relation->file,
@@ -406,8 +410,8 @@ final readonly class ParameterRenamePlanner
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @return list<RenameEdit>
+     * @param list<PlanEdit> $edits
+     * @return list<PlanEdit>
      */
     private function uniqueSortedEdits(array $edits): array
     {
@@ -416,13 +420,13 @@ final readonly class ParameterRenamePlanner
             $unique[$edit->path . ':' . $edit->startFilePos . ':' . $edit->endFilePos] = $edit;
         }
         $edits = array_values($unique);
-        usort($edits, static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
+        usort($edits, static fn (PlanEdit $left, PlanEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
 
         return $edits;
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return list<string>
      */
     private function overlapBlockers(array $edits): array
@@ -430,7 +434,7 @@ final readonly class ParameterRenamePlanner
         $blockers = [];
         $previous = null;
         foreach ($edits as $edit) {
-            if ($previous instanceof RenameEdit && $previous->path === $edit->path && $edit->startFilePos <= $previous->endFilePos) {
+            if ($previous instanceof PlanEdit && $previous->path === $edit->path && $edit->startFilePos <= $previous->endFilePos) {
                 $blockers[] = sprintf(
                     'Parameter rename edits overlap in %s at byte ranges %d-%d and %d-%d.',
                     $edit->path,
@@ -448,9 +452,9 @@ final readonly class ParameterRenamePlanner
 
     /**
      * @param array<string, ResolvedMethod> $family
-     * @param list<RenameEdit> $edits
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      */
     private function result(
@@ -479,7 +483,7 @@ final readonly class ParameterRenamePlanner
             originalName: '$' . $originalName,
             replacementName: '$' . $replacementName,
             parameterIndex: $parameterIndex,
-            provenance: new MethodRenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
+            provenance: new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
             family: $familyIds,
             edits: $status === ParameterRenamePlan::STATUS_BLOCKED ? [] : $edits,
             blindSpots: $blindSpots,
@@ -490,8 +494,8 @@ final readonly class ParameterRenamePlanner
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
-     * @return list<RenameBlindSpot>
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
      */
     private function uniqueBlindSpots(array $blindSpots): array
     {

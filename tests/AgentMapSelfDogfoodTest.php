@@ -50,7 +50,7 @@ final class AgentMapSelfDogfoodTest extends TestCase
         ));
     }
 
-    public function testDiscoversItsGovernedRenameExtensionPointAndTestOwner(): void
+    public function testDiscoversItsGovernedPlanExtensionPointAndTestOwner(): void
     {
         $root = dirname(__DIR__);
         $map = (new AgentMapBuilder())->build(
@@ -61,8 +61,10 @@ final class AgentMapSelfDogfoodTest extends TestCase
                 'src/Cli/FunctionRenameCliApplication.php',
                 'src/Cli/PropertyRenameCliApplication.php',
                 'src/Cli/RenameCliApplication.php',
-                'src/Cli/RenamePlanCapability.php',
-                'src/Cli/RenamePlanCliApplication.php',
+                'src/Cli/ClassMoveCliApplication.php',
+                'src/Cli/MethodRemovalCliApplication.php',
+                'src/Cli/PlanCliApplication.php',
+                'src/Plan/PlanCapability.php',
                 'src/Rename/PropertyNameLocator.php',
                 'src/Rename/PropertyRenamePlanner.php',
                 'tests/CliApplicationTest.php',
@@ -73,10 +75,10 @@ final class AgentMapSelfDogfoodTest extends TestCase
             phpStanMemoryLimit: '512M',
         );
 
-        $match = $map->query('RenamePlanCliApplication');
+        $match = $map->query('PlanCliApplication');
         self::assertSame('exact', $match->matchType);
         self::assertSame(
-            ['src/Cli/RenamePlanCliApplication.php'],
+            ['src/Cli/PlanCliApplication.php'],
             array_map(static fn (FileEntry $file): string => $file->path, $match->files),
         );
 
@@ -86,7 +88,7 @@ final class AgentMapSelfDogfoodTest extends TestCase
             array_map(static fn (FileEntry $file): string => $file->path, $likelyTests),
         );
 
-        $interfaceId = 'interface:voku\\AgentMap\\Cli\\RenamePlanCliApplication';
+        $interfaceId = 'interface:voku\\AgentMap\\Cli\\PlanCliApplication';
         $implementers = [];
         foreach ($map->relations as $relation) {
             if ($relation->kind === 'implements' && in_array($interfaceId, $relation->targetIds, true)) {
@@ -94,16 +96,19 @@ final class AgentMapSelfDogfoodTest extends TestCase
             }
         }
         sort($implementers, SORT_STRING);
+        // The extension point spans the whole plan family, not just renames.
         self::assertSame([
+            'class:voku\\AgentMap\\Cli\\ClassMoveCliApplication',
             'class:voku\\AgentMap\\Cli\\ClassRenameCliApplication',
             'class:voku\\AgentMap\\Cli\\FunctionRenameCliApplication',
+            'class:voku\\AgentMap\\Cli\\MethodRemovalCliApplication',
             'class:voku\\AgentMap\\Cli\\PropertyRenameCliApplication',
             'class:voku\\AgentMap\\Cli\\RenameCliApplication',
         ], $implementers);
 
         self::assertNotEmpty(array_filter(
             $map->relations,
-            static fn (RelationEntry $relation): bool => $relation->sourceId === 'method:voku\\AgentMap\\Cli\\CliApplication::renameApplications'
+            static fn (RelationEntry $relation): bool => $relation->sourceId === 'method:voku\\AgentMap\\Cli\\CliApplication::planApplications'
                 && $relation->kind === 'references_type'
                 && in_array($interfaceId, $relation->targetIds, true),
         ));

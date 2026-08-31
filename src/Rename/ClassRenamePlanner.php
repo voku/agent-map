@@ -10,6 +10,11 @@ use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\SymbolEntry;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanMove;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /** Builds a read-only, fail-closed plan for one same-namespace PHP class rename. */
 final readonly class ClassRenamePlanner
@@ -31,7 +36,7 @@ final readonly class ClassRenamePlanner
         $blockers = [];
         $blindSpots = [];
         $staleEvidence = array_map(
-            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            static fn (array $entry): PlanStaleEvidence => new PlanStaleEvidence($entry['path'], $entry['reason']),
             $map->staleEntries(),
         );
         if ($symbol->reconciliationStatus === 'conflict') {
@@ -60,7 +65,7 @@ final readonly class ClassRenamePlanner
         $edits = [];
         try {
             $declaration = $locator->declaration($file->path, $symbol->lineStart, $symbol->lineEnd, $symbol->name);
-            $edits[] = new RenameEdit(
+            $edits[] = new PlanEdit(
                 path: $file->path,
                 sourceSha256: $file->sha256,
                 startFilePos: $declaration['start_file_pos'],
@@ -102,10 +107,10 @@ final readonly class ClassRenamePlanner
 
         $moves = [];
         [$move, $moveBlindSpot, $moveBlocker] = $this->fileMove($map, $file, $symbol, $replacementShort);
-        if ($move instanceof RenameMove) {
+        if ($move instanceof PlanMove) {
             $moves[] = $move;
         }
-        if ($moveBlindSpot instanceof RenameBlindSpot) {
+        if ($moveBlindSpot instanceof PlanBlindSpot) {
             $blindSpots[] = $moveBlindSpot;
         }
         if (is_string($moveBlocker)) {
@@ -184,7 +189,7 @@ final readonly class ClassRenamePlanner
         return [$replacementFqn, $replacementShort];
     }
 
-    /** @return array{0: ?RenameMove, 1: ?RenameBlindSpot, 2: ?string} */
+    /** @return array{0: ?PlanMove, 1: ?PlanBlindSpot, 2: ?string} */
     private function fileMove(AgentMapIndex $map, FileEntry $file, SymbolEntry $symbol, string $replacementShort): array
     {
         $expectedBasename = $symbol->name . '.php';
@@ -192,7 +197,7 @@ final readonly class ClassRenamePlanner
         if (strcasecmp($basename, $expectedBasename) !== 0) {
             return [
                 null,
-                new RenameBlindSpot(
+                new PlanBlindSpot(
                     kind: 'autoload_path',
                     message: 'Class file basename does not match the current class name; autoload/file-path consequences need host review.',
                     path: $file->path,
@@ -211,7 +216,7 @@ final readonly class ClassRenamePlanner
         }
 
         $blindSpot = count($file->symbols) > 1
-            ? new RenameBlindSpot(
+            ? new PlanBlindSpot(
                 kind: 'multi_symbol_file_move',
                 message: 'Renamed class shares its file with other declarations; moving the file may affect their loading or autoload contract.',
                 path: $file->path,
@@ -221,7 +226,7 @@ final readonly class ClassRenamePlanner
             : null;
 
         return [
-            new RenameMove(
+            new PlanMove(
                 fromPath: $file->path,
                 toPath: $toPath,
                 sourceSha256: $file->sha256,
@@ -234,8 +239,8 @@ final readonly class ClassRenamePlanner
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @return list<RenameEdit>
+     * @param list<PlanEdit> $edits
+     * @return list<PlanEdit>
      */
     private function uniqueSortedEdits(array $edits): array
     {
@@ -244,13 +249,13 @@ final readonly class ClassRenamePlanner
             $unique[$edit->path . ':' . $edit->startFilePos . ':' . $edit->endFilePos] = $edit;
         }
         $edits = array_values($unique);
-        usort($edits, static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
+        usort($edits, static fn (PlanEdit $left, PlanEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
 
         return $edits;
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return list<string>
      */
     private function overlapBlockers(array $edits): array
@@ -285,10 +290,10 @@ final readonly class ClassRenamePlanner
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @param list<RenameMove> $moves
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanMove> $moves
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      */
     private function result(
@@ -312,7 +317,7 @@ final readonly class ClassRenamePlanner
             targetId: $symbol->id(),
             originalFqn: ltrim($symbol->fqn, '\\'),
             replacementFqn: $replacementFqn,
-            provenance: new RenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
+            provenance: new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
             edits: $status === ClassRenamePlan::STATUS_BLOCKED ? [] : $edits,
             moves: $status === ClassRenamePlan::STATUS_BLOCKED ? [] : $moves,
             blindSpots: $blindSpots,
@@ -323,8 +328,8 @@ final readonly class ClassRenamePlanner
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
-     * @return list<RenameBlindSpot>
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
      */
     private function uniqueBlindSpots(array $blindSpots): array
     {

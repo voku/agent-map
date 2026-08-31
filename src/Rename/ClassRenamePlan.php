@@ -4,19 +4,28 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Rename;
 
+use voku\AgentMap\Plan\GovernedPlan;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanMove;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
+use voku\AgentMap\Plan\PlanStatus;
+
 /** Immutable evidence package for one same-namespace PHP class rename. */
-final readonly class ClassRenamePlan
+final readonly class ClassRenamePlan implements GovernedPlan
 {
+    public const PLAN_TYPE = 'class_rename_plan';
     public const CONTRACT_VERSION = '1.0';
-    public const STATUS_SAFE = 'safe';
-    public const STATUS_REVIEW_REQUIRED = 'review_required';
-    public const STATUS_BLOCKED = 'blocked';
+    public const STATUS_SAFE = PlanStatus::SAFE;
+    public const STATUS_REVIEW_REQUIRED = PlanStatus::REVIEW_REQUIRED;
+    public const STATUS_BLOCKED = PlanStatus::BLOCKED;
 
     /**
-     * @param list<RenameEdit> $edits
-     * @param list<RenameMove> $moves
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanMove> $moves
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      * @param list<string> $notObservable
      */
@@ -25,7 +34,7 @@ final readonly class ClassRenamePlan
         public string $targetId,
         public string $originalFqn,
         public string $replacementFqn,
-        public RenameProvenance $provenance,
+        public PlanProvenance $provenance,
         public array $edits,
         public array $moves,
         public array $blindSpots,
@@ -33,6 +42,7 @@ final readonly class ClassRenamePlan
         public array $blockers,
         public array $notObservable,
     ) {
+        PlanStatus::assertPublishable(self::PLAN_TYPE, $status, $edits, $moves);
     }
 
     public function isBlocked(): bool
@@ -44,17 +54,17 @@ final readonly class ClassRenamePlan
     public function toArray(): array
     {
         return [
-            'type' => 'class_rename_plan',
+            'type' => self::PLAN_TYPE,
             'contract_version' => self::CONTRACT_VERSION,
             'status' => $this->status,
             'target_id' => $this->targetId,
             'original_fqn' => $this->originalFqn,
             'replacement_fqn' => $this->replacementFqn,
             'provenance' => $this->provenance->toArray(),
-            'edits' => array_map(static fn (RenameEdit $edit): array => $edit->toArray(), $this->edits),
-            'moves' => array_map(static fn (RenameMove $move): array => $move->toArray(), $this->moves),
-            'blind_spots' => array_map(static fn (RenameBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),
-            'stale_evidence' => array_map(static fn (RenameStaleEvidence $stale): array => $stale->toArray(), $this->staleEvidence),
+            'edits' => array_map(static fn (PlanEdit $edit): array => $edit->toArray(), $this->edits),
+            'moves' => array_map(static fn (PlanMove $move): array => $move->toArray(), $this->moves),
+            'blind_spots' => array_map(static fn (PlanBlindSpot $blindSpot): array => $blindSpot->toArray(), $this->blindSpots),
+            'stale_evidence' => array_map(static fn (PlanStaleEvidence $stale): array => $stale->toArray(), $this->staleEvidence),
             'blockers' => $this->blockers,
             'not_observable' => $this->notObservable,
         ];

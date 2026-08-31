@@ -10,6 +10,10 @@ use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\SymbolEntry;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /** Builds a read-only, fail-closed plan for one proven private PHP property rename. */
 final readonly class PropertyRenamePlanner
@@ -40,14 +44,14 @@ final readonly class PropertyRenamePlanner
 
         $staleEntries = $map->staleEntries();
         usort($staleEntries, static fn (array $left, array $right): int => $left['path'] <=> $right['path']);
-        /** @var list<RenameStaleEvidence> $staleEvidence */
+        /** @var list<PlanStaleEvidence> $staleEvidence */
         $staleEvidence = array_map(
-            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            static fn (array $entry): PlanStaleEvidence => new PlanStaleEvidence($entry['path'], $entry['reason']),
             $staleEntries,
         );
         /** @var list<string> $blockers */
         $blockers = [];
-        /** @var list<RenameBlindSpot> $blindSpots */
+        /** @var list<PlanBlindSpot> $blindSpots */
         $blindSpots = [];
 
         if (!str_ends_with($map->backend, '+phpstan')) {
@@ -94,7 +98,7 @@ final readonly class PropertyRenamePlanner
 
         foreach ($owner->methods as $method) {
             if (in_array(strtolower($method->name), ['__get', '__set', '__isset', '__unset'], true)) {
-                $blindSpots[] = new RenameBlindSpot(
+                $blindSpots[] = new PlanBlindSpot(
                     kind: 'magic_property_dispatch',
                     message: 'The owner defines magic property dispatch; runtime property-name strings may overlap the renamed private property.',
                     path: $file->path,
@@ -108,8 +112,8 @@ final readonly class PropertyRenamePlanner
             return $this->result($map, $targetId, $ownerFqn, $originalName, $replacementName, [], $blindSpots, $staleEvidence, $blockers);
         }
 
-        /** @var list<RenameEdit> $edits */
-        $edits = [new RenameEdit(
+        /** @var list<PlanEdit> $edits */
+        $edits = [new PlanEdit(
             path: $file->path,
             sourceSha256: $file->sha256,
             startFilePos: $declaration['start_file_pos'],
@@ -133,7 +137,7 @@ final readonly class PropertyRenamePlanner
                 && $this->receiverMayContain($relation->receiverType, $ownerFqn)
                 && $locator->isDynamicAccess($relation->file, $relation->lineStart, $relation->lineEnd)
             ) {
-                $blindSpots[] = new RenameBlindSpot(
+                $blindSpots[] = new PlanBlindSpot(
                     kind: 'dynamic_property_name',
                     message: 'A dynamic property access on the target owner may resolve to the renamed property at runtime.',
                     path: $relation->file,
@@ -177,7 +181,7 @@ final readonly class PropertyRenamePlanner
             }
             try {
                 $position = $locator->access($relation->file, $relation->lineStart, $relation->lineEnd, $originalName);
-                $edits[] = new RenameEdit(
+                $edits[] = new PlanEdit(
                     path: $relation->file,
                     sourceSha256: $accessFile->sha256,
                     startFilePos: $position['start_file_pos'],
@@ -263,31 +267,31 @@ final readonly class PropertyRenamePlanner
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @return list<RenameEdit>
+     * @param list<PlanEdit> $edits
+     * @return list<PlanEdit>
      */
     private function uniqueSortedEdits(array $edits): array
     {
-        /** @var array<string, RenameEdit> $unique */
+        /** @var array<string, PlanEdit> $unique */
         $unique = [];
         foreach ($edits as $edit) {
             $unique[$edit->path . ':' . $edit->startFilePos . ':' . $edit->endFilePos] = $edit;
         }
         $result = array_values($unique);
-        usort($result, static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
+        usort($result, static fn (PlanEdit $left, PlanEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos);
 
         return $result;
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return list<string>
      */
     private function overlapBlockers(array $edits): array
     {
         /** @var list<string> $blockers */
         $blockers = [];
-        /** @var array<string, RenameEdit> $coveringByPath */
+        /** @var array<string, PlanEdit> $coveringByPath */
         $coveringByPath = [];
         foreach ($edits as $edit) {
             $covering = $coveringByPath[$edit->path] ?? null;
@@ -310,9 +314,9 @@ final readonly class PropertyRenamePlanner
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      */
     private function result(
@@ -338,7 +342,7 @@ final readonly class PropertyRenamePlanner
             ownerFqn: $ownerFqn,
             originalName: $originalName,
             replacementName: $replacementName,
-            provenance: new RenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
+            provenance: new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
             edits: $status === PropertyRenamePlan::STATUS_BLOCKED ? [] : $edits,
             blindSpots: $blindSpots,
             staleEvidence: $staleEvidence,
@@ -348,12 +352,12 @@ final readonly class PropertyRenamePlanner
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
-     * @return list<RenameBlindSpot>
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
      */
     private function uniqueBlindSpots(array $blindSpots): array
     {
-        /** @var array<string, RenameBlindSpot> $unique */
+        /** @var array<string, PlanBlindSpot> $unique */
         $unique = [];
         foreach ($blindSpots as $blindSpot) {
             $unique[implode(':', [$blindSpot->kind, $blindSpot->path ?? '', (string) ($blindSpot->lineStart ?? 0), (string) ($blindSpot->lineEnd ?? 0)])] = $blindSpot;

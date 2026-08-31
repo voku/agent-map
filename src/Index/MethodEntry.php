@@ -68,14 +68,9 @@ final readonly class MethodEntry
     public static function fromArray(array $data): self
     {
         $parameters = [];
-        $rawParameters = $data['parameters'] ?? $data['params'] ?? [];
-        foreach (is_array($rawParameters) ? $rawParameters : [] as $key => $parameter) {
+        foreach (is_array($data['parameters'] ?? null) ? $data['parameters'] : [] as $parameter) {
             if (is_array($parameter)) {
                 $parameters[] = ParameterEntry::fromArray($parameter);
-                continue;
-            }
-            if (is_string($parameter)) {
-                $parameters[] = ParameterEntry::fromLegacyString($parameter, is_string($key) ? $key : null);
             }
         }
 
@@ -83,8 +78,6 @@ final readonly class MethodEntry
         foreach (is_array($data['attributes'] ?? null) ? $data['attributes'] : [] as $attribute) {
             $attributes[] = (string) $attribute;
         }
-
-        $legacyReturnType = self::nullableString($data['return_type'] ?? null);
 
         return new self(
             name: (string) ($data['name'] ?? ''),
@@ -95,7 +88,7 @@ final readonly class MethodEntry
             abstract: (bool) ($data['abstract'] ?? false),
             final: (bool) ($data['final'] ?? false),
             parameters: $parameters,
-            nativeReturnType: self::nullableString($data['native_return_type'] ?? null) ?? $legacyReturnType,
+            nativeReturnType: self::nullableString($data['native_return_type'] ?? null),
             phpDocReturnType: self::nullableString($data['phpdoc_return_type'] ?? null),
             resolvedReturnType: self::nullableString($data['resolved_return_type'] ?? null),
             attributes: $attributes,

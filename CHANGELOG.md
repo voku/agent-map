@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.9.0 - 2026-08-31
+
+### Added
+
+- Publish the versioned, read-only `class_move_plan@1.0` contract for relocating one class into another namespace, with Composer PSR-4 destination evidence, the namespace declaration edit, exact hash-bound import and reference edits, one preconditioned file move, blockers, review-required evidence, stale evidence, and explicit non-observable boundaries.
+- Publish `plan-capabilities`, a family-wide governed-contract registry covering all ten rename, removal and move contracts with a `family` field, backed by one `PlanCliApplication` interface that every plan boundary implements so routing and discovery cannot drift apart.
+- Declare the persisted map schema contract on `AgentMapIndex` (`SCHEMA_VERSION`, `SUPPORTED_SCHEMA_MAJOR`) and reject a map from any other schema major on read, with a rebuild instruction instead of a partially reconstructed map.
+- Document what agent-map is for and what it is not for, the governed plan status semantics, and the supported consumer API boundary in the README.
+- Document `search` and `search-index` in `agent-map help` and the README. They were routable public commands listed in neither, including their FTS5/search-database activation preconditions and their seed-generator rather than location-oracle role.
+- Publish `docs/stability.md`: the pre-1.0 contract audit. It classifies every public surface into stable, supported-conditional, experimental, diagnostic or subtraction candidate, states what 1.0 freezes (persisted map schema, plan contract semantics, artifact ownership, library-over-CLI, PHPStan optionality), records the six 0.9 surface decisions settled in this release, and records the 1.0 gate.
+- Declare the shared `voku\AgentMap\Plan\GovernedPlan` behaviour contract (`isBlocked()`, `toArray()`) and implement it on every governed rename, removal and move plan, so a mutation host can consume the family through one type without the concrete evidence shapes being collapsed into one.
+- Add `class-move-plan` to the public CLI routing boundary in `text`, `json` and `toon`, plus a dedicated class-move dogfood that publishes the evidence into a real PSR-4 fixture and rebuilds the map to prove the relocated identity.
+- Publish the versioned, read-only `parameter_rename_plan@1.0` contract for one already-chosen method parameter, with typed provenance, override/interface family evidence, exact hash-bound edits for the declaration, direct lexical method-body references and semantically resolved named-argument labels, blockers, review-required evidence, stale evidence, and explicit non-observable boundaries.
+- Register `parameter-rename-plan` in the governed plan-capability registry so hosts can discover the contract instead of probing CLI text.
+
+### Removed
+
+- Delete `rank`. It had no consumer, appeared in no skill and its one-hop neighbour count is derivable from `callers`/`callees`; `GraphRanker` survives as an internal collaborator of `discover` rather than as public API.
+- Delete `rename-capabilities`, superseded by `plan-capabilities`. Replacing the command rather than adding a second one keeps the rule that there is no parallel API.
+- Delete the schema-1.x-only map readers the new schema check makes unreachable: the `sha1` fallback on `FileEntry`, the legacy `return_type` on `SymbolEntry` and `MethodEntry`, the `params` alias, and `ParameterEntry::fromLegacyString()`.
+- Delete the `MethodRenamePlan::$backend` / `::$mapDigest` properties and the duplicated top-level `backend` / `map_digest` keys in `method_rename_plan` output. They were announced in 0.8.4 as pre-0.9 compatibility aliases; `provenance` is now the single evidence identity across the whole plan family.
+- Delete `MethodRenameProvenance`, an exact duplicate of the shared provenance type that ships in this release as `Plan\PlanProvenance`. `MethodRenamePlan` and `ParameterRenamePlan` now use the same provenance type as every other governed plan; machine output is unchanged.
+
+### Changed
+
+- Block a class move when any indexed reference file declares more than one namespace, because imports are namespace-block-local: a file-wide import table made a bare name in one block look import-covered by an import in another, so the plan skipped the edit that name needed and still reported `safe`, leaving the reference bound to the identity the move was taking away.
+- Require `schema_version` to arrive as the declared `major.minor` string. A bare major, or a JSON number that merely casts to one, is a map from another producer; accepting it because its first characters matched was the guess the schema check exists to prevent.
+- Enforce the blocked-publishes-nothing invariant at the plan boundary instead of trusting ten planners to apply it: `Plan\PlanStatus::assertPublishable()` refuses to construct a blocked plan that carries edits or moves, and refuses a status outside the governed vocabulary. Each plan now declares its `PLAN_TYPE` and derives both its machine `type` and its status constants from that single vocabulary.
+- Refuse to plan a class move through a Composer PSR-4 mapping that leaves the project root. `../sibling/src` blocks, and an absolute `/opt/lib` blocks rather than being trimmed into a plausible in-project destination; `Plan\PlanMove` refuses to represent such a path at all, and blockers quote the directory as `composer.json` declares it.
+- Class relocation stays a separate contract from class renaming: `class-move-plan` keeps the class name and changes only the namespace, and a request that would do both is rejected instead of silently widening `class-rename-plan`.
+- The destination file path is derived from declared PSR-4 mappings rather than guessed. A missing manifest, an uncovered destination prefix, equally specific competing mappings, or a classmap layout covering either end fails closed, as do destination identity/file collisions, grouped imports of the moved class, multi-symbol or multi-namespace files, braced namespaces, global-namespace sources, and namespaced function fallbacks the move would rebind.
+- References that resolved through the enclosing namespace are pinned to fully qualified identities and reported as review evidence; contract 1.0 does not synthesize new `use` statements.
+- Move the value objects the whole plan family shares out of `Rename\`: `RenameProvenance`, `RenameEdit`, `RenameBlindSpot`, `RenameStaleEvidence` and `RenameMove` are now `voku\AgentMap\Plan\PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence` and `PlanMove`. Machine output is unchanged.
+- Rename `Cli\RenamePlanCapability` to `Plan\PlanCapability` (with a leading `family` argument) and `Cli\RenamePlanCliApplication` to `Cli\PlanCliApplication`, now implemented by the removal and move boundaries too.
+- State the output-format rule rather than leaving it implicit: `text` and `markdown` are human projections, `json` and `toon` are the machine boundary, and governed plans deliberately do not emit `markdown`.
+- Pin the shared plan envelope in regression coverage: every governed plan agrees on the `safe` / `review_required` / `blocked` vocabulary, one `Plan\PlanProvenance`, and the same `type` / `contract_version` / `status` / `target_id` / `provenance` / `edits` / `blind_spots` / `stale_evidence` / `blockers` / `not_observable` machine keys.
+- Parameter renaming treats one parameter as a single binding: positional arguments and unrelated same-name parameters are deliberately left untouched, while split family parameter names, replacement parameter/local-variable collisions, nested closure/arrow binding ambiguity, mixed-target named calls, and ambiguous source mapping fail closed without publishing edits.
+
+### Validation
+
+- PR #56 passed the PHP 8.2-8.5 CI matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood (extended to exercise the registered parameter capability), and removal-plan validation on exact head `9df8b09e2e86c2a625790d6f5da7040af90b80ca` before squash merge to `7973d35f926bdc47a0fbca50888414c33a083af4`.
+- The complete check set passed on exact head `a4bf01cfafe563571eea4c74f4d9560c828e6adf`: the PHP 8.2-8.5 test matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood, removal-plan dogfood, and the class-move-plan dogfood. It passed the same set on the earlier candidate heads `3d4384e148787ebb5279891bffdf19fdc144c6fe` (under PR #57 and again under its successor PR #58) and `6b184d77ac85def9f8ef85568b3703913b95b33a`.
+- Review on `3d4384e` found the cross-namespace-block import leak, the incomplete `schema_version` acceptance, and a stale provenance type name in `UPGRADING.md`. All three are fixed above, each with a regression test confirmed to fail without its fix. The same head was verified locally with `composer ci` and by executing all three plan dogfood workflows step by step.
+
+### Release boundary
+
+- 0.9.0 is the feature- and boundary-complete candidate for 1.0, not another feature release. [docs/stability.md](docs/stability.md) records the tier of every public surface, what 1.0 freezes, the six surface decisions settled here, and the 1.0 gate. 0.9.x hardens consumers and compatibility rather than adding capabilities; `method_move_plan` ([#52](https://github.com/voku/agent-map/issues/52)) is explicitly post-1.0.
+
 ## 0.8.8 - 2026-08-23
 
 ### Added

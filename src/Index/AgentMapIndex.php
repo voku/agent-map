@@ -8,6 +8,18 @@ use RuntimeException;
 
 final readonly class AgentMapIndex
 {
+    /** The persisted map schema this build writes. */
+    public const SCHEMA_VERSION = '2.0';
+
+    /**
+     * The persisted schema major this build can read.
+     *
+     * A map from another major is not partially readable: the fields this build looks for would
+     * simply be absent, and the result would be a map that answers questions with silence instead
+     * of an error. Rebuilding is cheap; a wrong answer about where a symbol lives is not.
+     */
+    public const SUPPORTED_SCHEMA_MAJOR = '2';
+
     /**
      * @param list<FileEntry> $files
      * @param list<RelationEntry> $relations
@@ -404,6 +416,19 @@ final readonly class AgentMapIndex
     /** @param array<string, mixed> $data */
     public static function fromArray(array $data): self
     {
+        if (!array_key_exists('schema_version', $data)) {
+            throw new RuntimeException(
+                'Agent map has no schema_version; it predates the supported '
+                . self::SUPPORTED_SCHEMA_MAJOR . '.x schema. Rebuild it with agent-map build.',
+            );
+        }
+        $rawSchemaVersion = $data['schema_version'];
+        if (!is_string($rawSchemaVersion) || preg_match('/^[0-9]+\.[0-9]+$/D', $rawSchemaVersion) !== 1) {
+            throw new RuntimeException('Agent map schema_version must be a major.minor string. Rebuild the map with agent-map build.');
+        }
+        $schemaVersion = $rawSchemaVersion;
+        self::assertSupportedSchema($schemaVersion);
+
         $files = [];
         foreach (is_array($data['files'] ?? null) ? $data['files'] : [] as $file) {
             if (is_array($file)) {
@@ -425,7 +450,7 @@ final readonly class AgentMapIndex
         $fingerprint = is_array($data['fingerprint'] ?? null) ? AnalysisFingerprint::fromArray($data['fingerprint']) : null;
 
         return new self(
-            schemaVersion: (string) ($data['schema_version'] ?? '1.0'),
+            schemaVersion: $schemaVersion,
             root: (string) ($data['root'] ?? ''),
             backend: (string) ($data['backend'] ?? 'simple'),
             files: $files,
@@ -433,6 +458,26 @@ final readonly class AgentMapIndex
             diagnostics: $diagnostics,
             fingerprint: $fingerprint,
         );
+    }
+
+    private static function assertSupportedSchema(string $schemaVersion): void
+    {
+        if ($schemaVersion === '') {
+            throw new RuntimeException(
+                'Agent map has no schema_version; it predates the supported '
+                . self::SUPPORTED_SCHEMA_MAJOR . '.x schema. Rebuild it with agent-map build.',
+            );
+        }
+
+        $separator = strpos($schemaVersion, '.');
+        $major = $separator === false ? $schemaVersion : substr($schemaVersion, 0, $separator);
+        if ($major !== self::SUPPORTED_SCHEMA_MAJOR) {
+            throw new RuntimeException(sprintf(
+                'Unsupported agent map schema version %s; this build reads %s.x. Rebuild the map with agent-map build.',
+                $schemaVersion,
+                self::SUPPORTED_SCHEMA_MAJOR,
+            ));
+        }
     }
 
     /** @return array<string, SymbolEntry> */

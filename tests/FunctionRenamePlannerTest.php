@@ -15,7 +15,7 @@ use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Rename\FunctionRenamePlan;
 use voku\AgentMap\Rename\FunctionRenamePlanner;
-use voku\AgentMap\Rename\RenameEdit;
+use voku\AgentMap\Plan\PlanEdit;
 
 /**
  * Function-call context is adapted from Rector's
@@ -159,7 +159,7 @@ final class FunctionRenamePlannerTest extends TestCase
     /** @return list<string> */
     private function roles(FunctionRenamePlan $plan): array
     {
-        $roles = array_map(static fn (RenameEdit $edit): string => $edit->role, $plan->edits);
+        $roles = array_map(static fn (PlanEdit $edit): string => $edit->role, $plan->edits);
         sort($roles, SORT_STRING);
 
         return $roles;
@@ -168,7 +168,7 @@ final class FunctionRenamePlannerTest extends TestCase
     /** @return list<string> */
     private function expected(FunctionRenamePlan $plan): array
     {
-        return array_map(static fn (RenameEdit $edit): string => $edit->expected, $plan->edits);
+        return array_map(static fn (PlanEdit $edit): string => $edit->expected, $plan->edits);
     }
 
     private function semanticMap(): AgentMapIndex

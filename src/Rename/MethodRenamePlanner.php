@@ -9,6 +9,10 @@ use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\ResolvedMethod;
+use voku\AgentMap\Plan\PlanBlindSpot;
+use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Plan\PlanStaleEvidence;
 
 /** Builds a read-only, fail-closed rename plan for one PHP method family. */
 final readonly class MethodRenamePlanner
@@ -36,7 +40,7 @@ final readonly class MethodRenamePlanner
         $staleEntries = $map->staleEntries();
         usort($staleEntries, static fn (array $left, array $right): int => $left['path'] <=> $right['path']);
         $staleEvidence = array_map(
-            static fn (array $entry): RenameStaleEvidence => new RenameStaleEvidence($entry['path'], $entry['reason']),
+            static fn (array $entry): PlanStaleEvidence => new PlanStaleEvidence($entry['path'], $entry['reason']),
             $staleEntries,
         );
         if (!str_ends_with($map->backend, '+phpstan')) {
@@ -71,7 +75,7 @@ final readonly class MethodRenamePlanner
                     $method->method->lineEnd,
                     $method->method->name,
                 );
-                $edits[] = new RenameEdit(
+                $edits[] = new PlanEdit(
                     path: $method->file->path,
                     sourceSha256: $method->file->sha256,
                     startFilePos: $position['start_file_pos'],
@@ -137,7 +141,7 @@ final readonly class MethodRenamePlanner
 
             try {
                 $position = $locator->call($relation->file, $relation->lineStart, $relation->lineEnd, $originalName);
-                $edits[] = new RenameEdit(
+                $edits[] = new PlanEdit(
                     path: $relation->file,
                     sourceSha256: $file->sha256,
                     startFilePos: $position['start_file_pos'],
@@ -306,7 +310,7 @@ final readonly class MethodRenamePlanner
 
     /**
      * @param array<string, ResolvedMethod> $family
-     * @param list<RenameBlindSpot> $blindSpots
+     * @param list<PlanBlindSpot> $blindSpots
      */
     private function recordDynamicBlindSpot(RelationEntry $relation, array $family, array &$blindSpots): void
     {
@@ -317,7 +321,7 @@ final readonly class MethodRenamePlanner
             if (!$this->receiverTypeContainsOwner($relation->receiverType, $method->owner->fqn)) {
                 continue;
             }
-            $blindSpots[] = new RenameBlindSpot(
+            $blindSpots[] = new PlanBlindSpot(
                 kind: 'dynamic_method_name',
                 message: 'Dynamic method dispatch on a rename-family receiver cannot prove which runtime method name is used.',
                 path: $relation->file,
@@ -339,8 +343,8 @@ final readonly class MethodRenamePlanner
     }
 
     /**
-     * @param list<RenameEdit> $edits
-     * @return list<RenameEdit>
+     * @param list<PlanEdit> $edits
+     * @return list<PlanEdit>
      */
     private function uniqueSortedEdits(array $edits): array
     {
@@ -352,14 +356,14 @@ final readonly class MethodRenamePlanner
         $edits = array_values($unique);
         usort(
             $edits,
-            static fn (RenameEdit $left, RenameEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos,
+            static fn (PlanEdit $left, PlanEdit $right): int => $left->path <=> $right->path ?: $left->startFilePos <=> $right->startFilePos,
         );
 
         return $edits;
     }
 
     /**
-     * @param list<RenameEdit> $edits
+     * @param list<PlanEdit> $edits
      * @return list<string>
      */
     private function overlapBlockers(array $edits): array
@@ -367,7 +371,7 @@ final readonly class MethodRenamePlanner
         $blockers = [];
         $previous = null;
         foreach ($edits as $edit) {
-            if ($previous instanceof RenameEdit && $previous->path === $edit->path && $edit->startFilePos <= $previous->endFilePos) {
+            if ($previous instanceof PlanEdit && $previous->path === $edit->path && $edit->startFilePos <= $previous->endFilePos) {
                 $blockers[] = sprintf(
                     'Rename edits overlap in %s at byte ranges %d-%d and %d-%d.',
                     $edit->path,
@@ -385,9 +389,9 @@ final readonly class MethodRenamePlanner
 
     /**
      * @param array<string, ResolvedMethod> $family
-     * @param list<RenameEdit> $edits
-     * @param list<RenameBlindSpot> $blindSpots
-     * @param list<RenameStaleEvidence> $staleEvidence
+     * @param list<PlanEdit> $edits
+     * @param list<PlanBlindSpot> $blindSpots
+     * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
      */
     private function result(
@@ -424,14 +428,14 @@ final readonly class MethodRenamePlanner
         );
     }
 
-    private function provenance(AgentMapIndex $map): MethodRenameProvenance
+    private function provenance(AgentMapIndex $map): PlanProvenance
     {
-        return new MethodRenameProvenance($map->mapDigest(), $map->backend, $map->fingerprint);
+        return new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint);
     }
 
     /**
-     * @param list<RenameBlindSpot> $blindSpots
-     * @return list<RenameBlindSpot>
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
      */
     private function uniqueBlindSpots(array $blindSpots): array
     {

@@ -9,17 +9,47 @@ use InvalidArgumentException;
 use Throwable;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
+use voku\AgentMap\Plan\PlanCapability;
 use voku\AgentMap\Removal\ClassConstantRemovalPlan;
 use voku\AgentMap\Removal\ClassConstantRemovalPlanner;
 
 /** Read-only CLI boundary for exact unused-private-class constant removal evidence. */
-final readonly class ClassConstantRemovalCliApplication
+final readonly class ClassConstantRemovalCliApplication implements PlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
     public function __construct(?MapArtifactPaths $artifacts = null)
     {
         $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
+    }
+
+    public function capability(): PlanCapability
+    {
+        return new PlanCapability(
+            family: PlanCapability::FAMILY_REMOVAL,
+            kind: 'class_constant',
+            command: 'class-constant-removal-plan',
+            planType: 'class_constant_removal_plan',
+            contractVersion: ClassConstantRemovalPlan::CONTRACT_VERSION,
+            semanticBackend: 'phpstan',
+        );
+    }
+
+    /** @param list<string> $argv */
+    public function shouldAppendToGeneralHelp(array $argv): bool
+    {
+        return count($argv) === 2 && in_array($argv[1], ['help', '-h', '--help'], true);
+    }
+
+    public function helpOverview(): string
+    {
+        return <<<'TEXT'
+
+Class-constant removal evidence:
+  class-constant-removal-plan Build an exact unused-private-class-constant deletion plan
+
+Run `agent-map help class-constant-removal-plan` for details.
+TEXT;
     }
 
     /** @param list<string> $argv */
