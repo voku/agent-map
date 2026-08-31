@@ -47,8 +47,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Validation
 
 - PR #56 passed the PHP 8.2-8.5 CI matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood (extended to exercise the registered parameter capability), and removal-plan validation on exact head `9df8b09e2e86c2a625790d6f5da7040af90b80ca` before squash merge to `7973d35f926bdc47a0fbca50888414c33a083af4`.
-- The candidate passed its complete check set on head `3d4384e148787ebb5279891bffdf19fdc144c6fe`, under PR #57 and again under its successor PR #58: the PHP 8.2-8.5 test matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood, removal-plan dogfood, and the class-move-plan dogfood.
-- Review on that head then found the cross-namespace-block import leak, the incomplete `schema_version` acceptance, and a stale provenance type name in `UPGRADING.md`. All three are fixed above, each with a regression test. The head carrying those fixes is verified locally with `composer ci` and by executing all three plan dogfood workflows step by step; its exact-head CI record is added once those checks report.
+- The complete check set passed on exact head `a4bf01cfafe563571eea4c74f4d9560c828e6adf`: the PHP 8.2-8.5 test matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood, removal-plan dogfood, and the class-move-plan dogfood. It passed the same set on the earlier candidate heads `3d4384e148787ebb5279891bffdf19fdc144c6fe` (under PR #57 and again under its successor PR #58) and `6b184d77ac85def9f8ef85568b3703913b95b33a`.
+- Review on `3d4384e` found the cross-namespace-block import leak, the incomplete `schema_version` acceptance, and a stale provenance type name in `UPGRADING.md`. All three are fixed above, each with a regression test confirmed to fail without its fix. The same head was verified locally with `composer ci` and by executing all three plan dogfood workflows step by step.
 
 ### Release boundary
 
