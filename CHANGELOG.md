@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- Publish the versioned, read-only `parameter_rename_plan@1.0` contract for one already-chosen method parameter, with typed provenance, override/interface family evidence, exact hash-bound edits for the declaration, direct lexical method-body references and semantically resolved named-argument labels, blockers, review-required evidence, stale evidence, and explicit non-observable boundaries.
+- Register `parameter-rename-plan` in the governed `rename-capabilities` registry so hosts can discover the contract instead of probing CLI text.
+
+### Changed
+
+- Parameter renaming treats one parameter as a single binding: positional arguments and unrelated same-name parameters are deliberately left untouched, while split family parameter names, replacement parameter/local-variable collisions, nested closure/arrow binding ambiguity, mixed-target named calls, and ambiguous source mapping fail closed without publishing edits.
+
+### Validation
+
+- PR #56 passed the PHP 8.2-8.5 CI matrix, structural-without-PHPStan validation, temporal dogfood, rename-plan dogfood (extended to exercise the registered parameter capability), and removal-plan validation on exact head `9df8b09e2e86c2a625790d6f5da7040af90b80ca` before squash merge to `7973d35f926bdc47a0fbca50888414c33a083af4`.
+
 ## 0.8.8 - 2026-08-23
 
 ### Added
