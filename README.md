@@ -209,6 +209,27 @@ App\Foo::bar
 
 A short class name that matches multiple methods fails and lists the fully qualified candidates. Editing the wrong `Foo` faster was not a requested feature.
 
+### Search when the target is not yet known
+
+When the task names no PHP identity, ranked hybrid search turns prose into seeds. It is a **seed
+generator**, not a location oracle - the exact commands above remain the way to confirm an identity.
+
+```bash
+vendor/bin/agent-map search-index build --index=.agent-map/php-symbols.json
+vendor/bin/agent-map search 'why are trailing commas dropped' --limit=8
+vendor/bin/agent-map search-index doctor
+```
+
+The index is derived state, not a second source of truth: `search-index build` refuses to run against
+a stale map, `refresh` re-chunks only what moved, and `doctor` reports drift between the map snapshot
+and the stored index. `--semantic` adds embedding-backed ranking when a corpus provider is available;
+without it the ranking stays lexical.
+
+Search is **conditional**: it needs a SQLite build with FTS5 and a configured search database, and it
+reports that plainly instead of returning an empty result that looks like an answer. Literal strings,
+configuration, templates and file-name questions stay native text-search shapes - see
+[ADR 0001](docs/adr/0001-hybrid-search-is-a-derived-index.md).
+
 ### Discover architecture
 
 ```bash

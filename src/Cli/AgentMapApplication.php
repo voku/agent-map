@@ -948,10 +948,13 @@ final readonly class AgentMapApplication
           agent-map callers 'Foo::bar' --index=.agent-map/php-symbols.json
           agent-map callees 'Foo::bar' --index=.agent-map/php-symbols.json
           agent-map context 'Foo::bar' --index=.agent-map/php-symbols.json --format=toon
+          agent-map search-index build|refresh|doctor --index=.agent-map/php-symbols.json
+          agent-map search 'why are trailing commas dropped' --limit=8
           agent-map help
 
         Options:
           --format=text|json|markdown|toon
+          --database=.agent-map/search.sqlite --semantic
           --scan=lib,vendor/acme --merge
           --limit=20
           --symbol-limit=10

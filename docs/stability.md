@@ -95,7 +95,7 @@ Shared invariants, all of them machine-checkable:
 
 | surface | CLI | tier | why |
 | --- | --- | --- | --- |
-| ranked hybrid search | `search`, `search-index` | supported, conditional | Needs a configured search database and FTS5. Proven useful as a *seed generator*, not as a location oracle. Literal, config, template and filename questions remain native text-search shapes. **Not currently listed in `agent-map help` or the README** - see open decision 1. |
+| ranked hybrid search | `search`, `search-index` | supported, conditional | Needs a configured search database and FTS5. Proven useful as a *seed generator*, not as a location oracle. Literal, config, template and filename questions remain native text-search shapes. |
 | architecture discovery | `discover` | experimental | Real output, unmeasured benefit: it activates only when a task names no files and no targets, and no replay measured whether it helped. |
 | bounded reverse impact | `impact` | experimental | No automated consumer; model-invoked only. 15.6 KB text / 53 KB JSON at depth 2 is a real prompt cost with no measured payoff yet. |
 | graph ranking | `rank` | **subtraction candidate** | No consumer, in no skill, never automatic. See open decision 2. |
@@ -127,10 +127,10 @@ backend that turns out to be unavailable fails explicitly rather than downgradin
 These are named on purpose. Each one changes a public surface, so each is a decision rather than a
 cleanup.
 
-1. **`search` / `search-index` are routable but undocumented.** They appear in neither
-   `agent-map help` nor the README, while being a real supported capability with real activation
-   preconditions. Either document them as *supported, conditional*, or make the omission deliberate
-   and say why. Shipping 1.0 with an undocumented public command is the worst of the three.
+1. ~~**`search` / `search-index` are routable but undocumented.**~~ Resolved in 0.9: they were
+   routable public commands listed in neither `agent-map help` nor the README. Documenting an
+   existing public command is not a surface decision - leaving it hidden was the anomaly - so both
+   now describe them as *supported, conditional*, with their activation preconditions stated.
 2. **`rank`.** Delete it, or find the consumer that justifies it. It has no consumer, appears in no
    skill, and its one-hop neighbour count is derivable from `callers`/`callees`. Deleting it before
    1.0 costs nothing; deleting it after costs a major version.
