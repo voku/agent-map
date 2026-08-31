@@ -197,7 +197,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          php bin/agent-map rename-capabilities --format=json > "$DOGFOOD_ROOT/capabilities.json"
+          php bin/agent-map plan-capabilities --format=json > "$DOGFOOD_ROOT/capabilities.json"
           jq -e '.type == "rename_capabilities" and (.capabilities | length) > 0' \
             "$DOGFOOD_ROOT/capabilities.json" >/dev/null
 
@@ -291,7 +291,7 @@ jobs:
           set -euo pipefail
 
           for kind in method function class parameter property class-constant; do
-            php tools/dogfood/rename-plan.php \
+            php tools/dogfood/plan-evidence.php \
               "$DOGFOOD_ROOT/$kind" \
               "$DOGFOOD_ROOT/$kind/map.json" \
               "$DOGFOOD_ROOT/$kind/plan.json" \
@@ -316,7 +316,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          self_paths='src/Cli/CliApplication.php,src/Cli/ClassRenameCliApplication.php,src/Cli/ClassConstantRenameCliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/ParameterRenameCliApplication.php,src/Cli/PropertyRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/RenamePlanCapability.php,src/Cli/RenamePlanCliApplication.php,src/Rename/ClassRenamePlanner.php,src/Rename/SourceClassNameLocator.php,src/Rename/ClassConstantRenamePlanner.php,src/Rename/ClassConstantNameLocator.php,src/Rename/ParameterRenamePlanner.php,src/Rename/ParameterNameLocator.php,src/Rename/PropertyRenamePlanner.php,src/Rename/PropertyNameLocator.php,tests/CliApplicationTest.php,tests/ClassRenamePlannerTest.php,tests/ClassConstantRenamePlannerTest.php,tests/ParameterRenamePlannerTest.php,tests/PropertyRenamePlannerTest.php,tools/dogfood/rename-plan.php'
+          self_paths='src/Cli/CliApplication.php,src/Cli/ClassRenameCliApplication.php,src/Cli/ClassConstantRenameCliApplication.php,src/Cli/FunctionRenameCliApplication.php,src/Cli/ParameterRenameCliApplication.php,src/Cli/PropertyRenameCliApplication.php,src/Cli/RenameCliApplication.php,src/Cli/PlanCliApplication.php,src/Plan/PlanCapability.php,src/Rename/ClassRenamePlanner.php,src/Rename/SourceClassNameLocator.php,src/Rename/ClassConstantRenamePlanner.php,src/Rename/ClassConstantNameLocator.php,src/Rename/ParameterRenamePlanner.php,src/Rename/ParameterNameLocator.php,src/Rename/PropertyRenamePlanner.php,src/Rename/PropertyNameLocator.php,tests/CliApplicationTest.php,tests/ClassRenamePlannerTest.php,tests/ClassConstantRenamePlannerTest.php,tests/ParameterRenamePlannerTest.php,tests/PropertyRenamePlannerTest.php,tools/dogfood/plan-evidence.php'
           php bin/agent-map build \
             --root="$GITHUB_WORKSPACE" \
             --paths="$self_paths" \
@@ -383,7 +383,7 @@ jobs:
             --database="$DOGFOOD_ROOT/self/search.sqlite" \
             --format=json \
             --limit=25 > "$DOGFOOD_ROOT/self/search-dogfood.json"
-          jq -e '[.results[].file_path] | index("tools/dogfood/rename-plan.php") != null' \
+          jq -e '[.results[].file_path] | index("tools/dogfood/plan-evidence.php") != null' \
             "$DOGFOOD_ROOT/self/search-dogfood.json" >/dev/null
 
       - name: Prove rewritten dummy PHP is complete and valid

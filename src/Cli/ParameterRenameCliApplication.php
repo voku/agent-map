@@ -9,13 +9,14 @@ use InvalidArgumentException;
 use Throwable;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
+use voku\AgentMap\Plan\PlanCapability;
 use voku\AgentMap\Rename\ParameterRenamePlan;
 use voku\AgentMap\Rename\ParameterRenamePlanner;
 use voku\AgentMap\Rename\RenameBlindSpot;
 use voku\AgentMap\Rename\RenameEdit;
 
 /** Read-only CLI boundary for deterministic method-parameter rename planning. */
-final readonly class ParameterRenameCliApplication implements RenamePlanCliApplication
+final readonly class ParameterRenameCliApplication implements PlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
@@ -24,9 +25,10 @@ final readonly class ParameterRenameCliApplication implements RenamePlanCliAppli
         $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
     }
 
-    public function capability(): RenamePlanCapability
+    public function capability(): PlanCapability
     {
-        return new RenamePlanCapability(
+        return new PlanCapability(
+            family: PlanCapability::FAMILY_RENAME,
             kind: 'parameter',
             command: 'parameter-rename-plan',
             planType: 'parameter_rename_plan',

@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use Throwable;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
+use voku\AgentMap\Plan\PlanCapability;
 use voku\AgentMap\Rename\ClassRenamePlan;
 use voku\AgentMap\Rename\ClassRenamePlanner;
 use voku\AgentMap\Rename\RenameBlindSpot;
@@ -16,7 +17,7 @@ use voku\AgentMap\Rename\RenameEdit;
 use voku\AgentMap\Rename\RenameMove;
 
 /** Read-only CLI boundary for same-namespace PHP class rename planning. */
-final readonly class ClassRenameCliApplication implements RenamePlanCliApplication
+final readonly class ClassRenameCliApplication implements PlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
@@ -25,9 +26,10 @@ final readonly class ClassRenameCliApplication implements RenamePlanCliApplicati
         $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
     }
 
-    public function capability(): RenamePlanCapability
+    public function capability(): PlanCapability
     {
-        return new RenamePlanCapability(
+        return new PlanCapability(
+            family: PlanCapability::FAMILY_RENAME,
             kind: 'class',
             command: 'class-rename-plan',
             planType: 'class_rename_plan',

@@ -9,17 +9,47 @@ use InvalidArgumentException;
 use Throwable;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
+use voku\AgentMap\Plan\PlanCapability;
 use voku\AgentMap\Removal\MethodRemovalPlan;
 use voku\AgentMap\Removal\MethodRemovalPlanner;
 
 /** Read-only CLI boundary for exact unused-private-method removal evidence. */
-final readonly class MethodRemovalCliApplication
+final readonly class MethodRemovalCliApplication implements PlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
     public function __construct(?MapArtifactPaths $artifacts = null)
     {
         $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
+    }
+
+    public function capability(): PlanCapability
+    {
+        return new PlanCapability(
+            family: PlanCapability::FAMILY_REMOVAL,
+            kind: 'method',
+            command: 'method-removal-plan',
+            planType: 'method_removal_plan',
+            contractVersion: MethodRemovalPlan::CONTRACT_VERSION,
+            semanticBackend: 'phpstan',
+        );
+    }
+
+    /** @param list<string> $argv */
+    public function shouldAppendToGeneralHelp(array $argv): bool
+    {
+        return count($argv) === 2 && in_array($argv[1], ['help', '-h', '--help'], true);
+    }
+
+    public function helpOverview(): string
+    {
+        return <<<'TEXT'
+
+Method removal evidence:
+  method-removal-plan Build an exact unused-private-method deletion plan
+
+Run `agent-map help method-removal-plan` for details.
+TEXT;
     }
 
     /** @param list<string> $argv */

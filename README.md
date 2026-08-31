@@ -234,7 +234,6 @@ configuration, templates and file-name questions stay native text-search shapes 
 
 ```bash
 vendor/bin/agent-map discover
-vendor/bin/agent-map rank --by=dependents --top=20
 vendor/bin/agent-map impact 'App\Service\UserService::save' --depth=3
 ```
 
@@ -242,7 +241,9 @@ vendor/bin/agent-map impact 'App\Service\UserService::save' --depth=3
 
 Namespaces are deliberately not the only architecture signal. PHP allows projects without namespaces, so path and file coupling remain available for flat and legacy codebases.
 
-`rank` counts unique one-hop graph neighbours. `impact` performs a bounded, cycle-safe reverse traversal and preserves relation evidence, path nodes, truncation, and `dynamic` / `multiple_targets` uncertainty instead of collapsing them into an opaque score.
+`impact` performs a bounded, cycle-safe reverse traversal and preserves relation evidence, path nodes, truncation, and `dynamic` / `multiple_targets` uncertainty instead of collapsing them into an opaque score.
+
+Both are [experimental](docs/stability.md): they produce real output, but no consumer and no replay has yet measured that the output is worth its prompt cost.
 
 See [Architecture discovery](docs/architecture-discovery.md) for the complete command, semantics, legacy-PHP, freshness, and library-API documentation.
 
@@ -294,13 +295,14 @@ Every plan in the family shares the same shape: a versioned contract type, a `sa
 fingerprint), exact edits, blind spots, stale evidence, blockers, and an explicit `not_observable`
 boundary. A `blocked` plan publishes no edits.
 
-Which map a contract needs differs. Static class-name tokens are name-resolvable, so class and
-class-constant renaming work on a structural-only map. Method, parameter, property and function
-renaming need semantic evidence and therefore a PHPStan-backed map. Ask the registry rather than
-guessing:
+Which map a contract needs differs. Static class-name tokens are name-resolvable, so class renaming,
+class-constant renaming and class moves work on a structural-only map. Method, parameter, property and
+function renaming, and every removal contract, need semantic evidence and therefore a PHPStan-backed
+map. Ask the registry rather than guessing - it covers all three families, and routing and discovery
+read the same list, so an advertised contract is always routable:
 
 ```bash
-vendor/bin/agent-map rename-capabilities --format=json
+vendor/bin/agent-map plan-capabilities --format=json
 ```
 
 See [class rename](docs/class-rename.md) and [method rename](docs/method-rename.md) for the full

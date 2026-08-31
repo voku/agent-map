@@ -11,18 +11,31 @@ use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Move\ClassMovePlan;
 use voku\AgentMap\Move\ClassMovePlanner;
+use voku\AgentMap\Plan\PlanCapability;
 use voku\AgentMap\Rename\RenameBlindSpot;
 use voku\AgentMap\Rename\RenameEdit;
 use voku\AgentMap\Rename\RenameMove;
 
 /** Read-only CLI boundary for deterministic PHP class namespace relocation planning. */
-final readonly class ClassMoveCliApplication
+final readonly class ClassMoveCliApplication implements PlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
     public function __construct(?MapArtifactPaths $artifacts = null)
     {
         $this->artifacts = $artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.');
+    }
+
+    public function capability(): PlanCapability
+    {
+        return new PlanCapability(
+            family: PlanCapability::FAMILY_MOVE,
+            kind: 'class',
+            command: 'class-move-plan',
+            planType: 'class_move_plan',
+            contractVersion: ClassMovePlan::CONTRACT_VERSION,
+            semanticBackend: 'none',
+        );
     }
 
     /** @param list<string> $argv */

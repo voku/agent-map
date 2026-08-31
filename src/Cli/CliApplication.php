@@ -7,6 +7,7 @@ namespace voku\AgentMap\Cli;
 use InvalidArgumentException;
 use Throwable;
 use voku\AgentMap\MapArtifactPaths;
+use voku\AgentMap\Plan\PlanCapability;
 
 /** Public routing boundary for standalone and embedded agent-map. */
 final readonly class CliApplication
@@ -24,10 +25,10 @@ final readonly class CliApplication
             ? null
             : MapArtifactPaths::forProject($this->projectRoot ?? (getcwd() ?: '.'), $this->mapRoot);
 
-        $renameApplications = $this->renameApplications($artifacts);
-        if (($argv[1] ?? null) === 'rename-capabilities'
-            || (($argv[1] ?? null) === 'help' && ($argv[2] ?? null) === 'rename-capabilities')) {
-            return $this->renameCapabilities($argv, $renameApplications);
+        $planApplications = $this->planApplications($artifacts);
+        if (($argv[1] ?? null) === 'plan-capabilities'
+            || (($argv[1] ?? null) === 'help' && ($argv[2] ?? null) === 'plan-capabilities')) {
+            return $this->planCapabilities($argv, $planApplications);
         }
 
         $temporal = new TemporalCliApplication(artifacts: $artifacts);
@@ -35,29 +36,9 @@ final readonly class CliApplication
             return $temporal->run($argv);
         }
 
-        $methodRemoval = new MethodRemovalCliApplication(artifacts: $artifacts);
-        if ($methodRemoval->supports($argv)) {
-            return $methodRemoval->run($argv);
-        }
-
-        $propertyRemoval = new PropertyRemovalCliApplication(artifacts: $artifacts);
-        if ($propertyRemoval->supports($argv)) {
-            return $propertyRemoval->run($argv);
-        }
-
-        $classConstantRemoval = new ClassConstantRemovalCliApplication(artifacts: $artifacts);
-        if ($classConstantRemoval->supports($argv)) {
-            return $classConstantRemoval->run($argv);
-        }
-
-        $classMove = new ClassMoveCliApplication(artifacts: $artifacts);
-        if ($classMove->supports($argv)) {
-            return $classMove->run($argv);
-        }
-
-        foreach ($renameApplications as $renameApplication) {
-            if ($renameApplication->supports($argv)) {
-                return $renameApplication->run($argv);
+        foreach ($planApplications as $planApplication) {
+            if ($planApplication->supports($argv)) {
+                return $planApplication->run($argv);
             }
         }
 
@@ -73,18 +54,14 @@ final readonly class CliApplication
             || in_array('-h', $rest, true);
         if ($generalHelp) {
             echo "\nArtifact paths:\n  --out, --index, and --database are relative to --root unless an absolute path is given.\n\n";
-            echo "Rename capability discovery:\n  rename-capabilities List registered governed rename-plan contracts\n\n";
-            echo "Removal evidence:\n  method-removal-plan Build an exact unused-private-method deletion plan\n  property-removal-plan Build an exact unused-private-property deletion plan\n  class-constant-removal-plan Build an exact unused-private-class-constant deletion plan\n\n";
+            echo "Plan capability discovery:\n  plan-capabilities List every governed rename, removal and move contract\n\n";
         }
         if ($temporal->shouldAppendToGeneralHelp($argv)) {
             echo $temporal->helpOverview();
         }
-        if ($classMove->shouldAppendToGeneralHelp($argv)) {
-            echo $classMove->helpOverview();
-        }
-        foreach ($renameApplications as $renameApplication) {
-            if ($renameApplication->shouldAppendToGeneralHelp($argv)) {
-                echo $renameApplication->helpOverview();
+        foreach ($planApplications as $planApplication) {
+            if ($planApplication->shouldAppendToGeneralHelp($argv)) {
+                echo $planApplication->helpOverview();
             }
         }
         if ($discovery->shouldAppendToGeneralHelp($argv)) {
@@ -94,31 +71,43 @@ final readonly class CliApplication
         return $status;
     }
 
-    /** @return list<RenamePlanCliApplication> */
-    private function renameApplications(?MapArtifactPaths $artifacts): array
+    /**
+     * Every governed plan boundary, in one list.
+     *
+     * Routing and `plan-capabilities` read the same list on purpose: a contract that is reachable on
+     * the command line but invisible to capability discovery is exactly the drift this prevents.
+     *
+     * @return list<PlanCliApplication>
+     */
+    private function planApplications(?MapArtifactPaths $artifacts): array
     {
         return [
+            new ClassMoveCliApplication(artifacts: $artifacts),
             new ClassRenameCliApplication(artifacts: $artifacts),
             new ClassConstantRenameCliApplication(artifacts: $artifacts),
+            new ClassConstantRemovalCliApplication(artifacts: $artifacts),
             new FunctionRenameCliApplication(artifacts: $artifacts),
+            new MethodRemovalCliApplication(artifacts: $artifacts),
             new ParameterRenameCliApplication(artifacts: $artifacts),
             new PropertyRenameCliApplication(artifacts: $artifacts),
+            new PropertyRemovalCliApplication(artifacts: $artifacts),
             new RenameCliApplication(artifacts: $artifacts),
         ];
     }
 
     /**
      * @param list<string> $argv
-     * @param list<RenamePlanCliApplication> $applications
+     * @param list<PlanCliApplication> $applications
      */
-    private function renameCapabilities(array $argv, array $applications): int
+    private function planCapabilities(array $argv, array $applications): int
     {
         try {
             if (($argv[1] ?? null) === 'help' || in_array('--help', $argv, true) || in_array('-h', $argv, true)) {
                 echo <<<'TEXT'
-Usage: agent-map rename-capabilities [--format text|json]
+Usage: agent-map plan-capabilities [--format text|json]
 
-List the governed rename-plan capabilities registered at the public CLI routing boundary.
+List every governed plan contract registered at the public CLI routing boundary: the rename, removal
+and move families, their commands, contract versions and the semantic backend each one needs.
 The output describes evidence planning only; agent-map remains read-only.
 
 TEXT;
@@ -143,26 +132,27 @@ TEXT;
                     continue;
                 }
 
-                throw new InvalidArgumentException('Unknown rename-capabilities option: ' . $token);
+                throw new InvalidArgumentException('Unknown plan-capabilities option: ' . $token);
             }
             if (!in_array($format, ['text', 'json'], true)) {
-                throw new InvalidArgumentException('Unknown rename-capabilities format: ' . $format);
+                throw new InvalidArgumentException('Unknown plan-capabilities format: ' . $format);
             }
 
             $capabilities = array_map(
-                static fn (RenamePlanCliApplication $application): RenamePlanCapability => $application->capability(),
+                static fn (PlanCliApplication $application): PlanCapability => $application->capability(),
                 $applications,
             );
             usort(
                 $capabilities,
-                static fn (RenamePlanCapability $left, RenamePlanCapability $right): int => $left->kind <=> $right->kind,
+                static fn (PlanCapability $left, PlanCapability $right): int => $left->family <=> $right->family
+                    ?: $left->kind <=> $right->kind,
             );
 
             if ($format === 'json') {
                 echo json_encode([
-                    'type' => 'rename_capabilities',
+                    'type' => 'plan_capabilities',
                     'capabilities' => array_map(
-                        static fn (RenamePlanCapability $capability): array => $capability->toArray(),
+                        static fn (PlanCapability $capability): array => $capability->toArray(),
                         $capabilities,
                     ),
                 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
@@ -170,10 +160,11 @@ TEXT;
                 return 0;
             }
 
-            echo "Governed rename-plan capabilities:\n";
+            echo "Governed plan contracts:\n";
             foreach ($capabilities as $capability) {
                 echo sprintf(
-                    "  %s: %s -> %s@%s [%s]\n",
+                    "  %s/%s: %s -> %s@%s [%s]\n",
+                    $capability->family,
                     $capability->kind,
                     $capability->command,
                     $capability->planType,
@@ -185,6 +176,7 @@ TEXT;
             return 0;
         } catch (Throwable $throwable) {
             fwrite(STDERR, $throwable->getMessage() . "\n");
+
             return 1;
         }
     }

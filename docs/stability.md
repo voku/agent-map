@@ -98,10 +98,10 @@ Shared invariants, all of them machine-checkable:
 | ranked hybrid search | `search`, `search-index` | supported, conditional | Needs a configured search database and FTS5. Proven useful as a *seed generator*, not as a location oracle. Literal, config, template and filename questions remain native text-search shapes. |
 | architecture discovery | `discover` | experimental | Real output, unmeasured benefit: it activates only when a task names no files and no targets, and no replay measured whether it helped. |
 | bounded reverse impact | `impact` | experimental | No automated consumer; model-invoked only. 15.6 KB text / 53 KB JSON at depth 2 is a real prompt cost with no measured payoff yet. |
-| graph ranking | `rank` | **subtraction candidate** | No consumer, in no skill, never automatic. See open decision 2. |
+| graph ranking | - | **removed in 0.9** | `rank` had no consumer, appeared in no skill and was derivable from `callers`/`callees`. `GraphRanker` survives as an internal collaborator of `discover`; it is no longer public API. |
 | temporal history | `history diff/coupling/claims/observe/show` | experimental | Derived evidence by [ADR 0002](adr/0002-temporal-history-is-derived-evidence.md); no automated consumer. |
 | repository status | `summary`, `stats`, `changed` | diagnostic | Human orientation. The output shape is not a machine contract. |
-| plan capability discovery | `rename-capabilities` | stable, incomplete | Covers the rename family only. See open decision 3. |
+| plan capability discovery | `plan-capabilities` | stable | Covers all ten contracts across the rename, removal and move families. Routing and discovery read the same registry, so an advertised contract is always routable. |
 
 ## What 1.0 freezes
 
@@ -131,14 +131,14 @@ cleanup.
    routable public commands listed in neither `agent-map help` nor the README. Documenting an
    existing public command is not a surface decision - leaving it hidden was the anomaly - so both
    now describe them as *supported, conditional*, with their activation preconditions stated.
-2. **`rank`.** Delete it, or find the consumer that justifies it. It has no consumer, appears in no
-   skill, and its one-hop neighbour count is derivable from `callers`/`callees`. Deleting it before
-   1.0 costs nothing; deleting it after costs a major version.
-3. **Capability discovery covers only renames.** `rename-capabilities` cannot describe the removal or
-   move contracts, so the shared dogfood publisher has to be handed a declared contract identity for
-   them instead of discovering one. A family-wide registry would let a host discover all ten
-   contracts and would remove that asymmetry - at the cost of either renaming a public command or
-   adding a second one.
+2. ~~**`rank`.**~~ Resolved in 0.9: deleted. The command, its help, and its documented library API
+   are gone; `GraphRanker` stays as an internal detail of `discover`. Deleting it before 1.0 cost
+   nothing.
+3. ~~**Capability discovery covers only renames.**~~ Resolved in 0.9: `rename-capabilities` was
+   replaced by `plan-capabilities`, which covers all ten contracts and carries a `family` field. Every
+   plan boundary implements one `PlanCliApplication` interface, and the routing list *is* the
+   registry, so a contract cannot be reachable while being undiscoverable. Replacing the command
+   rather than adding a second one keeps the rule that there is no parallel API.
 4. **Family-wide value objects still live under `Rename\`.** `RenameProvenance`, `RenameEdit`,
    `RenameBlindSpot`, `RenameStaleEvidence` and `RenameMove` are used by the removal and move
    families too. Relocating them under `Plan\` would make the boundary honest; it is a wide,

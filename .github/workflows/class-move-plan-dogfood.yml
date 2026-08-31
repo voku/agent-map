@@ -50,17 +50,10 @@ jobs:
           JSON
           done
 
-          # The move contract is routed like the other governed non-rename plans, so the dogfood
-          # declares the contract identity it expects instead of reading the rename registry.
-          cat > "$root/capability.json" <<'JSON'
-          {
-              "kind": "class_move",
-              "command": "class-move-plan",
-              "plan_type": "class_move_plan",
-              "contract_version": "1.0",
-              "semantic_backend": "none"
-          }
-          JSON
+          # Contract identity comes from the registry, never from a literal written here: a move
+          # contract agent-map does not advertise must fail this job.
+          php bin/agent-map plan-capabilities --format=json > "$root/capabilities.json"
+          jq -e '[.capabilities[] | select(.plan_type == "class_move_plan")] | length == 1' "$root/capabilities.json" >/dev/null
 
           cat > "$root/safe/src/Legacy/UserService.php" <<'PHP'
           <?php
@@ -183,11 +176,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          php tools/dogfood/rename-plan.php \
+          php tools/dogfood/plan-evidence.php \
             "$DOGFOOD_ROOT/safe" \
             "$DOGFOOD_ROOT/safe/map.json" \
             "$DOGFOOD_ROOT/safe/plan.json" \
-            "$DOGFOOD_ROOT/capability.json" > "$DOGFOOD_ROOT/safe/dogfood.json"
+            "$DOGFOOD_ROOT/capabilities.json" > "$DOGFOOD_ROOT/safe/dogfood.json"
 
           jq -e '
             (.type == "class_move_plan")

@@ -12,9 +12,6 @@ use voku\AgentMap\Discovery\ArchitectureDiscovery;
 use voku\AgentMap\Discovery\ArchitectureImpactAnalyzer;
 use voku\AgentMap\Discovery\ArchitectureMapReport;
 use voku\AgentMap\Discovery\ArchitectureRegion;
-use voku\AgentMap\Discovery\GraphMetric;
-use voku\AgentMap\Discovery\GraphRanker;
-use voku\AgentMap\Discovery\RankedNode;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
@@ -34,11 +31,11 @@ final readonly class DiscoveryCliApplication
     public function supports(array $argv): bool
     {
         $command = $argv[1] ?? null;
-        if (in_array($command, ['discover', 'rank', 'impact'], true)) {
+        if (in_array($command, ['discover', 'impact'], true)) {
             return true;
         }
 
-        return $command === 'help' && in_array($argv[2] ?? null, ['discover', 'rank', 'impact'], true);
+        return $command === 'help' && in_array($argv[2] ?? null, ['discover', 'impact'], true);
     }
 
     /** @param list<string> $argv */
@@ -53,7 +50,6 @@ final readonly class DiscoveryCliApplication
 
 Architecture discovery:
   discover   Infer PHP architecture regions and evidence-backed starting points
-  rank       Rank nodes by one-hop graph importance
   impact     Trace bounded reverse impact for a method
 
 Run `agent-map help <command>` for details.
@@ -72,7 +68,6 @@ TEXT;
 
             return match ($command) {
                 'discover' => $this->discover(array_slice($argv, 2)),
-                'rank' => $this->rank(array_slice($argv, 2)),
                 'impact' => $this->impact(array_slice($argv, 2)),
                 default => 1,
             };
@@ -123,38 +118,6 @@ TEXT;
             $format,
             $this->textRenderer->discovery($report),
         );
-        return 0;
-    }
-
-    /** @param list<string> $tokens */
-    private function rank(array $tokens): int
-    {
-        $parsed = $this->parse($tokens, ['index', 'by', 'kind', 'top', 'format']);
-        if ($parsed['help']) {
-            echo $this->help('rank');
-            return 0;
-        }
-        $this->rejectArguments($parsed['arguments'], 'rank');
-
-        $metricName = $parsed['options']['by'] ?? 'dependents';
-        $metric = GraphMetric::tryFrom($metricName);
-        if ($metric === null) {
-            throw new InvalidArgumentException('Unknown graph metric: ' . $metricName);
-        }
-
-        $top = $this->positiveInt('top', $parsed['options']['top'] ?? '10');
-        $format = $this->format($parsed['options']['format'] ?? 'text');
-        $kind = $parsed['options']['kind'] ?? null;
-        $map = $this->loadFresh($parsed['options']['index'] ?? $this->artifacts->indexJson());
-        $ranked = (new GraphRanker())->rank($map, $metric, $kind, $top);
-        $payload = [
-            'type' => 'rank',
-            'metric' => $metric->value,
-            'kind' => $kind,
-            'results' => array_map(static fn (RankedNode $row): array => $row->toArray(), $ranked),
-        ];
-
-        echo $this->render($payload, $format, $this->textRenderer->rank($metric, $ranked));
         return 0;
     }
 
@@ -311,13 +274,6 @@ Infer deterministic PHP architecture regions first, then report entrypoint candi
 call hubs, orchestrators, type hubs, namespace/directory/file coupling and relation quality.
 Use --region after the first discovery pass to inspect a region without guessing file names.
 Region evidence exposes boundaries and structural agreement instead of an opaque confidence score.
-
-TEXT,
-            'rank' => <<<'TEXT'
-Usage: agent-map rank [--by METRIC] [--kind KIND] [--top N] [--index PATH] [--format FORMAT]
-
-Metrics: dependents, callers, dependencies, callees, members.
-Scores are unique one-hop graph neighbours; uncertainty is reported separately.
 
 TEXT,
             'impact' => <<<'TEXT'

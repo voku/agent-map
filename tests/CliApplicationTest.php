@@ -15,7 +15,7 @@ use voku\AgentMap\MapArtifactPaths;
 
 final class CliApplicationTest extends TestCase
 {
-    public function testGeneralHelpIncludesArtifactNoteDiscoveryTemporalAndRenameCapabilitiesOnce(): void
+    public function testGeneralHelpIncludesArtifactNoteDiscoveryTemporalAndPlanCapabilitiesOnce(): void
     {
         ob_start();
         try {
@@ -30,18 +30,21 @@ final class CliApplicationTest extends TestCase
         self::assertSame(1, substr_count($output, 'Temporal evolution:'));
         self::assertSame(1, substr_count($output, 'Class relocation evidence:'));
         self::assertSame(1, substr_count($output, 'class-move-plan Build a read-only class namespace move plan with PSR-4 destination evidence'));
-        self::assertSame(1, substr_count($output, 'Rename capability discovery:'));
-        self::assertSame(1, substr_count($output, 'rename-capabilities List registered governed rename-plan contracts'));
+        self::assertSame(1, substr_count($output, 'Plan capability discovery:'));
+        self::assertSame(1, substr_count($output, 'plan-capabilities List every governed rename, removal and move contract'));
         self::assertSame(1, substr_count($output, 'Parameter refactoring evidence:'));
         self::assertSame(1, substr_count($output, 'Property refactoring evidence:'));
+        self::assertSame(1, substr_count($output, 'Method removal evidence:'));
+        self::assertSame(1, substr_count($output, 'Property removal evidence:'));
+        self::assertSame(1, substr_count($output, 'Class-constant removal evidence:'));
         self::assertSame(1, substr_count($output, 'class-constant-removal-plan Build an exact unused-private-class-constant deletion plan'));
     }
 
-    public function testRenameCapabilitiesReflectTheRegisteredRenameRouters(): void
+    public function testPlanCapabilitiesCoverEveryRegisteredPlanRouter(): void
     {
         ob_start();
         try {
-            $exit = (new CliApplication())->run(['agent-map', 'rename-capabilities', '--format=json']);
+            $exit = (new CliApplication())->run(['agent-map', 'plan-capabilities', '--format=json']);
         } finally {
             $output = (string) ob_get_clean();
         }
@@ -49,9 +52,42 @@ final class CliApplicationTest extends TestCase
         self::assertSame(0, $exit);
         $payload = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
         self::assertIsArray($payload);
-        self::assertSame('rename_capabilities', $payload['type'] ?? null);
+        self::assertSame('plan_capabilities', $payload['type'] ?? null);
         self::assertSame([
             [
+                'family' => 'move',
+                'kind' => 'class',
+                'command' => 'class-move-plan',
+                'plan_type' => 'class_move_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'none',
+            ],
+            [
+                'family' => 'removal',
+                'kind' => 'class_constant',
+                'command' => 'class-constant-removal-plan',
+                'plan_type' => 'class_constant_removal_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'phpstan',
+            ],
+            [
+                'family' => 'removal',
+                'kind' => 'method',
+                'command' => 'method-removal-plan',
+                'plan_type' => 'method_removal_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'phpstan',
+            ],
+            [
+                'family' => 'removal',
+                'kind' => 'property',
+                'command' => 'property-removal-plan',
+                'plan_type' => 'property_removal_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'phpstan',
+            ],
+            [
+                'family' => 'rename',
                 'kind' => 'class',
                 'command' => 'class-rename-plan',
                 'plan_type' => 'class_rename_plan',
@@ -59,6 +95,7 @@ final class CliApplicationTest extends TestCase
                 'semantic_backend' => 'none',
             ],
             [
+                'family' => 'rename',
                 'kind' => 'class_constant',
                 'command' => 'class-constant-rename-plan',
                 'plan_type' => 'class_constant_rename_plan',
@@ -66,6 +103,7 @@ final class CliApplicationTest extends TestCase
                 'semantic_backend' => 'none',
             ],
             [
+                'family' => 'rename',
                 'kind' => 'function',
                 'command' => 'function-rename-plan',
                 'plan_type' => 'function_rename_plan',
@@ -73,6 +111,7 @@ final class CliApplicationTest extends TestCase
                 'semantic_backend' => 'phpstan',
             ],
             [
+                'family' => 'rename',
                 'kind' => 'method',
                 'command' => 'rename-plan',
                 'plan_type' => 'method_rename_plan',
@@ -80,6 +119,7 @@ final class CliApplicationTest extends TestCase
                 'semantic_backend' => 'phpstan',
             ],
             [
+                'family' => 'rename',
                 'kind' => 'parameter',
                 'command' => 'parameter-rename-plan',
                 'plan_type' => 'parameter_rename_plan',
@@ -87,6 +127,7 @@ final class CliApplicationTest extends TestCase
                 'semantic_backend' => 'phpstan',
             ],
             [
+                'family' => 'rename',
                 'kind' => 'property',
                 'command' => 'property-rename-plan',
                 'plan_type' => 'property_rename_plan',
@@ -94,6 +135,39 @@ final class CliApplicationTest extends TestCase
                 'semantic_backend' => 'phpstan',
             ],
         ], $payload['capabilities'] ?? null);
+    }
+
+    public function testEveryAdvertisedPlanCommandIsRoutable(): void
+    {
+        ob_start();
+        try {
+            $exit = (new CliApplication())->run(['agent-map', 'plan-capabilities', '--format=json']);
+        } finally {
+            $output = (string) ob_get_clean();
+        }
+        self::assertSame(0, $exit);
+
+        $payload = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        self::assertIsArray($payload['capabilities'] ?? null);
+
+        // Discovery is only useful if the command it advertises actually exists.
+        foreach ($payload['capabilities'] as $capability) {
+            self::assertIsArray($capability);
+            $command = $capability['command'] ?? null;
+            self::assertIsString($command);
+
+            $help = '';
+            ob_start();
+            try {
+                $status = (new CliApplication())->run(['agent-map', 'help', $command]);
+            } finally {
+                $help = (string) ob_get_clean();
+            }
+
+            self::assertSame(0, $status, $command);
+            self::assertStringContainsString('agent-map ' . $command, $help, $command);
+        }
     }
 
     public function testGeneralAndDiscoveryCommandsShareEmbeddedMapRoot(): void

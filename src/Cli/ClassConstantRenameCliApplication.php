@@ -9,13 +9,14 @@ use InvalidArgumentException;
 use Throwable;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
+use voku\AgentMap\Plan\PlanCapability;
 use voku\AgentMap\Rename\ClassConstantRenamePlan;
 use voku\AgentMap\Rename\ClassConstantRenamePlanner;
 use voku\AgentMap\Rename\RenameBlindSpot;
 use voku\AgentMap\Rename\RenameEdit;
 
 /** Read-only CLI boundary for one versioned PHP class-constant rename plan. */
-final readonly class ClassConstantRenameCliApplication implements RenamePlanCliApplication
+final readonly class ClassConstantRenameCliApplication implements PlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
@@ -26,9 +27,10 @@ final readonly class ClassConstantRenameCliApplication implements RenamePlanCliA
     }
 
     /** Advertises the versioned class-constant rename contract through the shared capability registry. */
-    public function capability(): RenamePlanCapability
+    public function capability(): PlanCapability
     {
-        return new RenamePlanCapability(
+        return new PlanCapability(
+            family: PlanCapability::FAMILY_RENAME,
             kind: 'class_constant',
             command: 'class-constant-rename-plan',
             planType: 'class_constant_rename_plan',
