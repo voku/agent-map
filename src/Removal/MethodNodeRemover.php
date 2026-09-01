@@ -135,6 +135,13 @@ final readonly class MethodNodeRemover
         if ($node instanceof Node\Scalar\String_ && $this->qualifiedStringNamesMethod($node->value, $name)) {
             return true;
         }
+        // First-class callable syntax: `self::handler(...)` builds a Closure, it
+        // does not call the method, so PHPStan publishes no call relation for it.
+        if ($node instanceof Node\Expr\CallLike
+            && $node->isFirstClassCallable()
+            && $this->callLikeNamesMethod($node, $name)) {
+            return true;
+        }
 
         foreach ($node->getSubNodeNames() as $subNodeName) {
             $child = $node->{$subNodeName};
@@ -146,6 +153,18 @@ final readonly class MethodNodeRemover
         }
 
         return false;
+    }
+
+    private function callLikeNamesMethod(Node\Expr\CallLike $node, string $name): bool
+    {
+        $called = match (true) {
+            $node instanceof StaticCall,
+            $node instanceof Node\Expr\MethodCall,
+            $node instanceof Node\Expr\NullsafeMethodCall => $node->name,
+            default => null,
+        };
+
+        return $called instanceof Identifier && strcasecmp($called->toString(), $name) === 0;
     }
 
     /** Only the "Class::method" callable string, never a bare name. */

@@ -103,6 +103,38 @@ PHP;
         self::assertSame([], $plan->edits);
     }
 
+    /**
+     * From modules/mitarbeiter/userdetail.php, where a dispatch table holds
+     * `self::filterTodo(...)`. First-class callable syntax builds a Closure
+     * rather than calling the method, so PHPStan publishes no call relation and
+     * the plan was SAFE.
+     */
+    public function testFirstClassCallableHoldingTheMethodBlocksRemoval(): void
+    {
+        $source = <<<'PHP'
+<?php
+final class Renderer
+{
+    public function columns(): array
+    {
+        return [
+            'todo' => self::filterTodo(...),
+        ];
+    }
+
+    private static function filterTodo(array $row): string
+    {
+        return (string) ($row['todo'] ?? '');
+    }
+}
+PHP;
+        file_put_contents($this->root . '/src/Renderer.php', $source);
+        $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Renderer::filterTodo');
+
+        self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+    }
+
     public function testPlansExactWholeMethodDeletionWithoutChangingSource(): void
     {
         $source = <<<'PHP'
