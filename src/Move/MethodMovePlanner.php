@@ -121,6 +121,20 @@ final readonly class MethodMovePlanner
 
         $callSites = $this->callSites($map, $method->id, $method->owner->fqn, $blindSpots);
 
+        // Relocating a non-public method changes who may reach it. Every call
+        // site outside the destination would still be re-pointed at the moved
+        // owner and then fail at runtime with "Call to private method ... from
+        // scope ...". The contract forbids an implicit visibility rewrite, so
+        // the only honest answer is to refuse.
+        if ($method->method->visibility !== 'public' && $callSites !== []) {
+            $blockers[] = sprintf(
+                'The method is %s and %d call site(s) would be re-pointed at %s, where that access is no longer valid; a move may not silently widen visibility.',
+                $method->method->visibility,
+                count($callSites),
+                $destinationSymbol === null ? ltrim(trim($destination), '\\') : $destinationSymbol->fqn,
+            );
+        }
+
         $edits = [];
         if ($stale === [] && $blockers === [] && $destinationSymbol !== null && $destinationFile !== null) {
             try {

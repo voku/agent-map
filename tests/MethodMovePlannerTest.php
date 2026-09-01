@@ -103,6 +103,63 @@ PHP);
         self::assertContains('self::', $plan->ownerDependencies);
     }
 
+    /**
+     * From IT-Portal's Authentication::normalizeRemoteUserToAdAccount, which the
+     * planner moved with status SAFE while re-pointing its caller at the new
+     * owner. The result parses and then fatals with "Call to private method
+     * ... from scope ...", because a move may not widen visibility.
+     */
+    public function testMovingANonPublicMethodWithCallersBlocks(): void
+    {
+        $source = <<<'PHP'
+<?php
+final class Authentication
+{
+    public static function run(string $value): string
+    {
+        return self::normalize($value);
+    }
+
+    private static function normalize(string $value): string
+    {
+        return trim($value);
+    }
+}
+PHP;
+        $this->write('Authentication.php', $source);
+        $this->write('Diff.php', "<?php\nfinal class Diff\n{\n}\n");
+
+        $plan = $this->plan('Authentication::normalize', 'Diff');
+
+        self::assertSame(MethodMovePlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertNotEmpty(array_filter(
+            $plan->blockers,
+            static fn (string $blocker): bool => str_contains($blocker, 'may not silently widen visibility'),
+        ));
+    }
+
+    public function testMovingANonPublicMethodWithoutCallersIsStillPlannable(): void
+    {
+        $source = <<<'PHP'
+<?php
+final class Lonely
+{
+    private static function unusedHelper(string $value): string
+    {
+        return trim($value);
+    }
+}
+PHP;
+        $this->write('Lonely.php', $source);
+        $this->write('Diff.php', "<?php\nfinal class Diff\n{\n}\n");
+
+        $plan = $this->plan('Lonely::unusedHelper', 'Diff');
+
+        self::assertNotSame(MethodMovePlan::STATUS_BLOCKED, $plan->status, implode("\n", $plan->blockers));
+        self::assertNotSame([], $plan->edits);
+    }
+
     public function testDestinationCollisionBlocks(): void
     {
         $this->writeCronJob();
