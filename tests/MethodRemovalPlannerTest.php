@@ -46,6 +46,63 @@ final class MethodRemovalPlannerTest extends TestCase
         rmdir($this->root);
     }
 
+    /**
+     * Reduced from lib/framework/system/helper/AssocSorter.php in IT-Portal, where
+     * the planner published a SAFE deletion for a method the same file hands to
+     * uasort as `[&$this, 'compare']`. Applying that edit left source that parses
+     * and then fatals at runtime.
+     */
+    public function testArrayCallableHoldingTheMethodBlocksRemoval(): void
+    {
+        $source = <<<'PHP'
+<?php
+final class AssocSorter
+{
+    private function compare($left, $right): int
+    {
+        return $left <=> $right;
+    }
+
+    public function asort(array &$array): void
+    {
+        \uasort($array, [&$this, 'compare']);
+    }
+}
+PHP;
+        file_put_contents($this->root . '/src/AssocSorter.php', $source);
+        $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'AssocSorter::compare');
+
+        self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertNotEmpty(array_filter(
+            $plan->blockers,
+            static fn (string $blocker): bool => str_contains($blocker, 'callable naming this method'),
+        ));
+    }
+
+    public function testStringCallableHoldingTheMethodBlocksRemoval(): void
+    {
+        $source = <<<'PHP'
+<?php
+final class Handler
+{
+    private function handle(): void
+    {
+    }
+
+    public function register(): void
+    {
+        \register_shutdown_function('Handler::handle');
+    }
+}
+PHP;
+        file_put_contents($this->root . '/src/Handler.php', $source);
+        $plan = (new MethodRemovalPlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Handler::handle');
+
+        self::assertSame(MethodRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+    }
+
     public function testPlansExactWholeMethodDeletionWithoutChangingSource(): void
     {
         $source = <<<'PHP'

@@ -98,6 +98,56 @@ final readonly class MethodNodeRemover
         }
     }
 
+    /**
+     * PHP reaches a method through more than a call expression.
+     *
+     * `[$this, 'compare']`, `[self::class, 'compare']` and `'Foo::compare'` are
+     * ordinary callables that usort/array_map/event wiring invoke at runtime,
+     * and PHPStan records no call relation for building one. Without this check
+     * a method held only by a callable looks unreferenced, and removal published
+     * a SAFE plan whose edit deletes a method the same file still hands to
+     * uasort - source that still parses and then fatals.
+     */
+    public function hasCallableReference(string $path, string $name): bool
+    {
+        foreach (PhpCodeParser::getAstFromString($this->source($path)) as $node) {
+            if ($this->containsCallableReference($node, $name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function containsCallableReference(Node $node, string $name): bool
+    {
+        if ($node instanceof Node\Scalar\String_ && $this->stringNamesMethod($node->value, $name)) {
+            return true;
+        }
+
+        foreach ($node->getSubNodeNames() as $subNodeName) {
+            $child = $node->{$subNodeName};
+            foreach ($child instanceof Node ? [$child] : (is_array($child) ? $child : []) as $item) {
+                if ($item instanceof Node && $this->containsCallableReference($item, $name)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /** Matches both the array-callable element and the "Class::method" string form. */
+    private function stringNamesMethod(string $value, string $name): bool
+    {
+        if (strcasecmp($value, $name) === 0) {
+            return true;
+        }
+        $separator = strrpos($value, '::');
+
+        return $separator !== false && strcasecmp(substr($value, $separator + 2), $name) === 0;
+    }
+
     private function containsClassStringStaticCall(Node $node, string $name): bool
     {
         if ($node instanceof StaticCall
