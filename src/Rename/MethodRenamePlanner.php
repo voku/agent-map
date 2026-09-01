@@ -9,6 +9,7 @@ use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\ResolvedMethod;
+use voku\AgentMap\Removal\MethodNodeRemover;
 use voku\AgentMap\Plan\PlanBlindSpot;
 use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Plan\PlanProvenance;
@@ -59,6 +60,23 @@ final readonly class MethodRenamePlanner
             }
         }
         $blockers = [...$blockers, ...$this->collisionBlockers($map, $family, $replacementName)];
+
+        // A callable is not a call relation. Renaming only the declaration while
+        // `[$this, 'name']` or `'Class::name'` still names the old method leaves
+        // source that parses and then fatals, so the rename is refused for the
+        // same reason removal refuses it.
+        $nodeRemover = new MethodNodeRemover($map->root);
+        foreach ($family as $method) {
+            foreach ($map->files as $file) {
+                if ($nodeRemover->hasCallableReference($file->path, $method->method->name)) {
+                    $blockers[] = sprintf(
+                        'A callable naming this method exists in indexed source %s; building a callable is not a call relation, so the rename cannot prove every reference is rewritten.',
+                        $file->path,
+                    );
+                }
+            }
+        }
+
         $blockers = array_values(array_unique($blockers));
 
         if ($blockers !== []) {

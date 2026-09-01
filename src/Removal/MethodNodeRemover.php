@@ -121,7 +121,18 @@ final readonly class MethodNodeRemover
 
     private function containsCallableReference(Node $node, string $name): bool
     {
-        if ($node instanceof Node\Scalar\String_ && $this->stringNamesMethod($node->value, $name)) {
+        // Only genuine callable shapes, not any string that happens to share the
+        // name. `$name = 'oldName'; $obj->{$name}()` is dynamic dispatch the
+        // planners already handle as reviewable evidence with deterministic
+        // edits, and treating it as a callable would block work that is provable.
+        if ($node instanceof Node\Expr\Array_ && count($node->items) === 2) {
+            $second = $node->items[1];
+            if ($second->value instanceof Node\Scalar\String_
+                && strcasecmp($second->value->value, $name) === 0) {
+                return true;
+            }
+        }
+        if ($node instanceof Node\Scalar\String_ && $this->qualifiedStringNamesMethod($node->value, $name)) {
             return true;
         }
 
@@ -137,12 +148,9 @@ final readonly class MethodNodeRemover
         return false;
     }
 
-    /** Matches both the array-callable element and the "Class::method" string form. */
-    private function stringNamesMethod(string $value, string $name): bool
+    /** Only the "Class::method" callable string, never a bare name. */
+    private function qualifiedStringNamesMethod(string $value, string $name): bool
     {
-        if (strcasecmp($value, $name) === 0) {
-            return true;
-        }
         $separator = strrpos($value, '::');
 
         return $separator !== false && strcasecmp(substr($value, $separator + 2), $name) === 0;
