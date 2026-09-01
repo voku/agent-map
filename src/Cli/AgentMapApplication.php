@@ -226,7 +226,24 @@ final readonly class AgentMapApplication
         if ($subcommand === 'refresh') {
             $changedPaths = $this->changedSincePaths($index, $store);
             if ($changedPaths === []) {
+                // No chunk needs re-extraction, but the map identity can still have
+                // moved: a rebuild produces a new source digest, and files can leave
+                // the scope without any surviving file changing. Returning here
+                // without reconciling left the recorded snapshot stale forever, so
+                // `search doctor` reported a mismatch that no later refresh could
+                // clear, and chunks of dropped files stayed searchable.
+                $mapPaths = [];
+                foreach ($index->files as $file) {
+                    $mapPaths[] = $file->path;
+                }
+                $pruned = $store->pruneMissingPaths($mapPaths);
+                $store->setMeta('map_snapshot', $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest);
+                $store->setMeta('chunk_policy_version', (string)\voku\AgentMap\Search\ChunkPolicy::VERSION);
+
                 echo 'Search index is up to date: ' . $options->database . "\n";
+                if ($pruned > 0) {
+                    echo '- ' . $pruned . " file(s) pruned: no longer part of the map\n";
+                }
 
                 return 0;
             }
