@@ -1019,6 +1019,14 @@ final readonly class AgentMapApplication
             return 'unknown';
         }
 
+        $relPath = MapArtifactPaths::relationsFileFor($path);
+        if (is_file($relPath)) {
+            $relBytes = filesize($relPath);
+            if (is_int($relBytes)) {
+                $bytes += $relBytes;
+            }
+        }
+
         return $bytes < 1024 ? $bytes . ' B' : round($bytes / 1024, 1) . ' KB';
     }
 

@@ -8,13 +8,14 @@ use HelgeSverre\Toon\Exceptions\DecodeException;
 use HelgeSverre\Toon\Toon;
 use JsonException;
 use RuntimeException;
+use voku\AgentMap\MapArtifactPaths;
 
 final readonly class IndexReader
 {
     /** Read size for the section scan; the largest section is read in pieces of this size. */
     private const CHUNK_BYTES = 65536;
 
-    public function read(string $file): AgentMapIndex
+    public function read(string $file, bool $loadRelations = true): AgentMapIndex
     {
         if (!is_file($file)) {
             throw new RuntimeException('Index file not found: ' . $file);
@@ -36,6 +37,25 @@ final readonly class IndexReader
             throw new RuntimeException('Invalid agent-map index: ' . $file);
         }
 
+        if ($loadRelations) {
+            $relationsFile = MapArtifactPaths::relationsFileFor($file);
+            if (is_file($relationsFile)) {
+                $relationsContent = file_get_contents($relationsFile);
+                if (is_string($relationsContent)) {
+                    $relToon = str_ends_with(strtolower($relationsFile), '.toon');
+                    $relData = $relToon ? $this->decodeToon($relationsContent) : $this->decodeJson($relationsContent);
+                    if ($relData === null) {
+                        $relData = $relToon ? $this->decodeJson($relationsContent) : $this->decodeToon($relationsContent);
+                    }
+                    if (is_array($relData) && isset($relData['relations']) && is_array($relData['relations'])) {
+                        $data['relations'] = $relData['relations'];
+                    }
+                }
+            }
+        } else {
+            $data['relations'] = [];
+        }
+
         return AgentMapIndex::fromArray($data);
     }
 
@@ -44,9 +64,9 @@ final readonly class IndexReader
      *
      * `relations` is by far the largest section of a real map - tens of megabytes against a few for
      * `files` - so decoding it for a "show me this file" lookup dominates the runtime of every quick
-     * query. IndexWriter puts each top-level section on its own line, which lets this skip the
-     * unwanted ones with a plain line scan. Anything that does not match that layout (an older index,
-     * a TOON index, a hand-edited file) falls back to the regular full read.
+     * query. When relations are split into a companion file, skipping relations takes no line-scanning
+     * at all. For single-file legacy maps, IndexWriter puts each top-level section on its own line,
+     * letting this skip unwanted ones with a plain line scan.
      *
      * @param list<string> $sections
      */
@@ -55,6 +75,28 @@ final readonly class IndexReader
         if (!is_file($file)) {
             throw new RuntimeException('Index file not found: ' . $file);
         }
+
+        $needsRelations = in_array('relations', $sections, true);
+        $relationsFile = MapArtifactPaths::relationsFileFor($file);
+        if (is_file($relationsFile)) {
+            $index = $this->read($file, $needsRelations);
+            $filterFiles = !in_array('files', $sections, true);
+            $filterDiagnostics = !in_array('diagnostics', $sections, true);
+            if ($filterFiles || $filterDiagnostics) {
+                return new AgentMapIndex(
+                    schemaVersion: $index->schemaVersion,
+                    root: $index->root,
+                    backend: $index->backend,
+                    files: $filterFiles ? [] : $index->files,
+                    relations: $index->relations,
+                    diagnostics: $filterDiagnostics ? [] : $index->diagnostics,
+                    fingerprint: $index->fingerprint,
+                );
+            }
+
+            return $index;
+        }
+
         if (str_ends_with(strtolower($file), '.toon')) {
             return $this->read($file);
         }

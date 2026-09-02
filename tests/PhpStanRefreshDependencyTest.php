@@ -12,6 +12,7 @@ use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
 use voku\AgentMap\Cli\AgentMapApplication;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
+use voku\AgentMap\MapArtifactPaths;
 
 final class PhpStanRefreshDependencyTest extends TestCase
 {
@@ -267,7 +268,8 @@ PHP);
 
         $build = $this->runApp(['agent-map', 'build', '--root=' . $this->root, '--paths=src', '--out=' . $map, '--backend=phpstan']);
         self::assertSame(0, $build['exit'], $build['output']);
-        self::assertStringContainsString('Demo\\\\Helper::run', (string) file_get_contents($map));
+        $relFile = MapArtifactPaths::relationsFileFor($map);
+        self::assertStringContainsString('Demo\\\\Helper::run', (string) file_get_contents($relFile));
 
         unlink($this->root . '/src/Helper.php');
         $refresh = $this->runApp(['agent-map', 'refresh', '--root=' . $this->root, '--index=' . $map, '--out=' . $map, '--backend=phpstan']);
@@ -275,7 +277,7 @@ PHP);
         self::assertSame(0, $refresh['exit'], $refresh['output']);
         self::assertStringNotContainsString(
             'Demo\\\\Helper::run',
-            (string) file_get_contents($map),
+            (string) file_get_contents($relFile),
             'a PHPStan-backed refresh must drop relations that resolved to the deleted declaration',
         );
     }

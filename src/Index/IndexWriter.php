@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Index;
 
 use RuntimeException;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Store\CanonicalArrayNormalizer;
 use voku\AgentMap\Store\CanonicalToonEncoder;
 
@@ -26,16 +27,44 @@ final readonly class IndexWriter
         $format ??= str_ends_with(strtolower($file), '.toon') ? 'toon' : 'json';
         $payload = $index->toArray();
 
+        $relationsFile = MapArtifactPaths::relationsFileFor($file);
+        $relationsPayload = [
+            'schema_version' => $index->schemaVersion,
+            'root' => $index->root,
+            'backend' => $index->backend,
+            'relations' => $payload['relations'] ?? [],
+        ];
+        if ($index->fingerprint !== null) {
+            $relationsPayload['fingerprint'] = $payload['fingerprint'] ?? null;
+        }
+
+        $payload['relations'] = [];
+        $payload['relations_file'] = basename($relationsFile);
+
         $temporary = $file . '.tmp-' . getmypid();
+        $temporaryRelations = $relationsFile . '.tmp-' . getmypid();
+
         match ($format) {
             'json' => $this->writeJson($payload, $temporary),
             'toon' => $this->writeString($this->toonEncoder->encode($payload), $temporary),
             default => throw new RuntimeException('Unsupported index format: ' . $format),
         };
 
+        match ($format) {
+            'json' => $this->writeJson($relationsPayload, $temporaryRelations),
+            'toon' => $this->writeString($this->toonEncoder->encode($relationsPayload), $temporaryRelations),
+            default => throw new RuntimeException('Unsupported index format: ' . $format),
+        };
+
         if (!rename($temporary, $file)) {
             @unlink($temporary);
+            @unlink($temporaryRelations);
             throw new RuntimeException('Unable to publish index: ' . $file);
+        }
+
+        if (!rename($temporaryRelations, $relationsFile)) {
+            @unlink($temporaryRelations);
+            throw new RuntimeException('Unable to publish relations index: ' . $relationsFile);
         }
     }
 

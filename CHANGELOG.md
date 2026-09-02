@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Split the persisted index into primary symbol definitions (`php-symbols.json` or `.toon`) and a companion relations file (`php-relations.json` or `.toon`). This decouples large call/override relation graphs (often 80-90% of index size) from core symbol definitions, enabling direct fast reads (~60ms vs 1.4s) for file, symbol, stats, and changed lookups while preserving full relations on-demand or transparently via `IndexReader::read()`.
 - Optimize `changed` and `stats` CLI commands to use `IndexReader::readSections(['files'])` instead of a full `read()`. This skips decoding >70MB (87% of the index payload) of relations data when only file hashes, file metadata, and symbol counts are needed, reducing command execution time from >1.1s to ~0.4s and significantly lowering peak memory usage on large indexes.
 - Preserve PHPStan's directory-based result cache when a map uses `--exclude`: derive exact PHPStan `excludePaths` for files absent from the map instead of falling back to an expanded file list. Persist the semantic paths, excludes, and scan directories in the analysis fingerprint; PHPStan-backed refreshes reuse that scope and rebuild when it, the PHPStan configuration, or `composer.lock` changes.
 - Default `phpstan-memory-limit` to `2G` in `CliOptions` so that spawned parallel PHPStan worker processes do not crash against PHP's default 128M CLI limit, which previously triggered internal dependency errors and prevented PHPStan from saving its result cache.
