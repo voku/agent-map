@@ -141,11 +141,21 @@ final readonly class AgentMapApplication
             return 0;
         }
 
-        if ($changed === []) {
-            // Only removals. Passing an empty path list to build() makes the file
-            // finder fall back to walking the whole root and re-analysing every
-            // file, so deleting one file cost a full repository rebuild. Dropping
-            // the missing entries is the whole job.
+        $structural = $options->backend === 'structural';
+        $phpStanRefresh = !$structural
+            && PhpStanSemanticAnalyzer::isAvailable()
+            && str_ends_with($index->backend, '+phpstan');
+
+        if ($changed === [] && !$phpStanRefresh) {
+            // Only removals, and no semantic facts to invalidate. Passing an empty
+            // path list to build() makes the file finder fall back to walking the
+            // root and re-analysing everything, so deleting one file cost a full
+            // rebuild. Structural facts are source-local, so dropping the missing
+            // entries is the whole job.
+            //
+            // A PHPStan-backed index deliberately does not take this shortcut: a
+            // deleted declaration also invalidates its dependents, and those live
+            // in files whose own hash never moved.
             $missing = [];
             foreach ($index->staleEntries() as $entry) {
                 if ($entry['reason'] === 'missing') {
@@ -176,10 +186,6 @@ final readonly class AgentMapApplication
             return 0;
         }
 
-        $structural = $options->backend === 'structural';
-        $phpStanRefresh = !$structural
-            && PhpStanSemanticAnalyzer::isAvailable()
-            && str_ends_with($index->backend, '+phpstan');
         $rebuilt = $this->builder($options)->build(
             $options->root,
             $phpStanRefresh ? $searchPaths : array_keys($changed),

@@ -124,6 +124,33 @@ PHP);
     }
 
     /**
+     * A deletion invalidates dependents too. The structural fast path that skips
+     * the builder for a pure removal must therefore not apply to a PHPStan-backed
+     * index, or a caller keeps a resolved target that no longer exists.
+     */
+    public function testDeletingAFileStillReresolvesDependentsOnAPhpStanMap(): void
+    {
+        $map = $this->root . '/deletion-map.json';
+        file_put_contents($this->root . '/src/Helper.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Demo;\n\nfinal class Helper\n{\n    public static function run(): string\n    {\n        return 'a';\n    }\n}\n");
+        file_put_contents($this->root . '/src/HelperCaller.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Demo;\n\nfinal class HelperCaller\n{\n    public function go(): string\n    {\n        return Helper::run();\n    }\n}\n");
+
+        $build = $this->runApp(['agent-map', 'build', '--root=' . $this->root, '--paths=src', '--out=' . $map, '--backend=phpstan']);
+        self::assertSame(0, $build['exit'], $build['output']);
+        self::assertStringContainsString('Demo\\\\Helper::run', (string) file_get_contents($map));
+
+        unlink($this->root . '/src/Helper.php');
+        $refresh = $this->runApp(['agent-map', 'refresh', '--root=' . $this->root, '--index=' . $map, '--out=' . $map, '--backend=phpstan']);
+
+        self::assertSame(0, $refresh['exit'], $refresh['output']);
+        self::assertStringNotContainsString(
+            'Demo\\\\Helper::run',
+            (string) file_get_contents($map),
+            'a PHPStan-backed refresh must drop relations that resolved to the deleted declaration',
+        );
+    }
+
+    /**
+     * @param list<string> $argv
      * @return array{exit: int, output: string}
      */
     private function runApp(array $argv): array
