@@ -634,7 +634,7 @@ final readonly class AgentMapApplication
 
     private function stats(CliOptions $options): int
     {
-        $index = (new IndexReader())->read($options->index);
+        $index = (new IndexReader())->readSections($options->index, ['files']);
         $this->warnIfStale($index->staleEntries());
         echo $this->formatter->render([
             'type' => 'stats',
