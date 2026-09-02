@@ -271,8 +271,12 @@ final readonly class AgentMapApplication
     {
         $directories = [];
         foreach ($files as $file) {
-            $separator = strrpos($file->path, '/');
+            $separator = strpos($file->path, '/');
             $directories[$separator === false ? '.' : substr($file->path, 0, $separator)] = true;
+        }
+
+        if (isset($directories['.'])) {
+            return ['.'];
         }
 
         return array_keys($directories);

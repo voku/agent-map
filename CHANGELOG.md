@@ -10,6 +10,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Optimize `changed` and `stats` CLI commands to use `IndexReader::readSections(['files'])` instead of a full `read()`. This skips decoding >70MB (87% of the index payload) of relations data when only file hashes, file metadata, and symbol counts are needed, reducing command execution time from >1.1s to ~0.4s and significantly lowering peak memory usage on large indexes.
 - Preserve PHPStan's directory-based result cache when a map uses `--exclude`: derive exact PHPStan `excludePaths` for files absent from the map instead of falling back to an expanded file list. Persist the semantic paths, excludes, and scan directories in the analysis fingerprint; PHPStan-backed refreshes reuse that scope and rebuild when it, the PHPStan configuration, or `composer.lock` changes.
+- Default `phpstan-memory-limit` to `2G` in `CliOptions` so that spawned parallel PHPStan worker processes do not crash against PHP's default 128M CLI limit, which previously triggered internal dependency errors and prevented PHPStan from saving its result cache.
+- Resolve top-level root directories instead of leaf directories in `indexedDirectories()` fallback, avoiding leaf directory explosion and preserving PHPStan's result cache scope matching.
+- Derive the artifact cache root from `--index` on `refresh` commands even when `--out` is redirected, ensuring existing warm caches are found and reused.
 
 ## 0.9.0 - 2026-08-31
 

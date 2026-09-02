@@ -50,6 +50,19 @@ final class CliOptionsTest extends TestCase
         self::assertSame($cwd . '/.agent-map/phpstan-cache', $options->artifacts->phpStanCache());
     }
 
+    public function testRefreshArtifactRootFollowsNamedIndexEvenWhenOutIsRedirected(): void
+    {
+        $cwd = getcwd() ?: '.';
+        $options = CliOptions::parse([
+            'refresh',
+            '--root=.',
+            '--index=.agent-loop/map/php-symbols.json',
+            '--out=/tmp/custom-out.json',
+        ]);
+
+        self::assertSame($cwd . '/.agent-loop/map/phpstan-cache', $options->artifacts->phpStanCache());
+    }
+
     public function testArtifactPathsAreResolvedRelativeToRoot(): void
     {
         $cwd = getcwd() ?: '.';
@@ -128,6 +141,7 @@ final class CliOptionsTest extends TestCase
         self::assertSame(10, $options->symbolLimit);
         self::assertSame(10, $options->methodLimit);
         self::assertSame('main', $options->base);
+        self::assertSame('2G', $options->phpStanMemoryLimit);
     }
 
     public function testEmbeddedMapRootDoesNotMoveWithExplicitSourceRoot(): void

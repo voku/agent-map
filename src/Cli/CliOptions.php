@@ -83,7 +83,7 @@ final readonly class CliOptions
             'base' => 'main',
             'backend' => 'auto',
             'phpstan-config' => '',
-            'phpstan-memory-limit' => '',
+            'phpstan-memory-limit' => '2G',
             'context-budget' => '60000',
             'max-files' => '20',
             'max-callers' => '10',
@@ -151,9 +151,12 @@ final readonly class CliOptions
         // location, and a checkout or worktree without that location paid a full
         // semantic analysis again instead of reusing the cache it just built.
         if ($artifacts === null) {
+            $artifactSource = $command === 'refresh' && $values['index'] !== ''
+                ? $values['index']
+                : ($values['out'] !== '' ? $values['out'] : $values['index']);
             $artifacts = MapArtifactPaths::forProject(
                 $values['root'],
-                self::artifactRootFrom($values['out'] !== '' ? $values['out'] : $values['index']),
+                self::artifactRootFrom($artifactSource),
             );
         }
         if ($command === 'build' || $command === 'refresh') {
