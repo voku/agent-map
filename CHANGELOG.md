@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Changed
+
+- Optimize `changed` and `stats` CLI commands to use `IndexReader::readSections(['files'])` instead of a full `read()`. This skips decoding >70MB (87% of the index payload) of relations data when only file hashes, file metadata, and symbol counts are needed, reducing command execution time from >1.1s to ~0.4s and significantly lowering peak memory usage on large indexes.
+
 ## 0.9.0 - 2026-08-31
 
 ### Added
