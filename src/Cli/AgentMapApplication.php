@@ -97,12 +97,13 @@ final readonly class AgentMapApplication
     }
 
     /**
-     * Rebuilds only what the index no longer matches.
+     * Rebuilds what the index no longer matches.
      *
-     * A full semantic build of a real code base runs for minutes, so keeping the map current has to
-     * cost about as much as the change that invalidated it: this re-analyses the files whose hash
-     * moved plus the ones that appeared since the last build, and patches them into the existing
-     * index. Deleted files drop out through the same merge.
+     * Structural-only refresh can safely patch changed files because its facts are source-local.
+     * PHPStan-backed refresh instead rebuilds the complete current indexed scope through the
+     * structural cache and lets PHPStan's result cache decide which changed files and transitive
+     * dependents require semantic re-analysis. Carrying untouched semantic relations would make a
+     * declaration change leave stale facts in otherwise unchanged callers.
      */
     private function refresh(CliOptions $options): int
     {
@@ -141,13 +142,16 @@ final readonly class AgentMapApplication
         }
 
         $structural = $options->backend === 'structural';
+        $phpStanRefresh = !$structural
+            && PhpStanSemanticAnalyzer::isAvailable()
+            && str_ends_with($index->backend, '+phpstan');
         $rebuilt = $this->builder($options)->build(
             $options->root,
-            array_keys($changed),
+            $phpStanRefresh ? $searchPaths : array_keys($changed),
             $options->excludes,
             $structural ? null : $options->phpStanConfig,
             $structural ? null : $options->phpStanMemoryLimit,
-            $index,
+            $phpStanRefresh ? null : $index,
             $structural ? [] : $options->scanPaths,
         );
         (new IndexWriter())->write($rebuilt, $options->out, $options->format);
@@ -923,8 +927,9 @@ final readonly class AgentMapApplication
             analysed scope references classes living outside it, otherwise their types stay unresolved.
 
             --merge patches the existing --out index instead of replacing it, so a narrow --paths scope
-            keeps everything it did not cover. refresh does the same automatically for the files whose
-            hash moved, plus new files, minus deleted ones - the cheap way to keep a large map current.
+            keeps everything it did not cover. Structural refresh does the same for changed files.
+            PHPStan-backed refresh rebuilds the complete current indexed scope through the structural
+            cache so PHPStan can invalidate semantic dependents through its own result cache.
 
             Keeping --paths on directories (no --exclude) lets PHPStan reuse its result cache; passing
             individual files disables that cache and re-analyses everything from scratch.
