@@ -140,6 +140,41 @@ final readonly class AgentMapApplication
             return 0;
         }
 
+        if ($changed === []) {
+            // Only removals. Passing an empty path list to build() makes the file
+            // finder fall back to walking the whole root and re-analysing every
+            // file, so deleting one file cost a full repository rebuild. Dropping
+            // the missing entries is the whole job.
+            $missing = [];
+            foreach ($index->staleEntries() as $entry) {
+                if ($entry['reason'] === 'missing') {
+                    $missing[$entry['path']] = true;
+                }
+            }
+            $pruned = new AgentMapIndex(
+                schemaVersion: $index->schemaVersion,
+                root: $index->root,
+                backend: $index->backend,
+                files: array_values(array_filter(
+                    $index->files,
+                    static fn ($file): bool => !isset($missing[$file->path]),
+                )),
+                relations: array_values(array_filter(
+                    $index->relations,
+                    static fn ($relation): bool => !isset($missing[$relation->file]),
+                )),
+                diagnostics: array_values(array_filter(
+                    $index->diagnostics,
+                    static fn ($diagnostic): bool => $diagnostic->file === null || !isset($missing[$diagnostic->file]),
+                )),
+                fingerprint: $index->fingerprint,
+            );
+            (new IndexWriter())->write($pruned, $options->out, $options->format);
+            echo 'Refreshed 0 changed and dropped ' . $removed . ' removed file(s); ' . count($pruned->files) . ' file(s) indexed in ' . $options->out . "\n";
+
+            return 0;
+        }
+
         $structural = $options->backend === 'structural';
         $rebuilt = $this->builder($options)->build(
             $options->root,
