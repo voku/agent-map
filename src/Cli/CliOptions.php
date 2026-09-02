@@ -135,7 +135,18 @@ final readonly class CliOptions
             throw new InvalidArgumentException('Missing argument for command: ' . $command);
         }
 
-        $artifacts ??= MapArtifactPaths::forProject($values['root']);
+        // Derived artifacts follow the index the caller named. --index and
+        // --database were already redirectable one by one, but the PHPStan result
+        // cache was not: it always resolved against the default artifact root. A
+        // project that keeps its index elsewhere then wrote the cache to a second
+        // location, and a checkout or worktree without that location paid a full
+        // semantic analysis again instead of reusing the cache it just built.
+        if ($artifacts === null) {
+            $artifacts = MapArtifactPaths::forProject(
+                $values['root'],
+                self::artifactRootFrom($values['out'] !== '' ? $values['out'] : $values['index']),
+            );
+        }
         if ($command === 'build' || $command === 'refresh') {
             if (!$formatProvided && $values['out'] !== '' && str_ends_with(strtolower($values['out']), '.toon')) {
                 $values['format'] = 'toon';
@@ -185,6 +196,21 @@ final readonly class CliOptions
             maxTypeDefinitions: self::positiveInt('max-type-definitions', $values['max-type-definitions'], 0),
             artifacts: $artifacts,
         );
+    }
+
+    /**
+     * The directory holding a named index is that run's artifact root, so the
+     * result cache and search database live beside the index they belong to.
+     */
+    private static function artifactRootFrom(string $indexPath): ?string
+    {
+        $indexPath = trim(str_replace('\\', '/', $indexPath));
+        if ($indexPath === '') {
+            return null;
+        }
+        $directory = \dirname($indexPath);
+
+        return $directory === '.' ? null : $directory;
     }
 
     /**
