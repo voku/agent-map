@@ -121,7 +121,9 @@ There is one analysis path and one map model. JSON and TOON are serializers, not
 
 Keep `--paths` on directories when you can. PHPStan turns its result cache off as soon as it is
 handed individual files, so a file-list scope re-analyses everything on every build, while a
-directory scope makes an unchanged rebuild close to free. `--exclude` falls back to the file list.
+directory scope makes an unchanged rebuild close to free. `--exclude` stays exact without losing
+that cache: agent-map derives PHPStan `excludePaths` from the files the map excludes and keeps
+PHPStan on the original directory scope.
 
 Use `--scan` when the analysed scope references classes that live outside it. Without it PHPStan
 cannot resolve those types and reports `Class X was not found ... discovering symbols is probably
@@ -376,9 +378,10 @@ map are not observable; the plan lists them as explicit boundaries instead of pr
 
 ## Keep a map current
 
-A full semantic build of a large repository costs minutes. `refresh` re-analyses only the files
-whose hash moved plus the ones that appeared since the last build, drops deleted ones, and patches
-the result into the existing map:
+A full semantic build of a large repository costs minutes. A structural-only `refresh` re-analyses
+only files whose hash moved, drops deleted ones, and patches the result into the existing map. A
+PHPStan-backed `refresh` instead rebuilds its complete stored semantic scope through the structural
+cache and lets PHPStan's dependency-aware result cache select changed files and semantic dependents:
 
 ```bash
 vendor/bin/agent-map refresh --root=. --index=.agent-map/php-symbols.json
@@ -389,8 +392,10 @@ explicit `--paths`, new files are looked for in the directories the map already 
 
 An incremental build refuses to mix semantic backends. If PHPStan availability changed since the existing map was built, run a full `build` so every carried file and relation has one backend identity.
 
-Relations are keyed by their source file, so edges pointing *into* a refreshed file keep the shape
-they had at their own last analysis. Rebuild fully now and then to make incoming edges exact.
+The map records its PHPStan paths, exclude rules, and scan directories in the analysis fingerprint.
+A normal PHPStan refresh reuses that recorded scope even when the caller omits flags; an explicit
+scope, PHPStan configuration, or `composer.lock` change triggers a full semantic refresh. This
+keeps call edges into a changed declaration exact without trusting source hashes alone.
 
 ### Repository status
 

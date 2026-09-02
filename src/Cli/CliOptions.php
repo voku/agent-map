@@ -20,7 +20,9 @@ final readonly class CliOptions
         public ?string $argument,
         public string $root,
         public array $paths,
+        public bool $pathsProvided,
         public array $scanPaths,
+        public bool $scanPathsProvided,
         public string $out,
         public string $index,
         public string $database,
@@ -31,6 +33,7 @@ final readonly class CliOptions
         public int $methodLimit,
         public string $base,
         public array $excludes,
+        public bool $excludesProvided,
         public bool $help,
         public bool $merge,
         public bool $semantic,
@@ -94,6 +97,9 @@ final readonly class CliOptions
         $merge = false;
         $semantic = false;
         $formatProvided = false;
+        $pathsProvided = false;
+        $scanPathsProvided = false;
+        $excludesProvided = false;
 
         for ($i = 0, $count = count($tokens); $i < $count; ++$i) {
             $token = $tokens[$i];
@@ -122,6 +128,7 @@ final readonly class CliOptions
             }
             if ($name === 'exclude') {
                 $excludes[] = $value;
+                $excludesProvided = true;
                 continue;
             }
             if (!array_key_exists($name, $values)) {
@@ -129,6 +136,8 @@ final readonly class CliOptions
             }
             $values[$name] = $value;
             $formatProvided = $formatProvided || $name === 'format';
+            $pathsProvided = $pathsProvided || $name === 'paths';
+            $scanPathsProvided = $scanPathsProvided || $name === 'scan';
         }
 
         if (in_array($command, ['query', 'file', 'related', 'scope', 'callers', 'callees', 'context', 'search'], true) && !$help && ($argument === null || $argument === '')) {
@@ -171,7 +180,9 @@ final readonly class CliOptions
             argument: $argument,
             root: $values['root'],
             paths: self::splitPaths($values['paths']),
+            pathsProvided: $pathsProvided,
             scanPaths: self::splitList($values['scan']),
+            scanPathsProvided: $scanPathsProvided,
             out: self::artifactPath($values['root'], $values['out']),
             index: self::artifactPath($values['root'], $values['index']),
             database: self::artifactPath($values['root'], $values['database']),
@@ -182,6 +193,7 @@ final readonly class CliOptions
             methodLimit: self::positiveInt('method-limit', $values['method-limit'], 0),
             base: $values['base'],
             excludes: $excludes,
+            excludesProvided: $excludesProvided,
             help: $help,
             merge: $merge,
             semantic: $semantic,

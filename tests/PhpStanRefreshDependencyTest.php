@@ -107,6 +107,124 @@ PHP);
         self::assertSame(['method:Demo\\B::run'], $this->callerTargets((new IndexReader())->read($map)));
     }
 
+    public function testDirectoryScopeWithExcludesWritesPhpStanResultCache(): void
+    {
+        mkdir($this->root . '/src/ignored', 0o775, true);
+        file_put_contents($this->root . '/src/ignored/Ignored.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Demo;\n\nfinal class Ignored\n{\n}\n");
+        $map = $this->root . '/excluded-map.json';
+
+        $build = $this->runApp([
+            'agent-map',
+            'build',
+            '--root=' . $this->root,
+            '--paths=src',
+            '--exclude=~(^|/)ignored(/|$)~',
+            '--backend=phpstan',
+            '--out=' . $map,
+        ]);
+
+        self::assertSame(0, $build['exit'], $build['output']);
+        self::assertDirectoryExists($this->root . '/phpstan-cache/cache/PHPStan');
+        self::assertGreaterThan(
+            0,
+            iterator_count(new RecursiveIteratorIterator(new RecursiveDirectoryIterator(
+                $this->root . '/phpstan-cache/cache/PHPStan',
+                RecursiveDirectoryIterator::SKIP_DOTS,
+            ))),
+        );
+        self::assertFalse($this->hasClass((new IndexReader())->read($map), 'Demo\\Ignored'));
+    }
+
+    public function testRefreshRetainsStoredExcludeScopeWhenTheCallerOmitsIt(): void
+    {
+        mkdir($this->root . '/src/ignored', 0o775, true);
+        file_put_contents($this->root . '/src/ignored/Ignored.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Demo;\n\nfinal class Ignored\n{\n}\n");
+        $map = $this->root . '/stored-scope-map.json';
+        $build = $this->runApp([
+            'agent-map',
+            'build',
+            '--root=' . $this->root,
+            '--paths=src',
+            '--exclude=~(^|/)ignored(/|$)~',
+            '--backend=phpstan',
+            '--out=' . $map,
+        ]);
+        self::assertSame(0, $build['exit'], $build['output']);
+
+        file_put_contents($this->root . '/src/ignored/NewIgnored.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Demo;\n\nfinal class NewIgnored\n{\n}\n");
+        $refresh = $this->runApp([
+            'agent-map',
+            'refresh',
+            '--root=' . $this->root,
+            '--backend=phpstan',
+            '--index=' . $map,
+            '--out=' . $map,
+        ]);
+
+        self::assertSame(0, $refresh['exit'], $refresh['output']);
+        self::assertStringContainsString('Index is up to date', $refresh['output']);
+        self::assertFalse($this->hasClass((new IndexReader())->read($map), 'Demo\\NewIgnored'));
+    }
+
+    public function testRefreshRebuildsWhenAnExplicitScopeChangesWithoutSourceChanges(): void
+    {
+        mkdir($this->root . '/src/ignored', 0o775, true);
+        file_put_contents($this->root . '/src/ignored/Ignored.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Demo;\n\nfinal class Ignored\n{\n}\n");
+        $map = $this->root . '/scope-change-map.json';
+        $build = $this->runApp([
+            'agent-map',
+            'build',
+            '--root=' . $this->root,
+            '--paths=src',
+            '--backend=phpstan',
+            '--out=' . $map,
+        ]);
+        self::assertSame(0, $build['exit'], $build['output']);
+        self::assertTrue($this->hasClass((new IndexReader())->read($map), 'Demo\\Ignored'));
+
+        $refresh = $this->runApp([
+            'agent-map',
+            'refresh',
+            '--root=' . $this->root,
+            '--exclude=~(^|/)ignored(/|$)~',
+            '--backend=phpstan',
+            '--index=' . $map,
+            '--out=' . $map,
+        ]);
+
+        self::assertSame(0, $refresh['exit'], $refresh['output']);
+        self::assertStringNotContainsString('Index is up to date', $refresh['output']);
+        self::assertFalse($this->hasClass((new IndexReader())->read($map), 'Demo\\Ignored'));
+    }
+
+    public function testRefreshRebuildsWhenPhpStanConfigurationChangesWithoutSourceChanges(): void
+    {
+        file_put_contents($this->root . '/phpstan.neon', "parameters:\n    level: 0\n");
+        $map = $this->root . '/config-change-map.json';
+        $build = $this->runApp([
+            'agent-map',
+            'build',
+            '--root=' . $this->root,
+            '--paths=src',
+            '--backend=phpstan',
+            '--out=' . $map,
+        ]);
+        self::assertSame(0, $build['exit'], $build['output']);
+
+        file_put_contents($this->root . '/phpstan.neon', "parameters:\n    level: 1\n");
+        $refresh = $this->runApp([
+            'agent-map',
+            'refresh',
+            '--root=' . $this->root,
+            '--backend=phpstan',
+            '--index=' . $map,
+            '--out=' . $map,
+        ]);
+
+        self::assertSame(0, $refresh['exit'], $refresh['output']);
+        self::assertStringNotContainsString('Index is up to date', $refresh['output']);
+    }
+
     /**
      * @return list<string>
      */
@@ -121,6 +239,19 @@ PHP);
         }
 
         throw new RuntimeException('Caller relation missing from semantic map.');
+    }
+
+    private function hasClass(AgentMapIndex $index, string $fqn): bool
+    {
+        foreach ($index->files as $file) {
+            foreach ($file->symbols as $symbol) {
+                if ($symbol->kind === 'class' && $symbol->fqn === $fqn) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

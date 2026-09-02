@@ -102,6 +102,16 @@ final class CliOptionsTest extends TestCase
         $options = CliOptions::parse(['build', '--exclude=~Generated~', '--exclude', '~fixtures~']);
 
         self::assertSame(['~Generated~', '~fixtures~'], $options->excludes);
+        self::assertTrue($options->excludesProvided);
+    }
+
+    public function testTracksExplicitSemanticScopeOptions(): void
+    {
+        $options = CliOptions::parse(['refresh', '--paths=src', '--scan=stubs', '--exclude=~fixtures~']);
+
+        self::assertTrue($options->pathsProvided);
+        self::assertTrue($options->scanPathsProvided);
+        self::assertTrue($options->excludesProvided);
     }
 
     public function testParsesDefaultValues(): void

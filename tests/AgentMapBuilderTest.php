@@ -55,6 +55,9 @@ final class AgentMapBuilderTest extends TestCase
         self::assertNotNull($index->fingerprint);
         self::assertSame('none', $index->fingerprint->phpStanVersion);
         self::assertStringStartsWith('sha256:', $index->fingerprint->sourceDigest);
+        self::assertNotNull($index->fingerprint->semanticScope);
+        self::assertSame(['src'], $index->fingerprint->semanticScope->paths);
+        self::assertSame([], $index->fingerprint->semanticScope->excludes);
     }
 
     public function testMergeKeepsUntouchedFilesAndDropsDeletedOnes(): void
@@ -118,6 +121,19 @@ final class AgentMapBuilderTest extends TestCase
 
         self::assertSame($this->root . '/phpstan.neon', $semantic->configurationFile);
         self::assertSame('512M', $semantic->memoryLimit);
+    }
+
+    public function testBuildKeepsDirectoryScopeWhenMapExcludesFiles(): void
+    {
+        $semantic = new RecordingSemanticAnalyzer();
+
+        (new AgentMapBuilder(semanticAnalyzer: $semantic))->build(
+            $this->root,
+            ['src'],
+            ['~(^|/)ignored(/|$)~'],
+        );
+
+        self::assertSame(['src'], $semantic->analyseDirectories);
     }
 
     public function testMissingExplicitPhpStanConfigurationFailsClearly(): void
@@ -263,6 +279,9 @@ final class RecordingSemanticAnalyzer implements SemanticAnalyzer
     public ?string $configurationFile = null;
     public ?string $memoryLimit = null;
 
+    /** @var list<string> */
+    public array $analyseDirectories = [];
+
     public function backend(): string
     {
         return 'recording';
@@ -279,6 +298,7 @@ final class RecordingSemanticAnalyzer implements SemanticAnalyzer
     {
         $this->configurationFile = $configurationFile;
         $this->memoryLimit = $memoryLimit;
+        $this->analyseDirectories = $analyseDirectories;
 
         return new SemanticAnalysisResult([], [], 'test-recording', 'sha256:recording');
     }

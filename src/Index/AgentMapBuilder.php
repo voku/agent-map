@@ -123,13 +123,13 @@ final readonly class AgentMapBuilder
 
         $this->saveStructuralCache($realRoot, $nextCache);
 
-        $configuration = $this->resolvePhpStanConfiguration($realRoot, $phpStanConfiguration);
+        $configuration = self::resolvePhpStanConfiguration($realRoot, $phpStanConfiguration);
         $semantic = $this->semanticAnalyzer->analyse(
             $realRoot,
             $relatives,
             $configuration,
             $phpStanMemoryLimit,
-            $this->analyseDirectories($realRoot, $paths, $excludes),
+            $this->analyseDirectories($realRoot, $paths),
             $scanPaths,
         );
         $reconciled = $this->reconciler->reconcile($realRoot, $structuralFiles, $semantic);
@@ -156,6 +156,7 @@ final readonly class AgentMapBuilder
                 phpStanConfigSha256: $semantic->configurationSha256,
                 composerLockSha256: is_string($composerLockHash) ? 'sha256:' . $composerLockHash : 'sha256:none',
                 sourceDigest: 'sha256:' . hash('sha256', implode("\n", $sourceDigestParts)),
+                semanticScope: new SemanticScope($paths, $excludes, $scanPaths),
             ),
         );
     }
@@ -165,21 +166,15 @@ final readonly class AgentMapBuilder
      *
      * PHPStan turns its result cache off completely as soon as individual files are passed
      * ("Result cache not used because only files were passed as analysed paths"), which makes every
-     * rebuild a cold rebuild. Handing over the scope directories keeps the cache alive. Excludes are
-     * the one case where that would widen the analysis, so those scopes keep the file list; extra
-     * semantic records for unindexed files are dropped during reconciliation either way.
+     * rebuild a cold rebuild. Handing over the scope directories keeps the cache alive; the semantic
+     * analyser translates the files removed from the map scope into PHPStan `excludePaths` instead of
+     * widening the analysed scope or falling back to the file list.
      *
      * @param list<string> $paths
-     * @param list<string> $excludes
-     *
      * @return list<string>
      */
-    private function analyseDirectories(string $root, array $paths, array $excludes): array
+    private function analyseDirectories(string $root, array $paths): array
     {
-        if ($excludes !== []) {
-            return [];
-        }
-
         $directories = [];
         foreach ($paths as $path) {
             if (!is_dir($path === '.' ? $root : $root . '/' . $path)) {
@@ -339,10 +334,10 @@ final readonly class AgentMapBuilder
         return $this->artifacts ?? MapArtifactPaths::forProject($root);
     }
 
-    private function resolvePhpStanConfiguration(string $root, ?string $configuration): ?string
+    public static function resolvePhpStanConfiguration(string $root, ?string $configuration): ?string
     {
         if ($configuration !== null) {
-            $candidate = $this->isAbsolutePath($configuration) ? $configuration : $root . '/' . $configuration;
+            $candidate = self::isAbsolutePath($configuration) ? $configuration : $root . '/' . $configuration;
             if (!is_file($candidate)) {
                 throw new RuntimeException('PHPStan configuration not found: ' . $configuration);
             }
@@ -359,7 +354,7 @@ final readonly class AgentMapBuilder
         return null;
     }
 
-    private function isAbsolutePath(string $path): bool
+    private static function isAbsolutePath(string $path): bool
     {
         return str_starts_with($path, '/')
             || str_starts_with($path, '\\\\')
