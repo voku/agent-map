@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.10.0 - 2026-09-04
+
+### Fixed
+
+- Reading a split index whose relations companion is missing now fails loudly
+  instead of returning an empty relation graph. An incomplete copy was
+  indistinguishable from a map with no relations, so `map history diff` reported
+  every relation on the other side as newly added against an unchanged tree. A
+  renamed symbols file beside the companion it names now resolves it; legacy
+  single-file indexes are unaffected.
+
 ### Changed
 
 - Move package Make include from root `Makefile.agent-map.mk` to `resources/make/agent-map.mk`, and move `THIRD_PARTY_NOTICES.md` to `docs/reference/third-party-notices.md` following the shared repository layout convention. Introduce `PackageResources` as the single owner of package-shipped asset paths.
