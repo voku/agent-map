@@ -3,6 +3,35 @@
   "type": "library",
   "description": "Compact PHP repository symbol maps for coding-agent navigation.",
   "license": "MIT",
+  "homepage": "https://github.com/voku/agent-map",
+  "support": {
+    "issues": "https://github.com/voku/agent-map/issues",
+    "source": "https://github.com/voku/agent-map"
+  },
+  "keywords": [
+    "agent",
+    "coding-agent",
+    "php",
+    "ast",
+    "symbol-map",
+    "code-index",
+    "static-analysis",
+    "phpstan",
+    "ai",
+    "llm"
+  ],
+  "authors": [
+    {
+      "name": "Lars Moelleken",
+      "homepage": "https://github.com/voku"
+    }
+  ],
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/voku"
+    }
+  ],
   "bin": [
     "bin/agent-map"
   ],

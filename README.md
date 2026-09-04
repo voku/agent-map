@@ -1,5 +1,14 @@
 # agent-map
 
+[![Build Status](https://github.com/voku/agent-map/actions/workflows/ci.yml/badge.svg)](https://github.com/voku/agent-map/actions)
+[![Latest Stable Version](https://poser.pugx.org/voku/agent-map/v/stable)](https://packagist.org/packages/voku/agent-map)
+[![Total Downloads](https://poser.pugx.org/voku/agent-map/downloads)](https://packagist.org/packages/voku/agent-map)
+[![Monthly Downloads](https://poser.pugx.org/voku/agent-map/d/monthly)](https://packagist.org/packages/voku/agent-map)
+[![License](https://poser.pugx.org/voku/agent-map/license)](https://packagist.org/packages/voku/agent-map)
+[![PHP Version Require](https://poser.pugx.org/voku/agent-map/require/php)](https://packagist.org/packages/voku/agent-map)
+[![GitHub Stars](https://img.shields.io/github/stars/voku/agent-map?style=flat-square)](https://github.com/voku/agent-map/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/voku/agent-map?style=flat-square)](https://github.com/voku/agent-map/network/members)
+
 Deterministic PHP repository maps for coding-agent context selection.
 
 `agent-map` always records structural repository facts and enriches them when the PHPStan capability is installed:
