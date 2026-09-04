@@ -479,6 +479,23 @@ The supported consumer boundary is:
 Files below `.agent-map/` are package-owned state, not an interface. A consumer that reads them, or
 parses CLI text, is depending on something that is free to change in a patch release.
 
+## Makefile integration & PackageResources
+
+The package includes a ready-to-use Makefile helper at `resources/make/agent-map.mk`. You can include it directly in your project's `Makefile`:
+
+```makefile
+-include vendor/voku/agent-map/resources/make/agent-map.mk
+```
+
+PHP tools and host integrations can resolve that resource path programmatically via `voku\AgentMap\PackageResources`:
+
+```php
+use voku\AgentMap\PackageResources;
+
+$makeIncludePath = PackageResources::makeInclude();
+// returns /path/to/vendor/voku/agent-map/resources/make/agent-map.mk
+```
+
 ## Generated files
 
 Recommended `.gitignore` entry:
