@@ -44,17 +44,8 @@ final readonly class IndexWriter
         $temporary = $file . '.tmp-' . getmypid();
         $temporaryRelations = $relationsFile . '.tmp-' . getmypid();
 
-        match ($format) {
-            'json' => $this->writeJson($payload, $temporary),
-            'toon' => $this->writeString($this->toonEncoder->encode($payload), $temporary),
-            default => throw new RuntimeException('Unsupported index format: ' . $format),
-        };
-
-        match ($format) {
-            'json' => $this->writeJson($relationsPayload, $temporaryRelations),
-            'toon' => $this->writeString($this->toonEncoder->encode($relationsPayload), $temporaryRelations),
-            default => throw new RuntimeException('Unsupported index format: ' . $format),
-        };
+        $this->writePayload($payload, $temporary, $format);
+        $this->writePayload($relationsPayload, $temporaryRelations, $format);
 
         if (!rename($temporary, $file)) {
             @unlink($temporary);
@@ -66,6 +57,18 @@ final readonly class IndexWriter
             @unlink($temporaryRelations);
             throw new RuntimeException('Unable to publish relations index: ' . $relationsFile);
         }
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function writePayload(array $payload, string $temporary, string $format): void
+    {
+        match ($format) {
+            'json' => $this->writeJson($payload, $temporary),
+            'toon' => $this->writeString($this->toonEncoder->encode($payload), $temporary),
+            default => throw new RuntimeException('Unsupported index format: ' . $format),
+        };
     }
 
     /**
