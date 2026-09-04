@@ -15,7 +15,7 @@ use InvalidArgumentException;
  * does not import Rector runtime types or mutation behavior.
  *
  * Copyright (c) 2017-present Tomáš Votruba.
- * Licensed under the MIT License; see THIRD_PARTY_NOTICES.md.
+ * Licensed under the MIT License; see docs/reference/third-party-notices.md.
  */
 final readonly class MethodRenameDefinition
 {

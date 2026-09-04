@@ -36,7 +36,7 @@ Attributes and PHPDoc are included in the exact deletion range but make the plan
 
 ## Deliberate difference from Rector
 
-The safety inventory is adapted from Rector's `RemoveUnusedPrivatePropertyRector` at immutable upstream commit `cbeefaa869f3c5a8721af602b887c242b18741fd`; see `THIRD_PARTY_NOTICES.md` for the retained MIT notice.
+The safety inventory is adapted from Rector's `RemoveUnusedPrivatePropertyRector` at immutable upstream commit `cbeefaa869f3c5a8721af602b887c242b18741fd`; see `docs/reference/third-party-notices.md` for the retained MIT notice.
 
 Rector can also remove write-only private properties and rewrite/remove assignments to them. `property_removal_plan@1.0` deliberately does **not** implement that behavior. Current agent-map property relations prove semantic property identity but do not publish a sufficiently strong read-vs-write access contract. Therefore any observed access—including an assignment—blocks automatic removal.
 

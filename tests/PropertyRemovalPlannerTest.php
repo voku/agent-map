@@ -17,7 +17,7 @@ use voku\AgentMap\Removal\PropertyRemovalPlanner;
  * rules/DeadCode/Rector/Property/RemoveUnusedPrivatePropertyRector.php at
  * rectorphp/rector-src@cbeefaa869f3c5a8721af602b887c242b18741fd.
  *
- * Copyright (c) 2017-present Tomáš Votruba. Licensed under the MIT License; see THIRD_PARTY_NOTICES.md.
+ * Copyright (c) 2017-present Tomáš Votruba. Licensed under the MIT License; see docs/reference/third-party-notices.md.
  */
 final class PropertyRemovalPlannerTest extends TestCase
 {

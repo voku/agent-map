@@ -17,7 +17,7 @@ use voku\AgentMap\Removal\ClassConstantRemovalPlanner;
  * Core safety cases adapted from Rector's RemoveUnusedPrivateClassConstantRector at
  * rectorphp/rector-src@cd3ec48e1209436d03d9c67d47c51ac4972a20cc.
  *
- * Copyright (c) 2017-present Tomáš Votruba. MIT licensed; see THIRD_PARTY_NOTICES.md.
+ * Copyright (c) 2017-present Tomáš Votruba. MIT licensed; see docs/reference/third-party-notices.md.
  */
 final class ClassConstantRemovalPlannerTest extends TestCase
 {

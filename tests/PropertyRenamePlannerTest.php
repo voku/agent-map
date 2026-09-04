@@ -26,7 +26,7 @@ use voku\AgentMap\Plan\PlanEdit;
  *
  * The tests are independently written for agent-map's stricter evidence contract.
  * Copyright (c) 2017-present Tomáš Votruba.
- * Licensed under the MIT License; see THIRD_PARTY_NOTICES.md.
+ * Licensed under the MIT License; see docs/reference/third-party-notices.md.
  */
 final class PropertyRenamePlannerTest extends TestCase
 {

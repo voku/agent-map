@@ -19,7 +19,7 @@ use voku\AgentMap\Removal\MethodRemovalPlanner;
  * rules/DeadCode/Rector/ClassMethod/RemoveUnusedPrivateMethodRector.php. Agent-map emits guarded
  * evidence rather than mutating the AST.
  *
- * Copyright (c) 2017-present Tomáš Votruba. Licensed under the MIT License; see THIRD_PARTY_NOTICES.md.
+ * Copyright (c) 2017-present Tomáš Votruba. Licensed under the MIT License; see docs/reference/third-party-notices.md.
  */
 final class MethodRemovalPlannerTest extends TestCase
 {

@@ -4,6 +4,12 @@ See [docs/stability.md](docs/stability.md) for the tier of every public surface 
 freezes. Anything classified there as *experimental* or *subtraction candidate* may still change in a
 0.9.x release.
 
+## Package assets and third-party notices layout
+
+Following the shared repository layout convention:
+- The package Make include moved from root `Makefile.agent-map.mk` to `resources/make/agent-map.mk`. Runtime code can locate it with `PackageResources::makeInclude()` or `PackageResources::MAKE_INCLUDE`.
+- `THIRD_PARTY_NOTICES.md` moved from root to `docs/reference/third-party-notices.md`.
+
 ## 0.8 to 0.9
 
 ### Removed pre-0.9 compatibility aliases

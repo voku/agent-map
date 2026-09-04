@@ -24,7 +24,7 @@ use voku\AgentMap\Plan\PlanEdit;
  * agent-map specific: semantic identity and exact source evidence are mandatory.
  *
  * Copyright (c) 2017-present Tomáš Votruba.
- * Licensed under the MIT License; see THIRD_PARTY_NOTICES.md.
+ * Licensed under the MIT License; see docs/reference/third-party-notices.md.
  */
 final class FunctionRenamePlannerTest extends TestCase
 {

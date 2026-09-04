@@ -26,7 +26,7 @@ use voku\AgentMap\Plan\PlanEdit;
  * map to exact source tokens, while unsupported or ambiguous dispatch remains fail-closed.
  *
  * Copyright (c) 2017-present Tomáš Votruba.
- * Licensed under the MIT License; see THIRD_PARTY_NOTICES.md.
+ * Licensed under the MIT License; see docs/reference/third-party-notices.md.
  */
 final class MethodRenameRectorParityTest extends TestCase
 {
