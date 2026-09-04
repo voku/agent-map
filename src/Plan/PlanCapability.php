@@ -16,6 +16,8 @@ final readonly class PlanCapability
     public const FAMILY_RENAME = 'rename';
     public const FAMILY_REMOVAL = 'removal';
     public const FAMILY_MOVE = 'move';
+    public const FAMILY_COPY = 'copy';
+    public const FAMILY_SCAFFOLD = 'scaffold';
 
     public function __construct(
         public string $family,

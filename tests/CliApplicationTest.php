@@ -31,7 +31,10 @@ final class CliApplicationTest extends TestCase
         self::assertSame(1, substr_count($output, 'Class relocation evidence:'));
         self::assertSame(1, substr_count($output, 'class-move-plan Build a read-only class namespace move plan with PSR-4 destination evidence'));
         self::assertSame(1, substr_count($output, 'Plan capability discovery:'));
-        self::assertSame(1, substr_count($output, 'plan-capabilities List every governed rename, removal and move contract'));
+        self::assertSame(1, substr_count($output, 'plan-capabilities List every governed rename, removal, move, copy, and scaffold contract'));
+        self::assertSame(1, substr_count($output, 'Method copy evidence:'));
+        self::assertSame(1, substr_count($output, 'Method scaffold evidence:'));
+        self::assertSame(1, substr_count($output, 'Class scaffold evidence:'));
         self::assertSame(1, substr_count($output, 'Method refactoring evidence:'));
         self::assertSame(1, substr_count($output, 'Parameter refactoring evidence:'));
         self::assertSame(1, substr_count($output, 'Property refactoring evidence:'));
@@ -55,6 +58,14 @@ final class CliApplicationTest extends TestCase
         self::assertIsArray($payload);
         self::assertSame('plan_capabilities', $payload['type'] ?? null);
         self::assertSame([
+            [
+                'family' => 'copy',
+                'kind' => 'method',
+                'command' => 'method-copy-plan',
+                'plan_type' => 'method_copy_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'phpstan',
+            ],
             [
                 'family' => 'move',
                 'kind' => 'class',
@@ -140,6 +151,22 @@ final class CliApplicationTest extends TestCase
                 'kind' => 'property',
                 'command' => 'property-rename-plan',
                 'plan_type' => 'property_rename_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'phpstan',
+            ],
+            [
+                'family' => 'scaffold',
+                'kind' => 'class',
+                'command' => 'class-scaffold-plan',
+                'plan_type' => 'class_scaffold_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'none',
+            ],
+            [
+                'family' => 'scaffold',
+                'kind' => 'method',
+                'command' => 'method-scaffold-plan',
+                'plan_type' => 'method_scaffold_plan',
                 'contract_version' => '1.0',
                 'semantic_backend' => 'phpstan',
             ],

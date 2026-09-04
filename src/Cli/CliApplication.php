@@ -54,7 +54,7 @@ final readonly class CliApplication
             || in_array('-h', $rest, true);
         if ($generalHelp) {
             echo "\nArtifact paths:\n  --out, --index, and --database are relative to --root unless an absolute path is given.\n\n";
-            echo "Plan capability discovery:\n  plan-capabilities List every governed rename, removal and move contract\n\n";
+            echo "Plan capability discovery:\n  plan-capabilities List every governed rename, removal, move, copy, and scaffold contract\n\n";
         }
         if ($temporal->shouldAppendToGeneralHelp($argv)) {
             echo $temporal->helpOverview();
@@ -89,6 +89,9 @@ final readonly class CliApplication
             new FunctionRenameCliApplication(artifacts: $artifacts),
             new MethodRemovalCliApplication(artifacts: $artifacts),
             new MethodMoveCliApplication(artifacts: $artifacts),
+            new MethodCopyCliApplication(artifacts: $artifacts),
+            new MethodScaffoldCliApplication(artifacts: $artifacts),
+            new ClassScaffoldCliApplication(artifacts: $artifacts),
             new ParameterRenameCliApplication(artifacts: $artifacts),
             new PropertyRenameCliApplication(artifacts: $artifacts),
             new PropertyRemovalCliApplication(artifacts: $artifacts),
