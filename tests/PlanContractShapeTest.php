@@ -9,6 +9,7 @@ use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionParameter;
 use voku\AgentMap\Move\ClassMovePlan;
+use voku\AgentMap\Move\MethodMovePlan;
 use InvalidArgumentException;
 use voku\AgentMap\Plan\GovernedPlan;
 use voku\AgentMap\Plan\PlanEdit;
@@ -24,6 +25,9 @@ use voku\AgentMap\Rename\MethodRenamePlan;
 use voku\AgentMap\Rename\ParameterRenamePlan;
 use voku\AgentMap\Rename\PropertyRenamePlan;
 use voku\AgentMap\Plan\PlanProvenance;
+use voku\AgentMap\Scaffold\ClassScaffoldPlan;
+use voku\AgentMap\Scaffold\MethodCopyPlan;
+use voku\AgentMap\Scaffold\MethodScaffoldPlan;
 
 /**
  * The governed plan family is one contract with several concrete shapes.
@@ -46,6 +50,10 @@ final class PlanContractShapeTest extends TestCase
         PropertyRemovalPlan::class,
         ClassConstantRemovalPlan::class,
         ClassMovePlan::class,
+        MethodMovePlan::class,
+        MethodCopyPlan::class,
+        MethodScaffoldPlan::class,
+        ClassScaffoldPlan::class,
     ];
 
     /** @var list<string> */

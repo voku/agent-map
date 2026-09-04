@@ -29,6 +29,7 @@ final readonly class MethodCopyPlan implements GovernedPlan
      */
     public function __construct(
         public string $status,
+        public string $targetId,
         public string $sourceId,
         public string $destinationFqn,
         public string $newMethodName,
@@ -55,6 +56,7 @@ final readonly class MethodCopyPlan implements GovernedPlan
             'type' => self::PLAN_TYPE,
             'contract_version' => self::CONTRACT_VERSION,
             'status' => $this->status,
+            'target_id' => $this->targetId,
             'source_id' => $this->sourceId,
             'destination_fqn' => $this->destinationFqn,
             'new_method_name' => $this->newMethodName,

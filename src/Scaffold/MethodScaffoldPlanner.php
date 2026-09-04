@@ -160,6 +160,7 @@ final readonly class MethodScaffoldPlanner
 
         return new MethodScaffoldPlan(
             status: PlanStatus::SAFE,
+            targetId: 'method:' . $symbol->fqn . '::' . $methodName,
             targetClass: $symbol->fqn,
             methodName: $methodName,
             provenance: new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
@@ -241,6 +242,7 @@ final readonly class MethodScaffoldPlanner
 
         return new MethodScaffoldPlan(
             status: PlanStatus::BLOCKED,
+            targetId: 'method:' . $targetClass . '::' . $methodName,
             targetClass: $targetClass,
             methodName: $methodName,
             provenance: new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),

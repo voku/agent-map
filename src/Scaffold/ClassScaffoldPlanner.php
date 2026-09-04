@@ -252,6 +252,7 @@ final readonly class ClassScaffoldPlanner
 
         return new ClassScaffoldPlan(
             status: PlanStatus::SAFE,
+            targetId: 'class:' . $cleanFqn,
             fqn: $cleanFqn,
             destinationPath: $destinationPath,
             provenance: new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
@@ -272,6 +273,7 @@ final readonly class ClassScaffoldPlanner
 
         return new ClassScaffoldPlan(
             status: PlanStatus::BLOCKED,
+            targetId: 'class:' . $fqn,
             fqn: $fqn,
             destinationPath: $destinationPath,
             provenance: new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),

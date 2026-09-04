@@ -56,28 +56,29 @@ whose per-capability verdicts are the measured basis for anything below marked *
 
 ### Governed plan family
 
-All ten plans are **stable** contracts at version `1.0`, and share one envelope: `type`,
+All fourteen plans across five families are **stable** contracts at version `1.0`, and share one envelope: `type`,
 `contract_version`, `status`, `target_id`, `provenance`, `edits`, `blind_spots`, `stale_evidence`,
 `blockers`, `not_observable`, plus contract-specific identity and, where it applies, `moves`.
 `voku\AgentMap\Plan\GovernedPlan` declares the shared behaviour, the shared value objects
 (`PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence`, `PlanMove`) live beside it, and
 `tests/PlanContractShapeTest.php` pins the envelope.
 
-| contract | command | needs PHPStan |
-| --- | --- | --- |
-| `class_rename_plan@1.0` | `class-rename-plan` | no |
-| `class_constant_rename_plan@1.0` | `class-constant-rename-plan` | no |
-| `function_rename_plan@1.0` | `function-rename-plan` | yes |
-| `method_rename_plan@1.0` | `rename-plan` | yes |
-| `parameter_rename_plan@1.0` | `parameter-rename-plan` | yes |
-| `property_rename_plan@1.0` | `property-rename-plan` | yes |
-| `method_removal_plan@1.0` | `method-removal-plan` | yes |
-| `property_removal_plan@1.0` | `property-removal-plan` | yes |
-| `class_constant_removal_plan@1.0` | `class-constant-removal-plan` | yes |
-| `class_move_plan@1.0` | `class-move-plan` | no |
-
-`class_move_plan` is the newest member. Its contract is frozen, but the 1.0 gate below still requires
-one real consumer task before it is claimed as proven rather than merely covered.
+| family | contract | command | needs PHPStan |
+| --- | --- | --- | --- |
+| rename | `class_rename_plan@1.0` | `class-rename-plan` | no |
+| rename | `class_constant_rename_plan@1.0` | `class-constant-rename-plan` | no |
+| rename | `function_rename_plan@1.0` | `function-rename-plan` | yes |
+| rename | `method_rename_plan@1.0` | `rename-plan` | yes |
+| rename | `parameter_rename_plan@1.0` | `parameter-rename-plan` | yes |
+| rename | `property_rename_plan@1.0` | `property-rename-plan` | yes |
+| removal | `method_removal_plan@1.0` | `method-removal-plan` | yes |
+| removal | `property_removal_plan@1.0` | `property-removal-plan` | yes |
+| removal | `class_constant_removal_plan@1.0` | `class-constant-removal-plan` | yes |
+| move | `class_move_plan@1.0` | `class-move-plan` | no |
+| move | `method_move_plan@1.0` | `method-move-plan` | yes |
+| copy | `method_copy_plan@1.0` | `method-copy-plan` | yes |
+| scaffold | `class_scaffold_plan@1.0` | `class-scaffold-plan` | no |
+| scaffold | `method_scaffold_plan@1.0` | `method-scaffold-plan` | yes |
 
 Shared invariants, all of them machine-checkable:
 
@@ -93,7 +94,7 @@ Shared invariants, all of them machine-checkable:
 - Stale source evidence is machine-distinct from semantic blockers, because the recovery differs.
 - Every edit carries the pre-edit source SHA-256 and an exact byte range; every move carries the same
   hash and requires an absent destination.
-- CLI exit code is `1` for a blocked plan and `0` otherwise, uniformly across all ten commands.
+- CLI exit code is `1` for a blocked plan and `0` otherwise, uniformly across all fourteen commands.
 - `text` is a human projection; `json` and `toon` are two serializers of one model, never two
   semantic implementations. Plans deliberately do not emit `markdown`.
 
@@ -107,7 +108,7 @@ Shared invariants, all of them machine-checkable:
 | graph ranking | - | **removed in 0.9** | `rank` had no consumer, appeared in no skill and was derivable from `callers`/`callees`. `GraphRanker` survives as an internal collaborator of `discover`; it is no longer public API. |
 | temporal history | `history diff/coupling/claims/observe/show` | experimental | Derived evidence by [ADR 0002](adr/0002-temporal-history-is-derived-evidence.md); no automated consumer. |
 | repository status | `summary`, `stats`, `changed` | diagnostic | Human orientation. The output shape is not a machine contract. |
-| plan capability discovery | `plan-capabilities` | stable | Covers all ten contracts across the rename, removal and move families. Routing and discovery read the same registry, so an advertised contract is always routable. |
+| plan capability discovery | `plan-capabilities` | stable | Covers all fourteen contracts across the rename, removal, move, copy, and scaffold families. Routing and discovery read the same registry, so an advertised contract is always routable. |
 
 ## What 1.0 freezes
 
@@ -187,14 +188,8 @@ reason to exist.
 
 ## Release shape
 
-`0.9.0` is the feature- and boundary-complete candidate for 1.0, not another feature release. After
-it, `0.9.x` hardens: consumer and dogfood fixes first, then an adversarial and compatibility pass
-(fresh install, upgrade from 0.8.8, structural-only projects, PHPStan projects, legacy non-namespaced
-PHP, large repositories, partial `--paths`, changed Composer autoload, source changed after a plan was
-published, JSON/TOON parity, Windows paths where relevant).
+`0.10.0` completes the governed plan surface across all fourteen contracts and introduces the split
+index format for high-performance navigation. Ahead of 1.0, the package focuses on dogfood proof,
+fresh-consumer ergonomics, and compatibility hardening (fresh install, structural-only projects,
+PHPStan-backed projects, large repositories, partial `--paths`, JSON/TOON parity, and Windows paths).
 
-New capabilities are out of scope for 0.9.x. `method_move_plan` in particular
-([#52](https://github.com/voku/agent-map/issues/52)) stays post-1.0: `$this`, `self`/`static`/`parent`,
-private dependencies, visibility, overrides and state transfer make it a different order of problem
-from a namespace relocation, and 1.0 does not require agent-map to support every conceivable PHP
-refactoring.

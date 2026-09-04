@@ -156,6 +156,7 @@ final readonly class MethodMovePlanner
         return new MethodMovePlan(
             $status,
             $method->id,
+            $method->id,
             $destinationSymbol === null ? ltrim(trim($destination), '\\') : $destinationSymbol->fqn,
             new PlanProvenance($map->mapDigest(), $map->backend, $map->fingerprint),
             $ownerDependencies,

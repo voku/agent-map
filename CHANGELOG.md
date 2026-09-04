@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- Unify machine-readable envelope structure across all fourteen governed plan contracts: add explicit `target_id` property and output key to `MethodMovePlan`, `MethodCopyPlan`, `MethodScaffoldPlan`, `ClassScaffoldPlan` and their planners.
+- Pin envelope invariants across all 14 governed plan contracts across all 5 families (`rename`, `removal`, `move`, `copy`, `scaffold`) in `tests/PlanContractShapeTest.php`.
+- Complete pre-1.0 stability policy and public surface classification in `docs/stability.md` classifying all 14 plan contracts as stable at contract version 1.0 with exit code 1 on blocked.
+
 ## 0.10.0 - 2026-09-04
 
 ### Fixed

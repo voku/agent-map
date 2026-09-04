@@ -216,6 +216,7 @@ final readonly class MethodCopyPlanner
 
         return new MethodCopyPlan(
             status: $status,
+            targetId: $method->id,
             sourceId: $method->id,
             destinationFqn: $destSymbol->fqn,
             newMethodName: $targetName,
@@ -255,6 +256,7 @@ final readonly class MethodCopyPlanner
 
         return new MethodCopyPlan(
             status: PlanStatus::BLOCKED,
+            targetId: $sourceId,
             sourceId: $sourceId,
             destinationFqn: $destFqn,
             newMethodName: $newMethodName,

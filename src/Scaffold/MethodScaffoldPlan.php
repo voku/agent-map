@@ -28,6 +28,7 @@ final readonly class MethodScaffoldPlan implements GovernedPlan
      */
     public function __construct(
         public string $status,
+        public string $targetId,
         public string $targetClass,
         public string $methodName,
         public PlanProvenance $provenance,
@@ -52,6 +53,7 @@ final readonly class MethodScaffoldPlan implements GovernedPlan
             'type' => self::PLAN_TYPE,
             'contract_version' => self::CONTRACT_VERSION,
             'status' => $this->status,
+            'target_id' => $this->targetId,
             'target_class' => $this->targetClass,
             'method_name' => $this->methodName,
             'provenance' => $this->provenance->toArray(),
