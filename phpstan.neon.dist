@@ -6,3 +6,5 @@ parameters:
     # The dogfood scripts stay out of static analysis, but the contract they share guards published
     # evidence, so it is analysed like product code.
     - tools/dogfood/ReplayBackendContract.php
+  scanFiles:
+    - phpstan-stubs/PdoSqlite.stub

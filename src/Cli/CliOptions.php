@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Cli;
 
 use InvalidArgumentException;
+use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
 use voku\AgentMap\MapArtifactPaths;
 
 final readonly class CliOptions
@@ -83,7 +84,7 @@ final readonly class CliOptions
             'base' => 'main',
             'backend' => 'auto',
             'phpstan-config' => '',
-            'phpstan-memory-limit' => '2G',
+            'phpstan-memory-limit' => PhpStanSemanticAnalyzer::isAvailable() ? '2G' : '',
             'context-budget' => '60000',
             'max-files' => '20',
             'max-callers' => '10',
