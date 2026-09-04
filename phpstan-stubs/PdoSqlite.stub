@@ -1,0 +1,21 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Pdo;
+
+/**
+ * PHP 8.4+ PDO SQLite driver subclass, modelled for PHPStan runs on older runtimes.
+ *
+ * @see https://www.php.net/manual/en/class.pdo-sqlite.php
+ */
+class Sqlite extends \PDO
+{
+    public const ATTR_OPEN_FLAGS = 0;
+
+    public const OPEN_READONLY = 0;
+
+    public function loadExtension(string $name): void
+    {
+    }
+}
