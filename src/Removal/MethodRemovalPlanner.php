@@ -99,6 +99,12 @@ final readonly class MethodRemovalPlanner
                             $file->path,
                         );
                     }
+                    if ($nodeRemover->hasCallableReference($file->path, $method->method->name)) {
+                        $blockers[] = sprintf(
+                            'A callable naming this method exists in indexed source %s; building a callable is not a call relation, so removal cannot prove it is unreachable.',
+                            $file->path,
+                        );
+                    }
                 }
 
                 if ($blockers === []) {

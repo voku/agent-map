@@ -31,9 +31,39 @@ final readonly class MapArtifactPaths
         return $this->path('php-symbols.json');
     }
 
+    public function relationsJson(): string
+    {
+        return $this->path('php-relations.json');
+    }
+
     public function indexToon(): string
     {
         return $this->path('php-symbols.toon');
+    }
+
+    public function relationsToon(): string
+    {
+        return $this->path('php-relations.toon');
+    }
+
+    public static function relationsFileFor(string $indexFile): string
+    {
+        $dir = dirname($indexFile);
+        $base = basename($indexFile);
+        if ($base === 'php-symbols.json') {
+            return $dir . '/php-relations.json';
+        }
+        if ($base === 'php-symbols.toon') {
+            return $dir . '/php-relations.toon';
+        }
+        if (str_ends_with(strtolower($base), '.json')) {
+            return $dir . '/' . substr($base, 0, -5) . '.relations.json';
+        }
+        if (str_ends_with(strtolower($base), '.toon')) {
+            return $dir . '/' . substr($base, 0, -5) . '.relations.toon';
+        }
+
+        return $indexFile . '.relations';
     }
 
     public function searchDatabase(): string

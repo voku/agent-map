@@ -98,6 +98,83 @@ final readonly class MethodNodeRemover
         }
     }
 
+    /**
+     * PHP reaches a method through more than a call expression.
+     *
+     * `[$this, 'compare']`, `[self::class, 'compare']` and `'Foo::compare'` are
+     * ordinary callables that usort/array_map/event wiring invoke at runtime,
+     * and PHPStan records no call relation for building one. Without this check
+     * a method held only by a callable looks unreferenced, and removal published
+     * a SAFE plan whose edit deletes a method the same file still hands to
+     * uasort - source that still parses and then fatals.
+     */
+    public function hasCallableReference(string $path, string $name): bool
+    {
+        foreach (PhpCodeParser::getAstFromString($this->source($path)) as $node) {
+            if ($this->containsCallableReference($node, $name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function containsCallableReference(Node $node, string $name): bool
+    {
+        // Only genuine callable shapes, not any string that happens to share the
+        // name. `$name = 'oldName'; $obj->{$name}()` is dynamic dispatch the
+        // planners already handle as reviewable evidence with deterministic
+        // edits, and treating it as a callable would block work that is provable.
+        if ($node instanceof Node\Expr\Array_ && count($node->items) === 2) {
+            $second = $node->items[1];
+            if ($second->value instanceof Node\Scalar\String_
+                && strcasecmp($second->value->value, $name) === 0) {
+                return true;
+            }
+        }
+        if ($node instanceof Node\Scalar\String_ && $this->qualifiedStringNamesMethod($node->value, $name)) {
+            return true;
+        }
+        // First-class callable syntax: `self::handler(...)` builds a Closure, it
+        // does not call the method, so PHPStan publishes no call relation for it.
+        if ($node instanceof Node\Expr\CallLike
+            && $node->isFirstClassCallable()
+            && $this->callLikeNamesMethod($node, $name)) {
+            return true;
+        }
+
+        foreach ($node->getSubNodeNames() as $subNodeName) {
+            $child = $node->{$subNodeName};
+            foreach ($child instanceof Node ? [$child] : (is_array($child) ? $child : []) as $item) {
+                if ($item instanceof Node && $this->containsCallableReference($item, $name)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function callLikeNamesMethod(Node\Expr\CallLike $node, string $name): bool
+    {
+        $called = match (true) {
+            $node instanceof StaticCall,
+            $node instanceof Node\Expr\MethodCall,
+            $node instanceof Node\Expr\NullsafeMethodCall => $node->name,
+            default => null,
+        };
+
+        return $called instanceof Identifier && strcasecmp($called->toString(), $name) === 0;
+    }
+
+    /** Only the "Class::method" callable string, never a bare name. */
+    private function qualifiedStringNamesMethod(string $value, string $name): bool
+    {
+        $separator = strrpos($value, '::');
+
+        return $separator !== false && strcasecmp(substr($value, $separator + 2), $name) === 0;
+    }
+
     private function containsClassStringStaticCall(Node $node, string $name): bool
     {
         if ($node instanceof StaticCall

@@ -15,6 +15,7 @@ use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
+use voku\AgentMap\Index\SemanticScope;
 use voku\AgentMap\IO\PhpFileFinder;
 use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Search\ChunkExtractor;
@@ -109,6 +110,12 @@ final readonly class AgentMapApplication
     {
         $index = (new IndexReader())->read($options->index);
 
+        $structural = $options->backend === 'structural';
+        $phpStanRefresh = !$structural
+            && PhpStanSemanticAnalyzer::isAvailable()
+            && str_ends_with($index->backend, '+phpstan');
+        $semanticScope = $this->semanticScope($index, $options);
+
         $indexed = [];
         foreach ($index->files as $file) {
             $indexed[$file->path] = true;
@@ -128,36 +135,117 @@ final readonly class AgentMapApplication
         // Without an explicit scope, look for new files exactly where the index already reaches:
         // walking the whole root would drag vendor directories into every refresh, and widening to
         // the top-level directory would pull in siblings the original build deliberately left out.
-        $searchPaths = $options->paths === ['.'] ? $this->indexedDirectories($index->files) : $options->paths;
-        foreach ((new PhpFileFinder())->find($options->root, $searchPaths, $options->excludes) as $relative) {
+        $searchPaths = $phpStanRefresh
+            ? $semanticScope->paths
+            : ($options->paths === ['.'] ? $this->indexedDirectories($index->files) : $options->paths);
+        $searchExcludes = $phpStanRefresh ? $semanticScope->excludes : $options->excludes;
+        foreach ((new PhpFileFinder())->find($options->root, $searchPaths, $searchExcludes) as $relative) {
             if (!isset($indexed[$relative])) {
                 $changed[$relative] = true;
             }
         }
 
-        if ($changed === [] && $removed === 0) {
+        $semanticInputsChanged = $phpStanRefresh && $this->semanticInputsChanged($index, $options, $semanticScope);
+        if ($changed === [] && $removed === 0 && !$semanticInputsChanged) {
             echo 'Index is up to date: ' . $options->index . "\n";
 
             return 0;
         }
 
-        $structural = $options->backend === 'structural';
-        $phpStanRefresh = !$structural
-            && PhpStanSemanticAnalyzer::isAvailable()
-            && str_ends_with($index->backend, '+phpstan');
+        if ($changed === [] && !$phpStanRefresh) {
+            // Only removals, and no semantic facts to invalidate. Passing an empty
+            // path list to build() makes the file finder fall back to walking the
+            // root and re-analysing everything, so deleting one file cost a full
+            // rebuild. Structural facts are source-local, so dropping the missing
+            // entries is the whole job.
+            //
+            // A PHPStan-backed index deliberately does not take this shortcut: a
+            // deleted declaration also invalidates its dependents, and those live
+            // in files whose own hash never moved.
+            $missing = [];
+            foreach ($index->staleEntries() as $entry) {
+                if ($entry['reason'] === 'missing') {
+                    $missing[$entry['path']] = true;
+                }
+            }
+            $pruned = new AgentMapIndex(
+                schemaVersion: $index->schemaVersion,
+                root: $index->root,
+                backend: $index->backend,
+                files: array_values(array_filter(
+                    $index->files,
+                    static fn ($file): bool => !isset($missing[$file->path]),
+                )),
+                relations: array_values(array_filter(
+                    $index->relations,
+                    static fn ($relation): bool => !isset($missing[$relation->file]),
+                )),
+                diagnostics: array_values(array_filter(
+                    $index->diagnostics,
+                    static fn ($diagnostic): bool => $diagnostic->file === null || !isset($missing[$diagnostic->file]),
+                )),
+                fingerprint: $index->fingerprint,
+            );
+            (new IndexWriter())->write($pruned, $options->out, $options->format);
+            echo 'Refreshed 0 changed and dropped ' . $removed . ' removed file(s); ' . count($pruned->files) . ' file(s) indexed in ' . $options->out . "\n";
+
+            return 0;
+        }
+
         $rebuilt = $this->builder($options)->build(
             $options->root,
-            $phpStanRefresh ? $searchPaths : array_keys($changed),
-            $options->excludes,
+            $phpStanRefresh ? $semanticScope->paths : array_keys($changed),
+            $phpStanRefresh ? $semanticScope->excludes : $options->excludes,
             $structural ? null : $options->phpStanConfig,
             $structural ? null : $options->phpStanMemoryLimit,
             $phpStanRefresh ? null : $index,
-            $structural ? [] : $options->scanPaths,
+            $structural ? [] : ($phpStanRefresh ? $semanticScope->scanDirectories : $options->scanPaths),
         );
         (new IndexWriter())->write($rebuilt, $options->out, $options->format);
         echo 'Refreshed ' . count($changed) . ' changed and dropped ' . $removed . ' removed file(s); ' . count($rebuilt->files) . ' file(s) indexed in ' . $options->out . "\n";
 
         return 0;
+    }
+
+    private function semanticScope(AgentMapIndex $index, CliOptions $options): SemanticScope
+    {
+        $stored = $index->fingerprint?->semanticScope;
+        if ($stored === null) {
+            return new SemanticScope(
+                paths: $options->pathsProvided ? $options->paths : $this->indexedDirectories($index->files),
+                excludes: $options->excludes,
+                scanDirectories: $options->scanPaths,
+            );
+        }
+
+        return new SemanticScope(
+            paths: $options->pathsProvided ? $options->paths : $stored->paths,
+            excludes: $options->excludesProvided ? $options->excludes : $stored->excludes,
+            scanDirectories: $options->scanPathsProvided ? $options->scanPaths : $stored->scanDirectories,
+        );
+    }
+
+    private function semanticInputsChanged(AgentMapIndex $index, CliOptions $options, SemanticScope $scope): bool
+    {
+        $fingerprint = $index->fingerprint;
+        if ($fingerprint === null || $fingerprint->semanticScope === null) {
+            return true;
+        }
+        if ($fingerprint->semanticScope->identitySha256() !== $scope->identitySha256()) {
+            return true;
+        }
+
+        $configuration = AgentMapBuilder::resolvePhpStanConfiguration($index->root, $options->phpStanConfig);
+        $configurationHash = $configuration === null
+            ? 'sha256:' . hash('sha256', 'default-level-0')
+            : 'sha256:' . (string) hash_file('sha256', $configuration);
+        if ($fingerprint->phpStanConfigSha256 !== $configurationHash) {
+            return true;
+        }
+
+        $composerLockHash = is_file($index->root . '/composer.lock') ? hash_file('sha256', $index->root . '/composer.lock') : false;
+
+        return $fingerprint->composerLockSha256 !== (is_string($composerLockHash) ? 'sha256:' . $composerLockHash : 'sha256:none');
     }
 
     private function builder(CliOptions $options): AgentMapBuilder
@@ -183,8 +271,12 @@ final readonly class AgentMapApplication
     {
         $directories = [];
         foreach ($files as $file) {
-            $separator = strrpos($file->path, '/');
+            $separator = strpos($file->path, '/');
             $directories[$separator === false ? '.' : substr($file->path, 0, $separator)] = true;
+        }
+
+        if (isset($directories['.'])) {
+            return ['.'];
         }
 
         return array_keys($directories);
@@ -230,7 +322,24 @@ final readonly class AgentMapApplication
         if ($subcommand === 'refresh') {
             $changedPaths = $this->changedSincePaths($index, $store);
             if ($changedPaths === []) {
+                // No chunk needs re-extraction, but the map identity can still have
+                // moved: a rebuild produces a new source digest, and files can leave
+                // the scope without any surviving file changing. Returning here
+                // without reconciling left the recorded snapshot stale forever, so
+                // `search doctor` reported a mismatch that no later refresh could
+                // clear, and chunks of dropped files stayed searchable.
+                $mapPaths = [];
+                foreach ($index->files as $file) {
+                    $mapPaths[] = $file->path;
+                }
+                $pruned = $store->pruneMissingPaths($mapPaths);
+                $store->setMeta('map_snapshot', $index->fingerprint === null ? 'sha256:none' : $index->fingerprint->sourceDigest);
+                $store->setMeta('chunk_policy_version', (string)\voku\AgentMap\Search\ChunkPolicy::VERSION);
+
                 echo 'Search index is up to date: ' . $options->database . "\n";
+                if ($pruned > 0) {
+                    echo '- ' . $pruned . " file(s) pruned: no longer part of the map\n";
+                }
 
                 return 0;
             }
@@ -576,7 +685,7 @@ final readonly class AgentMapApplication
 
     private function stats(CliOptions $options): int
     {
-        $index = (new IndexReader())->read($options->index);
+        $index = (new IndexReader())->readSections($options->index, ['files']);
         $this->warnIfStale($index->staleEntries());
         echo $this->formatter->render([
             'type' => 'stats',
@@ -593,7 +702,7 @@ final readonly class AgentMapApplication
 
     private function changed(CliOptions $options): int
     {
-        $index = (new IndexReader())->read($options->index);
+        $index = (new IndexReader())->readSections($options->index, ['files']);
         $this->warnIfStale($index->staleEntries());
         $changed = $this->changedPhpFiles($index->root, $options->base);
         $files = [];
@@ -908,6 +1017,14 @@ final readonly class AgentMapApplication
         $bytes = filesize($path);
         if (!is_int($bytes)) {
             return 'unknown';
+        }
+
+        $relPath = MapArtifactPaths::relationsFileFor($path);
+        if (is_file($relPath)) {
+            $relBytes = filesize($relPath);
+            if (is_int($relBytes)) {
+                $bytes += $relBytes;
+            }
         }
 
         return $bytes < 1024 ? $bytes . ' B' : round($bytes / 1024, 1) . ' KB';

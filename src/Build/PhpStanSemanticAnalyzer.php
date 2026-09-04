@@ -69,10 +69,14 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         try {
             $exportFile = $temporaryDirectory . '/semantic-export.json';
             $overlayConfiguration = $temporaryDirectory . '/agent-map.neon';
+            $absoluteAnalysePaths = $analyseDirectories !== []
+                ? $this->absoluteFiles($root, $analyseDirectories)
+                : $this->absoluteFiles($root, $relativeFiles);
             $overlay = $this->overlayConfiguration(
                 $configurationFile,
-                $analyseDirectories !== [] ? $this->absoluteFiles($root, $analyseDirectories) : $this->absoluteFiles($root, $relativeFiles),
+                $absoluteAnalysePaths,
                 $this->absoluteFiles($root, $scanDirectories),
+                $this->excludedPaths($root, $analyseDirectories, $relativeFiles),
                 $this->resultCacheDirectory($root),
             );
             if (file_put_contents($overlayConfiguration, $overlay) === false) {
@@ -207,8 +211,15 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
     /**
      * @param list<string> $absolutePaths
      * @param list<string> $absoluteScanPaths
+     * @param list<string> $absoluteExcludePaths
      */
-    private function overlayConfiguration(?string $configurationFile, array $absolutePaths, array $absoluteScanPaths, string $cacheDirectory): string
+    private function overlayConfiguration(
+        ?string $configurationFile,
+        array $absolutePaths,
+        array $absoluteScanPaths,
+        array $absoluteExcludePaths,
+        string $cacheDirectory,
+    ): string
     {
         $extension = dirname(__DIR__) . '/PhpStan/resources/extension.neon';
         $includes = [];
@@ -237,6 +248,13 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         foreach ($absolutePaths as $absolutePath) {
             $content .= '        - ' . json_encode(str_replace('\\', '/', $absolutePath), JSON_THROW_ON_ERROR) . "\n";
         }
+        if ($absoluteExcludePaths !== []) {
+            $content .= "    excludePaths:\n";
+            $content .= "        analyse:\n";
+            foreach ($absoluteExcludePaths as $absoluteExcludePath) {
+                $content .= '            - ' . json_encode(str_replace('\\', '/', $absoluteExcludePath), JSON_THROW_ON_ERROR) . "\n";
+            }
+        }
         if ($absoluteScanPaths !== []) {
             $content .= "    scanDirectories:\n";
             foreach ($absoluteScanPaths as $absoluteScanPath) {
@@ -245,6 +263,113 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         }
 
         return $content;
+    }
+
+    /**
+     * PHPStan keeps its result cache only for directory analysis scopes. The map
+     * already knows which PHP files that scope excludes, so write that complement
+     * into the generated PHPStan configuration rather than handing PHPStan the
+     * included files one by one.
+     *
+     * @param list<string> $analyseDirectories
+     * @param list<string> $includedFiles
+     * @return list<string>
+     */
+    private function excludedPaths(string $root, array $analyseDirectories, array $includedFiles): array
+    {
+        if ($analyseDirectories === []) {
+            return [];
+        }
+
+        $included = array_fill_keys($includedFiles, true);
+        /** @var array<string, array{absolute: string, total: int, included: int}> $directories */
+        $directories = [];
+        /** @var array<string, string> $excludedFiles */
+        $excludedFiles = [];
+
+        foreach ($analyseDirectories as $directory) {
+            $absoluteDirectory = $directory === '.' ? $root : $root . '/' . trim($directory, '/');
+            if (!is_dir($absoluteDirectory)) {
+                continue;
+            }
+
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($absoluteDirectory, RecursiveDirectoryIterator::SKIP_DOTS),
+            );
+            foreach ($iterator as $item) {
+                if (!$item->isFile() || !str_ends_with($item->getFilename(), '.php')) {
+                    continue;
+                }
+                $absolute = realpath($item->getPathname());
+                if (!is_string($absolute)) {
+                    continue;
+                }
+                $absolute = str_replace('\\', '/', $absolute);
+                if (!str_starts_with($absolute, rtrim($root, '/') . '/')) {
+                    continue;
+                }
+                $relative = substr($absolute, strlen(rtrim($root, '/')) + 1);
+                $isIncluded = isset($included[$relative]);
+                foreach ($this->directoryAncestors($relative) as $ancestor) {
+                    $directories[$ancestor] ??= [
+                        'absolute' => $root . '/' . $ancestor,
+                        'total' => 0,
+                        'included' => 0,
+                    ];
+                    ++$directories[$ancestor]['total'];
+                    if ($isIncluded) {
+                        ++$directories[$ancestor]['included'];
+                    }
+                }
+                if (!$isIncluded) {
+                    $excludedFiles[$relative] = $absolute;
+                }
+            }
+        }
+
+        uksort($directories, static fn (string $left, string $right): int => substr_count($left, '/') <=> substr_count($right, '/') ?: $left <=> $right);
+        $excluded = [];
+        foreach ($directories as $relative => $stats) {
+            if ($stats['included'] !== 0 || $this->hasExcludedParent($relative, $excluded)) {
+                continue;
+            }
+            $excluded[$relative] = $stats['absolute'];
+        }
+
+        foreach ($excludedFiles as $relative => $absolute) {
+            if (!$this->hasExcludedParent($relative, $excluded)) {
+                $excluded[$relative] = $absolute;
+            }
+        }
+
+        ksort($excluded, SORT_STRING);
+
+        return array_values($excluded);
+    }
+
+    /** @return list<string> */
+    private function directoryAncestors(string $relativeFile): array
+    {
+        $directory = dirname($relativeFile);
+        $ancestors = [];
+        while ($directory !== '.' && $directory !== '/') {
+            $ancestors[] = $directory;
+            $directory = dirname($directory);
+        }
+
+        return $ancestors;
+    }
+
+    /** @param array<string, string> $excluded */
+    private function hasExcludedParent(string $relative, array $excluded): bool
+    {
+        foreach ($excluded as $excludedRelative => $_absolute) {
+            if ($relative === $excludedRelative || str_starts_with($relative, $excludedRelative . '/')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

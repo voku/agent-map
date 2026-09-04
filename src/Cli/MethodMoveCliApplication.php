@@ -10,11 +10,11 @@ use Throwable;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Plan\PlanCapability;
-use voku\AgentMap\Removal\PropertyRemovalPlan;
-use voku\AgentMap\Removal\PropertyRemovalPlanner;
+use voku\AgentMap\Move\MethodMovePlan;
+use voku\AgentMap\Move\MethodMovePlanner;
 
-/** Read-only CLI boundary for exact unused-private-property removal evidence. */
-final readonly class PropertyRemovalCliApplication implements PlanCliApplication
+/** Read-only CLI boundary for exact method relocation evidence. */
+final readonly class MethodMoveCliApplication implements PlanCliApplication
 {
     private MapArtifactPaths $artifacts;
 
@@ -26,11 +26,11 @@ final readonly class PropertyRemovalCliApplication implements PlanCliApplication
     public function capability(): PlanCapability
     {
         return new PlanCapability(
-            family: PlanCapability::FAMILY_REMOVAL,
-            kind: 'property',
-            command: 'property-removal-plan',
-            planType: 'property_removal_plan',
-            contractVersion: PropertyRemovalPlan::CONTRACT_VERSION,
+            family: PlanCapability::FAMILY_MOVE,
+            kind: 'method',
+            command: 'method-move-plan',
+            planType: 'method_move_plan',
+            contractVersion: MethodMovePlan::CONTRACT_VERSION,
             semanticBackend: 'phpstan',
         );
     }
@@ -45,18 +45,18 @@ final readonly class PropertyRemovalCliApplication implements PlanCliApplication
     {
         return <<<'TEXT'
 
-Property removal evidence:
-  property-removal-plan Build an exact unused-private-property deletion plan
+Method move evidence:
+  method-move-plan    Build an exact method relocation plan for a chosen destination
 
-Run `agent-map help property-removal-plan` for details.
+Run `agent-map help method-move-plan` for details.
 TEXT;
     }
 
     /** @param list<string> $argv */
     public function supports(array $argv): bool
     {
-        return ($argv[1] ?? null) === 'property-removal-plan'
-            || (($argv[1] ?? null) === 'help' && ($argv[2] ?? null) === 'property-removal-plan');
+        return ($argv[1] ?? null) === 'method-move-plan'
+            || (($argv[1] ?? null) === 'help' && ($argv[2] ?? null) === 'method-move-plan');
     }
 
     /** @param list<string> $argv */
@@ -73,8 +73,8 @@ TEXT;
                 echo $this->help();
                 return 0;
             }
-            if (count($parsed['arguments']) !== 1) {
-                throw new InvalidArgumentException('property-removal-plan requires exactly one Class::$property target.');
+            if (count($parsed['arguments']) !== 2) {
+                throw new InvalidArgumentException('method-move-plan requires one Class::method source and one destination class.');
             }
 
             $format = $this->format($parsed['options']['format'] ?? 'text');
@@ -83,7 +83,7 @@ TEXT;
                 ? $this->artifacts->indexJson()
                 : $this->artifacts->projectPath($explicitIndex);
             $map = (new IndexReader())->read($index);
-            $plan = (new PropertyRemovalPlanner())->plan($map, $parsed['arguments'][0]);
+            $plan = (new MethodMovePlanner())->plan($map, $parsed['arguments'][0], $parsed['arguments'][1]);
             echo $this->render($plan, $format);
 
             return $plan->isBlocked() ? 1 : 0;
@@ -151,7 +151,7 @@ TEXT;
         return $format;
     }
 
-    private function render(PropertyRemovalPlan $plan, string $format): string
+    private function render(MethodMovePlan $plan, string $format): string
     {
         if ($format === 'json') {
             return json_encode($plan->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
@@ -161,8 +161,9 @@ TEXT;
         }
 
         $lines = [
-            sprintf('Property removal plan: %s', strtoupper($plan->status)),
-            'Target: ' . $plan->targetId,
+            sprintf('Method move plan: %s', strtoupper($plan->status)),
+            'Source: ' . $plan->sourceId,
+            'Destination: ' . $plan->destinationFqn,
             'Edits: ' . count($plan->edits),
             'Provenance:',
             '  map_digest: ' . $plan->provenance->mapDigest,
@@ -175,16 +176,11 @@ TEXT;
                     : $value);
             }
         }
+        foreach ($plan->ownerDependencies as $dependency) {
+            $lines[] = '  OWNER DEPENDENCY: ' . $dependency;
+        }
         foreach ($plan->edits as $edit) {
-            $lines[] = sprintf(
-                '  delete %s:%d-%d bytes %d-%d (SHA-256 %s)',
-                $edit->path,
-                $edit->lineStart,
-                $edit->lineEnd,
-                $edit->startFilePos,
-                $edit->endFilePos,
-                $edit->sourceSha256,
-            );
+            $lines[] = sprintf('  %s %s:%d-%d bytes %d-%d (SHA-256 %s)', $edit->role, $edit->path, $edit->lineStart, $edit->lineEnd, $edit->startFilePos, $edit->endFilePos, $edit->sourceSha256);
         }
         foreach ($plan->blindSpots as $spot) {
             $lines[] = '  REVIEW: ' . $spot->message;
@@ -205,13 +201,21 @@ TEXT;
     private function help(): string
     {
         return <<<'TEXT'
-Usage: agent-map property-removal-plan 'Class::$property' [--index PATH] [--format text|json|toon]
+Usage: agent-map method-move-plan Class::method DestinationClass [--index PATH] [--format text|json|toon]
 
-Plan the exact whole-line deletion of a provably unused private PHP property. The command never changes source.
-Contract 1.0 requires a current PHPStan-backed map and zero observed semantic accesses. Public/protected,
-static, promoted, hooked, multi-property, trait-backed, Doctrine loadMetadata and unsafe same-line cases block.
-Dynamic property dispatch, magic property methods, attributes and PHPDoc require review. Write-only assignment
-rewriting is intentionally unsupported until Map publishes explicit read/write evidence.
+Plan the exact relocation of one already-chosen method into one already-chosen destination class. The
+command never changes source, never suggests which method to move, and never proposes a destination.
+
+The first slice supports static methods whose body observes no owner state. A body using $this, self::,
+static::, parent::, __CLASS__ or get_called_class() is blocked, because relocating that text would
+silently change what those resolve to. Trait sources, abstract methods, an unresolvable or ambiguous
+destination, a destination that already declares the name, stale source and conflicting declarations
+also block. Public or protected sources and method attributes require review, because no closed-world
+evidence here disproves a caller outside the indexed map.
+
+Published edits are hash-guarded: the source declaration removal, the destination insertion before the
+class closing brace, and one owner rewrite per statically resolved call site. Call sites are re-pointed
+with the fully qualified destination so the plan never invents an import.
 
 TEXT;
     }

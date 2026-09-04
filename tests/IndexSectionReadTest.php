@@ -12,6 +12,7 @@ use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\SymbolEntry;
+use voku\AgentMap\MapArtifactPaths;
 
 final class IndexSectionReadTest extends TestCase
 {
@@ -28,6 +29,10 @@ final class IndexSectionReadTest extends TestCase
         if (is_file($this->file)) {
             unlink($this->file);
         }
+        $rel = MapArtifactPaths::relationsFileFor($this->file);
+        if (is_file($rel)) {
+            unlink($rel);
+        }
     }
 
     public function testWrittenIndexRemainsValidJson(): void
@@ -36,7 +41,12 @@ final class IndexSectionReadTest extends TestCase
 
         self::assertIsArray($decoded);
         self::assertCount(1, $decoded['files']);
-        self::assertCount(1, $decoded['relations']);
+        self::assertSame([], $decoded['relations']);
+        self::assertSame(basename(MapArtifactPaths::relationsFileFor($this->file)), $decoded['relations_file']);
+
+        $relDecoded = json_decode((string) file_get_contents(MapArtifactPaths::relationsFileFor($this->file)), true);
+        self::assertIsArray($relDecoded);
+        self::assertCount(1, $relDecoded['relations']);
     }
 
     public function testRequestedSectionIsDecodedAndTheRestIsSkipped(): void
@@ -61,8 +71,12 @@ final class IndexSectionReadTest extends TestCase
 
     public function testAnIndexWithoutTheSectionLayoutStillReads(): void
     {
-        $compact = (string) json_encode(json_decode((string) file_get_contents($this->file), true));
-        file_put_contents($this->file, $compact);
+        $relFile = MapArtifactPaths::relationsFileFor($this->file);
+        if (is_file($relFile)) {
+            unlink($relFile);
+        }
+        $legacyPayload = $this->index()->toArray();
+        file_put_contents($this->file, (string) json_encode($legacyPayload));
 
         $index = (new IndexReader())->readSections($this->file, ['files']);
 

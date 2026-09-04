@@ -21,6 +21,48 @@ final class CliOptionsTest extends TestCase
         self::assertSame('512M', $options->phpStanMemoryLimit);
     }
 
+    /**
+     * The PHPStan result cache used to resolve against the default artifact root
+     * even when the caller put the index elsewhere, so a project that keeps its
+     * index outside .agent-map wrote the cache to a second location and a fresh
+     * checkout paid a full semantic analysis instead of reusing it.
+     */
+    public function testDerivedArtifactsFollowTheNamedIndex(): void
+    {
+        $cwd = getcwd() ?: '.';
+        $options = CliOptions::parse([
+            'build',
+            '--root=.',
+            '--paths=src',
+            '--out=.agent-loop/map/php-symbols.json',
+        ]);
+
+        self::assertSame($cwd . '/.agent-loop/map/php-symbols.json', $options->out);
+        self::assertSame($cwd . '/.agent-loop/map/phpstan-cache', $options->artifacts->phpStanCache());
+        self::assertSame($cwd . '/.agent-loop/map/search.sqlite', $options->artifacts->searchDatabase());
+    }
+
+    public function testDefaultArtifactRootIsUnchangedWithoutAnExplicitIndex(): void
+    {
+        $cwd = getcwd() ?: '.';
+        $options = CliOptions::parse(['build', '--root=.', '--paths=src']);
+
+        self::assertSame($cwd . '/.agent-map/phpstan-cache', $options->artifacts->phpStanCache());
+    }
+
+    public function testRefreshArtifactRootFollowsNamedIndexEvenWhenOutIsRedirected(): void
+    {
+        $cwd = getcwd() ?: '.';
+        $options = CliOptions::parse([
+            'refresh',
+            '--root=.',
+            '--index=.agent-loop/map/php-symbols.json',
+            '--out=/tmp/custom-out.json',
+        ]);
+
+        self::assertSame($cwd . '/.agent-loop/map/phpstan-cache', $options->artifacts->phpStanCache());
+    }
+
     public function testArtifactPathsAreResolvedRelativeToRoot(): void
     {
         $cwd = getcwd() ?: '.';
@@ -73,6 +115,16 @@ final class CliOptionsTest extends TestCase
         $options = CliOptions::parse(['build', '--exclude=~Generated~', '--exclude', '~fixtures~']);
 
         self::assertSame(['~Generated~', '~fixtures~'], $options->excludes);
+        self::assertTrue($options->excludesProvided);
+    }
+
+    public function testTracksExplicitSemanticScopeOptions(): void
+    {
+        $options = CliOptions::parse(['refresh', '--paths=src', '--scan=stubs', '--exclude=~fixtures~']);
+
+        self::assertTrue($options->pathsProvided);
+        self::assertTrue($options->scanPathsProvided);
+        self::assertTrue($options->excludesProvided);
     }
 
     public function testParsesDefaultValues(): void
@@ -89,6 +141,7 @@ final class CliOptionsTest extends TestCase
         self::assertSame(10, $options->symbolLimit);
         self::assertSame(10, $options->methodLimit);
         self::assertSame('main', $options->base);
+        self::assertSame('2G', $options->phpStanMemoryLimit);
     }
 
     public function testEmbeddedMapRootDoesNotMoveWithExplicitSourceRoot(): void

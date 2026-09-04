@@ -20,7 +20,9 @@ final readonly class CliOptions
         public ?string $argument,
         public string $root,
         public array $paths,
+        public bool $pathsProvided,
         public array $scanPaths,
+        public bool $scanPathsProvided,
         public string $out,
         public string $index,
         public string $database,
@@ -31,6 +33,7 @@ final readonly class CliOptions
         public int $methodLimit,
         public string $base,
         public array $excludes,
+        public bool $excludesProvided,
         public bool $help,
         public bool $merge,
         public bool $semantic,
@@ -80,7 +83,7 @@ final readonly class CliOptions
             'base' => 'main',
             'backend' => 'auto',
             'phpstan-config' => '',
-            'phpstan-memory-limit' => '',
+            'phpstan-memory-limit' => '2G',
             'context-budget' => '60000',
             'max-files' => '20',
             'max-callers' => '10',
@@ -94,6 +97,9 @@ final readonly class CliOptions
         $merge = false;
         $semantic = false;
         $formatProvided = false;
+        $pathsProvided = false;
+        $scanPathsProvided = false;
+        $excludesProvided = false;
 
         for ($i = 0, $count = count($tokens); $i < $count; ++$i) {
             $token = $tokens[$i];
@@ -122,6 +128,7 @@ final readonly class CliOptions
             }
             if ($name === 'exclude') {
                 $excludes[] = $value;
+                $excludesProvided = true;
                 continue;
             }
             if (!array_key_exists($name, $values)) {
@@ -129,13 +136,29 @@ final readonly class CliOptions
             }
             $values[$name] = $value;
             $formatProvided = $formatProvided || $name === 'format';
+            $pathsProvided = $pathsProvided || $name === 'paths';
+            $scanPathsProvided = $scanPathsProvided || $name === 'scan';
         }
 
         if (in_array($command, ['query', 'file', 'related', 'scope', 'callers', 'callees', 'context', 'search'], true) && !$help && ($argument === null || $argument === '')) {
             throw new InvalidArgumentException('Missing argument for command: ' . $command);
         }
 
-        $artifacts ??= MapArtifactPaths::forProject($values['root']);
+        // Derived artifacts follow the index the caller named. --index and
+        // --database were already redirectable one by one, but the PHPStan result
+        // cache was not: it always resolved against the default artifact root. A
+        // project that keeps its index elsewhere then wrote the cache to a second
+        // location, and a checkout or worktree without that location paid a full
+        // semantic analysis again instead of reusing the cache it just built.
+        if ($artifacts === null) {
+            $artifactSource = $command === 'refresh' && $values['index'] !== ''
+                ? $values['index']
+                : ($values['out'] !== '' ? $values['out'] : $values['index']);
+            $artifacts = MapArtifactPaths::forProject(
+                $values['root'],
+                self::artifactRootFrom($artifactSource),
+            );
+        }
         if ($command === 'build' || $command === 'refresh') {
             if (!$formatProvided && $values['out'] !== '' && str_ends_with(strtolower($values['out']), '.toon')) {
                 $values['format'] = 'toon';
@@ -160,7 +183,9 @@ final readonly class CliOptions
             argument: $argument,
             root: $values['root'],
             paths: self::splitPaths($values['paths']),
+            pathsProvided: $pathsProvided,
             scanPaths: self::splitList($values['scan']),
+            scanPathsProvided: $scanPathsProvided,
             out: self::artifactPath($values['root'], $values['out']),
             index: self::artifactPath($values['root'], $values['index']),
             database: self::artifactPath($values['root'], $values['database']),
@@ -171,6 +196,7 @@ final readonly class CliOptions
             methodLimit: self::positiveInt('method-limit', $values['method-limit'], 0),
             base: $values['base'],
             excludes: $excludes,
+            excludesProvided: $excludesProvided,
             help: $help,
             merge: $merge,
             semantic: $semantic,
@@ -185,6 +211,21 @@ final readonly class CliOptions
             maxTypeDefinitions: self::positiveInt('max-type-definitions', $values['max-type-definitions'], 0),
             artifacts: $artifacts,
         );
+    }
+
+    /**
+     * The directory holding a named index is that run's artifact root, so the
+     * result cache and search database live beside the index they belong to.
+     */
+    private static function artifactRootFrom(string $indexPath): ?string
+    {
+        $indexPath = trim(str_replace('\\', '/', $indexPath));
+        if ($indexPath === '') {
+            return null;
+        }
+        $directory = \dirname($indexPath);
+
+        return $directory === '.' ? null : $directory;
     }
 
     /**

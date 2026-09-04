@@ -64,6 +64,14 @@ final class CliApplicationTest extends TestCase
                 'semantic_backend' => 'none',
             ],
             [
+                'family' => 'move',
+                'kind' => 'method',
+                'command' => 'method-move-plan',
+                'plan_type' => 'method_move_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'phpstan',
+            ],
+            [
                 'family' => 'removal',
                 'kind' => 'class_constant',
                 'command' => 'class-constant-removal-plan',

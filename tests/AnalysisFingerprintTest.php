@@ -7,6 +7,7 @@ namespace voku\AgentMap\Tests;
 use Composer\InstalledVersions;
 use PHPUnit\Framework\TestCase;
 use voku\AgentMap\Index\AnalysisFingerprint;
+use voku\AgentMap\Index\SemanticScope;
 
 final class AnalysisFingerprintTest extends TestCase
 {
@@ -51,6 +52,23 @@ final class AnalysisFingerprintTest extends TestCase
 
         self::assertSame('unknown', $fingerprint->phpStanReference);
         self::assertSame('unknown', $fingerprint->toArray()['phpstan_reference']);
+    }
+
+    public function testSemanticScopeRoundTripsWithItsDeterministicIdentity(): void
+    {
+        $scope = new SemanticScope(['src', 'modules'], ['~(^|/)generated(/|$)~'], ['stubs']);
+        $fingerprint = new AnalysisFingerprint(
+            phpStanVersion: '2.2.8',
+            phpStanConfigSha256: 'sha256:config',
+            composerLockSha256: 'sha256:lock',
+            sourceDigest: 'sha256:sources',
+            semanticScope: $scope,
+        );
+
+        $roundTripped = AnalysisFingerprint::fromArray($fingerprint->toArray());
+
+        self::assertNotNull($roundTripped->semanticScope);
+        self::assertSame($scope->toArray(), $roundTripped->semanticScope->toArray());
     }
 
     public function testRecordedReferenceRoundTripsWithoutConsultingCurrentRuntime(): void

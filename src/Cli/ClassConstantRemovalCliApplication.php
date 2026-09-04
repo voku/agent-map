@@ -170,7 +170,9 @@ TEXT;
         ];
         if ($plan->provenance->analysisFingerprint !== null) {
             foreach ($plan->provenance->analysisFingerprint->toArray() as $name => $value) {
-                $lines[] = '  analysis_fingerprint.' . $name . ': ' . $value;
+                $lines[] = '  analysis_fingerprint.' . $name . ': ' . (is_array($value)
+                    ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)
+                    : $value);
             }
         }
         foreach ($plan->edits as $edit) {

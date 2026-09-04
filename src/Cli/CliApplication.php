@@ -88,6 +88,7 @@ final readonly class CliApplication
             new ClassConstantRemovalCliApplication(artifacts: $artifacts),
             new FunctionRenameCliApplication(artifacts: $artifacts),
             new MethodRemovalCliApplication(artifacts: $artifacts),
+            new MethodMoveCliApplication(artifacts: $artifacts),
             new ParameterRenameCliApplication(artifacts: $artifacts),
             new PropertyRenameCliApplication(artifacts: $artifacts),
             new PropertyRemovalCliApplication(artifacts: $artifacts),

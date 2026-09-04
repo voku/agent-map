@@ -16,7 +16,7 @@ final readonly class PlanProvenance
     ) {
     }
 
-    /** @return array{map_digest: string, backend: string, analysis_fingerprint: array<string, string>|null} */
+    /** @return array{map_digest: string, backend: string, analysis_fingerprint: array{phpstan_version: string, phpstan_reference: string, phpstan_config_sha256: string, composer_lock_sha256: string, source_digest: string, semantic_scope?: array{paths: list<string>, excludes: list<string>, scan_directories: list<string>, identity_sha256: string}}|null} */
     public function toArray(): array
     {
         return [
