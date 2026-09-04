@@ -38,7 +38,19 @@ final readonly class IndexReader
         }
 
         if ($loadRelations) {
-            $relationsFile = MapArtifactPaths::relationsFileFor($file);
+            $relationsFile = $this->resolveRelationsFile($file, $data);
+            if ($relationsFile === null) {
+                // A split index records the companion it was written with. Treating a
+                // missing companion as "no relations" silently answered relation
+                // questions with an empty graph: diffing a symbols file copied without
+                // its companion reported every relation in the other index as added.
+                throw new RuntimeException(sprintf(
+                    'Index %s declares relations companion "%s", but it could not be found. '
+                    . 'Copy the whole index, not just the symbols file.',
+                    $file,
+                    is_string($data['relations_file'] ?? null) ? $data['relations_file'] : '',
+                ));
+            }
             if (is_file($relationsFile)) {
                 $relationsContent = file_get_contents($relationsFile);
                 if (is_string($relationsContent)) {
@@ -57,6 +69,33 @@ final readonly class IndexReader
         }
 
         return AgentMapIndex::fromArray($data);
+    }
+
+    /**
+     * Locates the relations companion for a split index.
+     *
+     * Returns the derived path (which may not exist for a legacy single-file index),
+     * or null when the index declares a companion that cannot be found anywhere.
+     *
+     * @param array<string, mixed> $data decoded symbols payload
+     */
+    private function resolveRelationsFile(string $file, array $data): ?string
+    {
+        $derived = MapArtifactPaths::relationsFileFor($file);
+        if (is_file($derived)) {
+            return $derived;
+        }
+
+        $declared = $data['relations_file'] ?? null;
+        if (!is_string($declared) || $declared === '') {
+            // Legacy single-file index: relations live inline, nothing to resolve.
+            return $derived;
+        }
+
+        // A renamed symbols file still sits next to the companion it names.
+        $beside = dirname($file) . '/' . basename($declared);
+
+        return is_file($beside) ? $beside : null;
     }
 
     /**

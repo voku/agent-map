@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Tests;
 
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\AnalysisFingerprint;
 use voku\AgentMap\Index\DiagnosticEntry;
@@ -28,6 +29,14 @@ final class SplitIndexTest extends TestCase
     protected function tearDown(): void
     {
         foreach (glob($this->root . '/*') ?: [] as $file) {
+            if (is_dir($file)) {
+                foreach (glob($file . '/*') ?: [] as $nested) {
+                    unlink($nested);
+                }
+                rmdir($file);
+
+                continue;
+            }
             unlink($file);
         }
         rmdir($this->root);
@@ -81,6 +90,34 @@ final class SplitIndexTest extends TestCase
         self::assertCount(1, $read->files);
         self::assertCount(2, $read->relations);
         self::assertSame('calls', $read->relations[0]->kind);
+    }
+
+    public function testMissingRelationsCompanionFailsInsteadOfReportingAnEmptyGraph(): void
+    {
+        // Copying only the symbols file produced an index that answered every
+        // relation question with an empty graph, so diffing it against a complete
+        // index reported all of the other side's relations as newly added.
+        $indexFile = $this->root . '/php-symbols.json';
+        (new IndexWriter())->write($this->createMap(), $indexFile, 'json');
+
+        $partial = $this->root . '/partial';
+        self::assertTrue(mkdir($partial, 0o775, true));
+        self::assertTrue(copy($indexFile, $partial . '/php-symbols.json'));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/relations companion/');
+        (new IndexReader())->read($partial . '/php-symbols.json');
+    }
+
+    public function testRenamedSymbolsFileStillFindsTheCompanionItNames(): void
+    {
+        $indexFile = $this->root . '/php-symbols.json';
+        (new IndexWriter())->write($this->createMap(), $indexFile, 'json');
+        self::assertTrue(copy($indexFile, $this->root . '/before.json'));
+
+        $read = (new IndexReader())->read($this->root . '/before.json');
+
+        self::assertCount(2, $read->relations);
     }
 
     public function testToonFormatProducesCompanionToonFile(): void
