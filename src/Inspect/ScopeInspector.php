@@ -50,6 +50,8 @@ final readonly class ScopeInspector
         $tables = array_slice($visitor->tables, 0, $limit);
         $templates = array_slice($visitor->templates, 0, $limit);
 
+        $localSemantics = (new LocalSemanticFrameBuilder())->build($index, $target);
+
         return new ScopeInspection(
             $target,
             $calls,
@@ -58,7 +60,13 @@ final readonly class ScopeInspector
             count($visitor->calls) - count($calls),
             count($visitor->tables) - count($tables),
             count($visitor->templates) - count($templates),
+            $localSemantics,
         );
+    }
+
+    public function inspectLocalSemantics(AgentMapIndex $index, ScopeTarget $target): LocalSemanticFrame
+    {
+        return (new LocalSemanticFrameBuilder())->build($index, $target);
     }
 
     /**

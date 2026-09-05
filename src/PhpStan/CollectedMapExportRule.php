@@ -9,8 +9,13 @@ use PHPStan\Analyser\Scope;
 use PHPStan\Node\CollectedDataNode;
 use PHPStan\Rules\Rule;
 use RuntimeException;
+use voku\AgentMap\PhpStan\Collector\AssignCollector;
+use voku\AgentMap\PhpStan\Collector\AssignOpCollector;
+use voku\AgentMap\PhpStan\Collector\AssignRefCollector;
+use voku\AgentMap\PhpStan\Collector\CatchCollector;
 use voku\AgentMap\PhpStan\Collector\ClassLikeCollector;
 use voku\AgentMap\PhpStan\Collector\ClassMethodCollector;
+use voku\AgentMap\PhpStan\Collector\ForeachCollector;
 use voku\AgentMap\PhpStan\Collector\FunctionCallCollector;
 use voku\AgentMap\PhpStan\Collector\FunctionCollector;
 use voku\AgentMap\PhpStan\Collector\InstantiationCollector;
@@ -19,8 +24,10 @@ use voku\AgentMap\PhpStan\Collector\NullsafeMethodCallCollector;
 use voku\AgentMap\PhpStan\Collector\NullsafePropertyFetchCollector;
 use voku\AgentMap\PhpStan\Collector\PropertyDeclarationCollector;
 use voku\AgentMap\PhpStan\Collector\PropertyFetchCollector;
+use voku\AgentMap\PhpStan\Collector\ReturnCollector;
 use voku\AgentMap\PhpStan\Collector\StaticCallCollector;
 use voku\AgentMap\PhpStan\Collector\StaticPropertyFetchCollector;
+use voku\AgentMap\PhpStan\Collector\ThrowCollector;
 
 /** @implements Rule<CollectedDataNode> */
 final readonly class CollectedMapExportRule implements Rule
@@ -51,18 +58,33 @@ final readonly class CollectedMapExportRule implements Rule
             PropertyFetchCollector::class,
             NullsafePropertyFetchCollector::class,
             StaticPropertyFetchCollector::class,
+            AssignCollector::class,
+            AssignOpCollector::class,
+            AssignRefCollector::class,
+            ForeachCollector::class,
+            CatchCollector::class,
+            ReturnCollector::class,
+            ThrowCollector::class,
         ] as $collector) {
             foreach ($node->get($collector) as $fileRecords) {
                 foreach ($fileRecords as $record) {
                     if (is_array($record)) {
-                        $records[] = $record;
+                        if (isset($record['record_type'])) {
+                            $records[] = $record;
+                        } else {
+                            foreach ($record as $subRecord) {
+                                if (is_array($subRecord) && isset($subRecord['record_type'])) {
+                                    $records[] = $subRecord;
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
         usort($records, static function (array $left, array $right): int {
-            return ((string) ($left['record_type'] ?? '')) <=> ((string) ($right['record_type'] ?? ''))
+            return ((string) $left['record_type']) <=> ((string) $right['record_type'])
                 ?: ((string) ($left['file'] ?? '')) <=> ((string) ($right['file'] ?? ''))
                 ?: ((int) ($left['line_start'] ?? 0)) <=> ((int) ($right['line_start'] ?? 0))
                 ?: ((string) ($left['name'] ?? $left['kind'] ?? '')) <=> ((string) ($right['name'] ?? $right['kind'] ?? ''))

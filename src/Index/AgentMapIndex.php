@@ -24,6 +24,8 @@ final readonly class AgentMapIndex
      * @param list<FileEntry> $files
      * @param list<RelationEntry> $relations
      * @param list<DiagnosticEntry> $diagnostics
+     * @param list<LocalBindingEntry> $localBindings
+     * @param list<LocalExitEntry> $localExits
      */
     public function __construct(
         public string $schemaVersion,
@@ -33,6 +35,8 @@ final readonly class AgentMapIndex
         public array $relations = [],
         public array $diagnostics = [],
         public ?AnalysisFingerprint $fingerprint = null,
+        public array $localBindings = [],
+        public array $localExits = [],
     ) {
     }
 
@@ -410,7 +414,39 @@ final readonly class AgentMapIndex
             'files' => array_map(static fn (FileEntry $file): array => $file->toArray(), $this->files),
             'relations' => array_map(static fn (RelationEntry $relation): array => $relation->toArray(), $this->relations),
             'diagnostics' => array_map(static fn (DiagnosticEntry $diagnostic): array => $diagnostic->toArray(), $this->diagnostics),
+            'local_bindings' => array_map(static fn (LocalBindingEntry $binding): array => $binding->toArray(), $this->localBindings),
+            'local_exits' => array_map(static fn (LocalExitEntry $exit): array => $exit->toArray(), $this->localExits),
         ];
+    }
+
+    /**
+     * @return list<LocalBindingEntry>
+     */
+    public function bindingsFor(string $ownerId): array
+    {
+        $matches = [];
+        foreach ($this->localBindings as $binding) {
+            if ($binding->ownerId === $ownerId) {
+                $matches[] = $binding;
+            }
+        }
+
+        return $matches;
+    }
+
+    /**
+     * @return list<LocalExitEntry>
+     */
+    public function exitsFor(string $ownerId): array
+    {
+        $matches = [];
+        foreach ($this->localExits as $exit) {
+            if ($exit->ownerId === $ownerId) {
+                $matches[] = $exit;
+            }
+        }
+
+        return $matches;
     }
 
     /** @param array<string, mixed> $data */
@@ -448,6 +484,18 @@ final readonly class AgentMapIndex
             }
         }
         $fingerprint = is_array($data['fingerprint'] ?? null) ? AnalysisFingerprint::fromArray($data['fingerprint']) : null;
+        $localBindings = [];
+        foreach (is_array($data['local_bindings'] ?? null) ? $data['local_bindings'] : [] as $binding) {
+            if (is_array($binding)) {
+                $localBindings[] = LocalBindingEntry::fromArray($binding);
+            }
+        }
+        $localExits = [];
+        foreach (is_array($data['local_exits'] ?? null) ? $data['local_exits'] : [] as $exit) {
+            if (is_array($exit)) {
+                $localExits[] = LocalExitEntry::fromArray($exit);
+            }
+        }
 
         return new self(
             schemaVersion: $schemaVersion,
@@ -457,6 +505,8 @@ final readonly class AgentMapIndex
             relations: $relations,
             diagnostics: $diagnostics,
             fingerprint: $fingerprint,
+            localBindings: $localBindings,
+            localExits: $localExits,
         );
     }
 

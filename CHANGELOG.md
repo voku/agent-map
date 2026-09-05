@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add local semantic understanding inside methods and functions (#61):
+  - Flow-sensitive `LocalSemanticFrame` capturing ordered execution checkpoints (`LocalBindingCheckpoint`, `LocalGuardCheckpoint`, `LocalUseCheckpoint`, `LocalExitCheckpoint`).
+  - Byte-exact source coordinates (`startFilePos`, `endFilePos`) across relations, variable bindings, and exit statements.
+  - PHPStan collectors for assignments (`Assign`, `AssignOp`, `AssignRef`, `Foreach_`, `Catch_`) and exit points (`Return_`, `Throw_`).
+  - Index schema 2.0 extension persisting `local_bindings` and `local_exits` in companion relations file with backward compatibility.
+  - Flow reconstruction via `LocalSemanticFrameBuilder` extracting variable narrowing (e.g. `excludes false`, `excludes null`, `instanceof`), semantic method/property uses on locals, and exit reasons.
+  - Integrated into `ScopeInspector`, `ScopeInspection`, `EditContextPlanner`, `EditContextPlan`, and CLI `scope` command output.
 - Unify machine-readable envelope structure across all fourteen governed plan contracts: add explicit `target_id` property and output key to `MethodMovePlan`, `MethodCopyPlan`, `MethodScaffoldPlan`, `ClassScaffoldPlan` and their planners.
 - Pin envelope invariants across all 14 governed plan contracts across all 5 families (`rename`, `removal`, `move`, `copy`, `scaffold`) in `tests/PlanContractShapeTest.php`.
 - Complete pre-1.0 stability policy and public surface classification in `docs/stability.md` classifying all 14 plan contracts as stable at contract version 1.0 with exit code 1 on blocked.

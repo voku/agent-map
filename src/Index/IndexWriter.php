@@ -33,12 +33,16 @@ final readonly class IndexWriter
             'root' => $index->root,
             'backend' => $index->backend,
             'relations' => $payload['relations'] ?? [],
+            'local_bindings' => $payload['local_bindings'] ?? [],
+            'local_exits' => $payload['local_exits'] ?? [],
         ];
         if ($index->fingerprint !== null) {
             $relationsPayload['fingerprint'] = $payload['fingerprint'] ?? null;
         }
 
         $payload['relations'] = [];
+        $payload['local_bindings'] = [];
+        $payload['local_exits'] = [];
         $payload['relations_file'] = basename($relationsFile);
 
         $temporary = $file . '.tmp-' . getmypid();

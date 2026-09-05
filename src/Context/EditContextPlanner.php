@@ -9,6 +9,8 @@ use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\ResolvedMethod;
 use voku\AgentMap\Index\SymbolEntry;
+use voku\AgentMap\Inspect\LocalSemanticFrameBuilder;
+use voku\AgentMap\Inspect\ScopeTarget;
 
 final readonly class EditContextPlanner
 {
@@ -194,6 +196,18 @@ final readonly class EditContextPlanner
         $slices = $this->mergeAndMaterialize($map, $selected);
         $sourceBytes = array_sum(array_map(static fn (CodeSlice $slice): int => strlen($slice->content), $slices));
 
+        $localSemantics = (new LocalSemanticFrameBuilder())->build(
+            $map,
+            new ScopeTarget(
+                kind: 'method',
+                label: $resolved->owner->fqn . '::' . $resolved->method->name,
+                file: $resolved->file->path,
+                lineStart: $resolved->method->lineStart,
+                lineEnd: $resolved->method->lineEnd,
+                sourceId: $resolved->id,
+            ),
+        );
+
         return new EditContextPlan(
             requestedTarget: $target,
             resolvedTarget: $resolved,
@@ -203,6 +217,7 @@ final readonly class EditContextPlanner
             omitted: $omitted,
             mapDigest: $map->mapDigest(),
             sourceBytes: $sourceBytes,
+            localSemantics: $localSemantics,
         );
     }
 

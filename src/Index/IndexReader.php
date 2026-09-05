@@ -59,13 +59,23 @@ final readonly class IndexReader
                     if ($relData === null) {
                         $relData = $relToon ? $this->decodeJson($relationsContent) : $this->decodeToon($relationsContent);
                     }
-                    if (is_array($relData) && isset($relData['relations']) && is_array($relData['relations'])) {
-                        $data['relations'] = $relData['relations'];
+                    if (is_array($relData)) {
+                        if (isset($relData['relations']) && is_array($relData['relations'])) {
+                            $data['relations'] = $relData['relations'];
+                        }
+                        if (isset($relData['local_bindings']) && is_array($relData['local_bindings'])) {
+                            $data['local_bindings'] = $relData['local_bindings'];
+                        }
+                        if (isset($relData['local_exits']) && is_array($relData['local_exits'])) {
+                            $data['local_exits'] = $relData['local_exits'];
+                        }
                     }
                 }
             }
         } else {
             $data['relations'] = [];
+            $data['local_bindings'] = [];
+            $data['local_exits'] = [];
         }
 
         return AgentMapIndex::fromArray($data);
@@ -130,6 +140,8 @@ final readonly class IndexReader
                     relations: $index->relations,
                     diagnostics: $filterDiagnostics ? [] : $index->diagnostics,
                     fingerprint: $index->fingerprint,
+                    localBindings: $index->localBindings,
+                    localExits: $index->localExits,
                 );
             }
 

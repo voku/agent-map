@@ -7,6 +7,8 @@ namespace voku\AgentMap\Reconcile;
 use voku\AgentMap\Build\SemanticAnalysisResult;
 use voku\AgentMap\Index\DiagnosticEntry;
 use voku\AgentMap\Index\FileEntry;
+use voku\AgentMap\Index\LocalBindingEntry;
+use voku\AgentMap\Index\LocalExitEntry;
 use voku\AgentMap\Index\MethodEntry;
 use voku\AgentMap\Index\ParameterEntry;
 use voku\AgentMap\Index\RelationEntry;
@@ -16,7 +18,7 @@ final readonly class MapReconciler
 {
     /**
      * @param list<FileEntry> $structuralFiles
-     * @return array{files: list<FileEntry>, relations: list<RelationEntry>, diagnostics: list<DiagnosticEntry>}
+     * @return array{files: list<FileEntry>, relations: list<RelationEntry>, diagnostics: list<DiagnosticEntry>, local_bindings: list<LocalBindingEntry>, local_exits: list<LocalExitEntry>}
      */
     public function reconcile(string $root, array $structuralFiles, SemanticAnalysisResult $semantic): array
     {
@@ -24,6 +26,8 @@ final readonly class MapReconciler
         $semanticMethods = [];
         $semanticFunctions = [];
         $semanticRelations = [];
+        $semanticBindings = [];
+        $semanticExits = [];
 
         foreach ($semantic->records as $record) {
             $record = $this->normalizeRecord($root, $record);
@@ -39,6 +43,10 @@ final readonly class MapReconciler
                 $semanticFunctions['function:' . $record['name']] = $record;
             } elseif ($type === 'relation') {
                 $semanticRelations[] = $record;
+            } elseif ($type === 'local_binding') {
+                $semanticBindings[] = $record;
+            } elseif ($type === 'local_exit') {
+                $semanticExits[] = $record;
             }
         }
 
@@ -185,6 +193,8 @@ final readonly class MapReconciler
                 resolution: (string) ($record['resolution'] ?? 'dynamic'),
                 receiverType: is_string($record['receiver_type'] ?? null) ? $record['receiver_type'] : null,
                 resultType: is_string($record['result_type'] ?? null) ? $record['result_type'] : null,
+                startFilePos: is_int($record['start_file_pos'] ?? null) ? $record['start_file_pos'] : null,
+                endFilePos: is_int($record['end_file_pos'] ?? null) ? $record['end_file_pos'] : null,
             );
         }
 
@@ -225,12 +235,66 @@ final readonly class MapReconciler
             $diagnostics[] = DiagnosticEntry::create('warning', 'phpstan_finding', $finding);
         }
 
+        $localBindings = [];
+        foreach ($semanticBindings as $record) {
+            $ownerId = (string) ($record['owner_id'] ?? '');
+            if (str_starts_with($ownerId, 'file:')) {
+                $sourcePath = substr($ownerId, 5);
+                $ownerId = 'file:' . $this->relativePath($root, $sourcePath);
+            }
+            $localBindings[] = LocalBindingEntry::create(
+                ownerId: $ownerId,
+                variable: (string) ($record['variable'] ?? ''),
+                file: (string) ($record['file'] ?? ''),
+                lineStart: (int) ($record['line_start'] ?? 0),
+                lineEnd: (int) ($record['line_end'] ?? 0),
+                resolvedType: (string) ($record['resolved_type'] ?? 'mixed'),
+                expressionKind: (string) ($record['expression_kind'] ?? 'other'),
+                literalValue: is_string($record['literal_value'] ?? null) ? $record['literal_value'] : null,
+                startFilePos: is_int($record['start_file_pos'] ?? null) ? $record['start_file_pos'] : null,
+                endFilePos: is_int($record['end_file_pos'] ?? null) ? $record['end_file_pos'] : null,
+                rhsStartFilePos: is_int($record['rhs_start_file_pos'] ?? null) ? $record['rhs_start_file_pos'] : null,
+                rhsEndFilePos: is_int($record['rhs_end_file_pos'] ?? null) ? $record['rhs_end_file_pos'] : null,
+            );
+        }
+        $localBindings = $this->uniqueBindings($localBindings);
+
+        $localExits = [];
+        foreach ($semanticExits as $record) {
+            $ownerId = (string) ($record['owner_id'] ?? '');
+            if (str_starts_with($ownerId, 'file:')) {
+                $sourcePath = substr($ownerId, 5);
+                $ownerId = 'file:' . $this->relativePath($root, $sourcePath);
+            }
+            $localExits[] = LocalExitEntry::create(
+                ownerId: $ownerId,
+                kind: (string) ($record['kind'] ?? 'return'),
+                file: (string) ($record['file'] ?? ''),
+                lineStart: (int) ($record['line_start'] ?? 0),
+                lineEnd: (int) ($record['line_end'] ?? 0),
+                expressionType: (string) ($record['expression_type'] ?? 'void'),
+                literalValue: is_string($record['literal_value'] ?? null) ? $record['literal_value'] : null,
+                variable: is_string($record['variable'] ?? null) ? $record['variable'] : null,
+                startFilePos: is_int($record['start_file_pos'] ?? null) ? $record['start_file_pos'] : null,
+                endFilePos: is_int($record['end_file_pos'] ?? null) ? $record['end_file_pos'] : null,
+                exprStartFilePos: is_int($record['expr_start_file_pos'] ?? null) ? $record['expr_start_file_pos'] : null,
+                exprEndFilePos: is_int($record['expr_end_file_pos'] ?? null) ? $record['expr_end_file_pos'] : null,
+            );
+        }
+        $localExits = $this->uniqueExits($localExits);
+
         $files = array_values($files);
         usort($files, static fn (FileEntry $left, FileEntry $right): int => $left->path <=> $right->path);
         $relations = $this->uniqueRelations($relations);
         $diagnostics = $this->uniqueDiagnostics($diagnostics);
 
-        return ['files' => $files, 'relations' => $relations, 'diagnostics' => $diagnostics];
+        return [
+            'files' => $files,
+            'relations' => $relations,
+            'diagnostics' => $diagnostics,
+            'local_bindings' => $localBindings,
+            'local_exits' => $localExits,
+        ];
     }
 
     /**
@@ -500,6 +564,37 @@ final readonly class MapReconciler
 
         return array_values($unique);
     }
+
+    /**
+     * @param list<LocalBindingEntry> $bindings
+     * @return list<LocalBindingEntry>
+     */
+    private function uniqueBindings(array $bindings): array
+    {
+        $unique = [];
+        foreach ($bindings as $binding) {
+            $unique[$binding->id] = $binding;
+        }
+        ksort($unique, SORT_STRING);
+
+        return array_values($unique);
+    }
+
+    /**
+     * @param list<LocalExitEntry> $exits
+     * @return list<LocalExitEntry>
+     */
+    private function uniqueExits(array $exits): array
+    {
+        $unique = [];
+        foreach ($exits as $exit) {
+            $unique[$exit->id] = $exit;
+        }
+        ksort($unique, SORT_STRING);
+
+        return array_values($unique);
+    }
+
 
     /** @param array<string, mixed> $record */
     private function recordId(array $record): ?string

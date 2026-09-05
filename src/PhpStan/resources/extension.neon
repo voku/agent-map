@@ -48,6 +48,35 @@ services:
         tags:
             - phpstan.collector
     -
+        class: voku\AgentMap\PhpStan\Collector\AssignCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\AssignOpCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\AssignRefCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\ForeachCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\CatchCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\ReturnCollector
+        tags:
+            - phpstan.collector
+    -
+        class: voku\AgentMap\PhpStan\Collector\ThrowCollector
+        tags:
+            - phpstan.collector
+    -
         class: voku\AgentMap\PhpStan\CollectedMapExportRule
         tags:
             - phpstan.rules.rule
+

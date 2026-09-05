@@ -296,6 +296,67 @@ final readonly class OutputFormatter
         $out .= "Calls:\n" . $this->scopeCallsText($payload);
         $out .= "\nTables:\n" . $this->scopeTablesText($payload);
         $out .= "\nTemplates:\n" . $this->scopeTemplatesText($payload);
+        if (isset($payload['local_semantics']) && is_array($payload['local_semantics'])) {
+            $flowText = $this->localSemanticsText($payload['local_semantics']);
+            if ($flowText !== '') {
+                $out .= "\n" . $flowText;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function localSemanticsText(array $payload): string
+    {
+        $checkpoints = is_array($payload['checkpoints'] ?? null) ? $payload['checkpoints'] : [];
+        if ($checkpoints === []) {
+            return '';
+        }
+
+        $out = "Flow:\n";
+        foreach ($checkpoints as $cp) {
+            if (!is_array($cp)) {
+                continue;
+            }
+            $kind = (string) ($cp['kind'] ?? '');
+            $line = (int) ($cp['line'] ?? 0);
+            if ($kind === 'binding') {
+                $meta = ['type: ' . ($cp['resolved_type'] ?? 'mixed'), 'kind: ' . ($cp['expression_kind'] ?? 'other')];
+                if (!empty($cp['receiver_type'])) {
+                    $meta[] = 'receiver: ' . $cp['receiver_type'];
+                }
+                if (!empty($cp['literal_value']) && ($cp['expression_kind'] ?? '') === 'literal') {
+                    $meta[] = 'value: ' . $cp['literal_value'];
+                }
+                $out .= sprintf("  line %d: %s [%s]\n", $line, (string) ($cp['code_snippet'] ?? ''), implode(', ', $meta));
+            } elseif ($kind === 'guard') {
+                $details = [];
+                if (!empty($cp['exits']) && !empty($cp['exit_kind'])) {
+                    $details[] = 'exits: ' . $cp['exit_kind'] . (!empty($cp['exit_target']) ? ' ' . $cp['exit_target'] : '');
+                }
+                if (!empty($cp['narrowing'])) {
+                    $details[] = 'narrows: ' . $cp['narrowing'];
+                }
+                $suffix = $details !== [] ? ' [' . implode(', ', $details) . ']' : '';
+                $out .= sprintf("  line %d: guard on %s%s\n", $line, (string) ($cp['condition'] ?? ''), $suffix);
+            } elseif ($kind === 'use') {
+                $meta = [];
+                if (!empty($cp['receiver_type'])) {
+                    $meta[] = 'receiver: ' . $cp['receiver_type'];
+                }
+                if (!empty($cp['result_type'])) {
+                    $meta[] = 'result: ' . $cp['result_type'];
+                }
+                $suffix = $meta !== [] ? ' [' . implode(', ', $meta) . ']' : '';
+                $out .= sprintf("  line %d: semantic use: %s%s\n", $line, (string) ($cp['expression'] ?? ''), $suffix);
+            } elseif ($kind === 'exit') {
+                $snippet = (string) ($cp['code_snippet'] ?? ($cp['exit_kind'] ?? 'exit'));
+                $out .= sprintf("  line %d: exit: %s [type: %s]\n", $line, $snippet, (string) ($cp['expression_type'] ?? 'void'));
+            }
+        }
 
         return $out;
     }

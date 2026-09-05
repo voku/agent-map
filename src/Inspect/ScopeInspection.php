@@ -19,11 +19,12 @@ final readonly class ScopeInspection
         public int $callsOmitted = 0,
         public int $tablesOmitted = 0,
         public int $templatesOmitted = 0,
+        public ?LocalSemanticFrame $localSemantics = null,
     ) {
     }
 
     /**
-     * @return array{target: array{kind: string, label: string, file: string, line_start: int, line_end: int, source_id: ?string}, calls: list<array{kind: string, label: string, line: int, target_ids: list<string>, resolution: string, receiver_type: ?string, result_type: ?string}>, calls_omitted: int, tables: list<array{table: string, action: string, line: int}>, tables_omitted: int, templates: list<array{path: string, line: int}>, templates_omitted: int}
+     * @return array{target: array{kind: string, label: string, file: string, line_start: int, line_end: int, source_id: ?string}, calls: list<array{kind: string, label: string, line: int, target_ids: list<string>, resolution: string, receiver_type: ?string, result_type: ?string}>, calls_omitted: int, tables: list<array{table: string, action: string, line: int}>, tables_omitted: int, templates: list<array{path: string, line: int}>, templates_omitted: int, local_semantics: array{target_id: string, file: string, line_start: int, line_end: int, checkpoints: list<array<string, mixed>>}|null}
      */
     public function toArray(): array
     {
@@ -35,6 +36,7 @@ final readonly class ScopeInspection
             'tables_omitted' => $this->tablesOmitted,
             'templates' => array_map(static fn (TemplateHint $template): array => $template->toArray(), $this->templates),
             'templates_omitted' => $this->templatesOmitted,
+            'local_semantics' => $this->localSemantics?->toArray(),
         ];
     }
 }

@@ -20,6 +20,8 @@ final readonly class RelationEntry
         public string $resolution,
         public ?string $receiverType = null,
         public ?string $resultType = null,
+        public ?int $startFilePos = null,
+        public ?int $endFilePos = null,
     ) {
     }
 
@@ -36,6 +38,8 @@ final readonly class RelationEntry
         string $resolution,
         ?string $receiverType = null,
         ?string $resultType = null,
+        ?int $startFilePos = null,
+        ?int $endFilePos = null,
     ): self {
         sort($targetIds, SORT_STRING);
         $identity = implode("\0", [
@@ -61,11 +65,13 @@ final readonly class RelationEntry
             resolution: $resolution,
             receiverType: $receiverType,
             resultType: $resultType,
+            startFilePos: $startFilePos,
+            endFilePos: $endFilePos,
         );
     }
 
     /**
-     * @return array{id: string, source_id: string, kind: string, target_ids: non-empty-list<string>, file: string, line_start: int, line_end: int, resolution: string, receiver_type: ?string, result_type: ?string}
+     * @return array{id: string, source_id: string, kind: string, target_ids: non-empty-list<string>, file: string, line_start: int, line_end: int, resolution: string, receiver_type: ?string, result_type: ?string, start_file_pos?: ?int, end_file_pos?: ?int}
      */
     public function toArray(): array
     {
@@ -80,11 +86,13 @@ final readonly class RelationEntry
             'resolution' => $this->resolution,
             'receiver_type' => $this->receiverType,
             'result_type' => $this->resultType,
+            'start_file_pos' => $this->startFilePos,
+            'end_file_pos' => $this->endFilePos,
         ];
     }
 
     /**
-     * @param array{id?: mixed, source_id?: mixed, kind?: mixed, target_ids?: mixed, file?: mixed, line_start?: mixed, line_end?: mixed, resolution?: mixed, receiver_type?: mixed, result_type?: mixed} $data
+     * @param array{id?: mixed, source_id?: mixed, kind?: mixed, target_ids?: mixed, file?: mixed, line_start?: mixed, line_end?: mixed, resolution?: mixed, receiver_type?: mixed, result_type?: mixed, start_file_pos?: mixed, end_file_pos?: mixed} $data
      */
     public static function fromArray(array $data): self
     {
@@ -109,6 +117,8 @@ final readonly class RelationEntry
             resolution: (string) ($data['resolution'] ?? 'dynamic'),
             receiverType: is_string($data['receiver_type'] ?? null) ? $data['receiver_type'] : null,
             resultType: is_string($data['result_type'] ?? null) ? $data['result_type'] : null,
+            startFilePos: isset($data['start_file_pos']) && is_int($data['start_file_pos']) ? $data['start_file_pos'] : null,
+            endFilePos: isset($data['end_file_pos']) && is_int($data['end_file_pos']) ? $data['end_file_pos'] : null,
         );
     }
 }

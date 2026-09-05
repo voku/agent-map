@@ -158,6 +158,8 @@ final readonly class AgentMapBuilder
                 sourceDigest: 'sha256:' . hash('sha256', implode("\n", $sourceDigestParts)),
                 semanticScope: new SemanticScope($paths, $excludes, $scanPaths),
             ),
+            localBindings: $reconciled['local_bindings'],
+            localExits: $reconciled['local_exits'],
         );
     }
 
@@ -196,11 +198,11 @@ final readonly class AgentMapBuilder
      * carried-over edges pointing into a rebuilt file keep the shape they had at their own last
      * analysis - a periodic full rebuild is still what makes incoming edges exact.
      *
-     * @param array{files: list<FileEntry>, relations: list<RelationEntry>, diagnostics: list<DiagnosticEntry>} $fresh
+     * @param array{files: list<FileEntry>, relations: list<RelationEntry>, diagnostics: list<DiagnosticEntry>, local_bindings: list<LocalBindingEntry>, local_exits: list<LocalExitEntry>} $fresh
      * @param list<string> $rebuilt
      * @param array<string, string> $sourceHashes
      *
-     * @return array{files: list<FileEntry>, relations: list<RelationEntry>, diagnostics: list<DiagnosticEntry>}
+     * @return array{files: list<FileEntry>, relations: list<RelationEntry>, diagnostics: list<DiagnosticEntry>, local_bindings: list<LocalBindingEntry>, local_exits: list<LocalExitEntry>}
      */
     private function merge(string $root, AgentMapIndex $previous, array $fresh, array $rebuilt, array &$sourceHashes): array
     {
@@ -247,11 +249,47 @@ final readonly class AgentMapBuilder
             $diagnostics[] = $diagnostic;
         }
 
+        $localBindings = $fresh['local_bindings'];
+        $bindingIds = [];
+        foreach ($localBindings as $binding) {
+            $bindingIds[$binding->id] = true;
+        }
+        foreach ($previous->localBindings as $binding) {
+            if (!isset($carriedPaths[$binding->file]) || isset($bindingIds[$binding->id])) {
+                continue;
+            }
+
+            $bindingIds[$binding->id] = true;
+            $localBindings[] = $binding;
+        }
+
+        $localExits = $fresh['local_exits'];
+        $exitIds = [];
+        foreach ($localExits as $exit) {
+            $exitIds[$exit->id] = true;
+        }
+        foreach ($previous->localExits as $exit) {
+            if (!isset($carriedPaths[$exit->file]) || isset($exitIds[$exit->id])) {
+                continue;
+            }
+
+            $exitIds[$exit->id] = true;
+            $localExits[] = $exit;
+        }
+
         usort($files, static fn (FileEntry $left, FileEntry $right): int => strcmp($left->path, $right->path));
         usort($relations, static fn (RelationEntry $left, RelationEntry $right): int => strcmp($left->file, $right->file) ?: $left->lineStart <=> $right->lineStart ?: strcmp($left->id, $right->id));
         usort($diagnostics, static fn (DiagnosticEntry $left, DiagnosticEntry $right): int => strcmp($left->file ?? '', $right->file ?? '') ?: ($left->line ?? 0) <=> ($right->line ?? 0) ?: strcmp($left->id, $right->id));
+        usort($localBindings, static fn (LocalBindingEntry $left, LocalBindingEntry $right): int => strcmp($left->file, $right->file) ?: $left->lineStart <=> $right->lineStart ?: strcmp($left->id, $right->id));
+        usort($localExits, static fn (LocalExitEntry $left, LocalExitEntry $right): int => strcmp($left->file, $right->file) ?: $left->lineStart <=> $right->lineStart ?: strcmp($left->id, $right->id));
 
-        return ['files' => $files, 'relations' => $relations, 'diagnostics' => $diagnostics];
+        return [
+            'files' => $files,
+            'relations' => $relations,
+            'diagnostics' => $diagnostics,
+            'local_bindings' => $localBindings,
+            'local_exits' => $localExits,
+        ];
     }
 
     /**
