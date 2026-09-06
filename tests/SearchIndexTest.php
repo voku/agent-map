@@ -14,7 +14,7 @@ use voku\AgentMap\Search\ChunkExtractor;
 use voku\AgentMap\Search\CodeChunk;
 use voku\AgentMap\Search\HybridSearch;
 use voku\AgentMap\Search\QueryPlanner;
-use voku\AgentMap\Search\Embedding\SqliteVecBinary;
+use voku\AgentGraph\Sqlite\SqliteVecBinary;
 use voku\AgentMap\Search\SearchIndexStore;
 
 final class SearchIndexTest extends TestCase
@@ -181,7 +181,7 @@ final class SearchIndexTest extends TestCase
         }
 
         $path = SqliteVecBinary::resolve();
-        self::assertIsString($path, 'the package ships a binary for ' . $platform);
+        self::assertIsString($path, 'agent-graph ships a binary for ' . $platform);
         self::assertFileExists($path);
         self::assertStringContainsString($platform, $path);
         self::assertNotNull(SqliteVecBinary::version());

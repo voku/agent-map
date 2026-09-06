@@ -9,7 +9,7 @@ namespace voku\AgentMap;
  */
 final class PackageResources
 {
-    public const string MAKE_INCLUDE = 'resources/make/agent-map.mk';
+    public const MAKE_INCLUDE = 'resources/make/agent-map.mk';
 
     public static function makeInclude(): string
     {
