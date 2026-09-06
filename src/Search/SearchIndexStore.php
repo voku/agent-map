@@ -7,7 +7,7 @@ namespace voku\AgentMap\Search;
 use PDO;
 use RuntimeException;
 use voku\AgentMap\Search\Embedding\EmbeddingModel;
-use voku\AgentMap\Search\Embedding\SqliteVecBinary;
+use voku\AgentGraph\Sqlite\SqliteVecBinary;
 use voku\AgentMap\Search\Embedding\EmbeddingVector;
 
 /**
@@ -64,7 +64,7 @@ final class SearchIndexStore
             return $this->vectorReady;
         }
 
-        // The binary shipped with this package first, then whatever the host installed itself.
+        // The binary shipped by agent-graph first, then whatever the host installed itself.
         $candidates = $extensionPath !== null
             ? [$extensionPath]
             : array_filter([

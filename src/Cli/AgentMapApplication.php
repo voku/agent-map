@@ -476,10 +476,10 @@ final readonly class AgentMapApplication
         if ($store->enableVectorSupport()) {
             echo '[OK] vector channel: sqlite-vec ' . ($store->vectorVersion() ?? 'unknown') . ', ' . $store->vectorCount() . " vector(s)\n";
         } else {
-            $platform = \voku\AgentMap\Search\Embedding\SqliteVecBinary::platform();
+            $platform = \voku\AgentGraph\Sqlite\SqliteVecBinary::platform();
             echo '[SKIP] vector channel: no sqlite-vec for ' . ($platform ?? PHP_OS_FAMILY . '/' . php_uname('m'))
                 . '; search stays lexical and reports degraded (set '
-                . \voku\AgentMap\Search\Embedding\SqliteVecBinary::ENVIRONMENT_OVERRIDE . " to point at your own build)\n";
+                . \voku\AgentGraph\Sqlite\SqliteVecBinary::ENVIRONMENT_OVERRIDE . " to point at your own build)\n";
         }
         echo '[' . ($mapSnapshot === $indexSnapshot ? 'OK' : 'FAIL') . '] map snapshot ' . ($mapSnapshot === $indexSnapshot ? 'matches' : 'differs from') . " search index\n";
         echo '[OK] indexed chunks: ' . $store->chunkCount() . "\n";
