@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Discovery;
 
+use voku\AgentGraph\Graph\GraphRelation;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\RelationEntry;
@@ -26,24 +27,29 @@ final readonly class FileCouplingGraphBuilder
     private const PATH_CLIQUE_LIMIT = 20;
     private const PATH_NEIGHBOURS = 2;
 
-    public function build(AgentMapIndex $map): WeightedFileGraph
+    /** @param iterable<RelationEntry|GraphRelation>|null $relations */
+    public function build(AgentMapIndex $map, ?iterable $relations = null): WeightedFileGraph
     {
         $catalog = new GraphNodeCatalog($map);
         $files = array_map(static fn (FileEntry $file): string => $file->path, $map->files);
         sort($files, SORT_STRING);
         $fileSet = array_fill_keys($files, true);
+        $relations ??= $map->relations;
 
         /** @var array<string, array{left: string, right: string, counts: array<string, float>}> $pairs */
         $pairs = [];
-        foreach ($map->relations as $relation) {
+        foreach ($relations as $relation) {
             $baseWeight = self::RELATION_WEIGHTS[$relation->kind] ?? null;
             if ($baseWeight === null) {
                 continue;
             }
 
             $source = $catalog->find($relation->sourceId);
-            $sourceFile = $source === null ? $relation->file : $source->file;
-            if (!isset($fileSet[$sourceFile])) {
+            $sourceFile = $source?->file;
+            if ($sourceFile === null && $relation instanceof RelationEntry) {
+                $sourceFile = $relation->file;
+            }
+            if ($sourceFile === null || !isset($fileSet[$sourceFile])) {
                 continue;
             }
 
@@ -56,7 +62,7 @@ final readonly class FileCouplingGraphBuilder
                 [$left, $right] = $this->orderedPair($sourceFile, $target->file);
                 $key = WeightedFileGraph::pairKey($left, $right);
                 $pairs[$key] ??= ['left' => $left, 'right' => $right, 'counts' => []];
-                $factor = $this->isUncertain($relation) ? self::UNCERTAIN_FACTOR : 1.0;
+                $factor = GraphRelationFacts::isUncertain($relation) ? self::UNCERTAIN_FACTOR : 1.0;
                 $pairs[$key]['counts'][$relation->kind] = ($pairs[$key]['counts'][$relation->kind] ?? 0.0) + $factor;
             }
         }
@@ -200,10 +206,5 @@ final readonly class FileCouplingGraphBuilder
     private function orderedPair(string $left, string $right): array
     {
         return $left < $right ? [$left, $right] : [$right, $left];
-    }
-
-    private function isUncertain(RelationEntry $relation): bool
-    {
-        return in_array($relation->resolution, ['dynamic', 'multiple_targets'], true);
     }
 }
