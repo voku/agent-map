@@ -1,0 +1,31 @@
+name: Verify agent-graph consumer via VCS
+
+on:
+  push:
+    branches:
+      - refactor/use-agent-graph-sqlite-runtime
+    paths:
+      - .github/workflows/verify-agent-graph-vcs.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+      - name: Resolve tagged agent-graph directly from GitHub for pre-registry proof
+        run: composer config repositories.agent-graph vcs https://github.com/voku/agent-graph
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer show voku/agent-graph
+      - run: composer ci
