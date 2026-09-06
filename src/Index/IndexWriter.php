@@ -25,7 +25,7 @@ final readonly class IndexWriter
             throw new RuntimeException('Unable to create index directory: ' . $directory);
         }
 
-        $lockFile = $file . '.lock';
+        $lockFile = MapArtifactPaths::writerLockFor($file);
         $lock = fopen($lockFile, 'c');
         if ($lock === false) {
             throw new RuntimeException('Unable to open index writer lock: ' . $lockFile);
