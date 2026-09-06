@@ -1,0 +1,133 @@
+name: Graph scale benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dogfood/graph-scale-70mb
+    paths:
+      - .github/workflows/graph-scale-benchmark.yml
+      - tools/graph-scale-fixture.php
+      - tools/graph-impact-dogfood.php
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-dev --no-interaction --prefer-dist
+
+      - name: Build baseline structural map
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/agent-map-scale
+          php bin/agent-map build \
+            --root="$GITHUB_WORKSPACE" \
+            --paths=src \
+            --out=/tmp/agent-map-scale/php-symbols.json
+
+      - name: Inflate relation graph beyond 70 MiB and rebuild SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          node='method:voku\AgentMap\Cli\AgentMapApplication::run'
+          php tools/graph-scale-fixture.php \
+            /tmp/agent-map-scale/php-symbols.json \
+            73400320 \
+            "$node" > /tmp/agent-map-scale/scale-fixture.json
+          cat /tmp/agent-map-scale/scale-fixture.json
+
+      - name: Run legacy and SQLite impact parity benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='voku\AgentMap\Cli\AgentMapApplication::run'
+          index=/tmp/agent-map-scale/php-symbols.json
+          php tools/graph-impact-dogfood.php legacy "$index" "$target" > /tmp/agent-map-scale/impact-legacy.json
+          php tools/graph-impact-dogfood.php sqlite "$index" "$target" > /tmp/agent-map-scale/impact-sqlite.json
+          php tools/graph-impact-dogfood.php compare \
+            /tmp/agent-map-scale/impact-legacy.json \
+            /tmp/agent-map-scale/impact-sqlite.json \
+            | tee /tmp/agent-map-scale/impact-compare.txt
+
+      - name: Run indexed query and rebuild benchmarks
+        shell: bash
+        run: |
+          set -euo pipefail
+          index=/tmp/agent-map-scale/php-symbols.json
+          node='method:voku\AgentMap\Cli\AgentMapApplication::run'
+          php tools/graph-impact-dogfood.php queries "$index" "$node" > /tmp/agent-map-scale/graph-queries.json
+          php tools/graph-impact-dogfood.php rebuild "$index" > /tmp/agent-map-scale/graph-rebuild.json
+          cat /tmp/agent-map-scale/graph-queries.json
+          cat /tmp/agent-map-scale/graph-rebuild.json
+
+      - name: Validate scale decision evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r '
+          $dir = "/tmp/agent-map-scale";
+          $fixture = json_decode((string) file_get_contents("$dir/scale-fixture.json"), true, 512, JSON_THROW_ON_ERROR);
+          $legacy = json_decode((string) file_get_contents("$dir/impact-legacy.json"), true, 512, JSON_THROW_ON_ERROR);
+          $sqlite = json_decode((string) file_get_contents("$dir/impact-sqlite.json"), true, 512, JSON_THROW_ON_ERROR);
+          $queries = json_decode((string) file_get_contents("$dir/graph-queries.json"), true, 512, JSON_THROW_ON_ERROR);
+          $rebuild = json_decode((string) file_get_contents("$dir/graph-rebuild.json"), true, 512, JSON_THROW_ON_ERROR);
+
+          $minimum = 70 * 1024 * 1024;
+          if (($fixture["relation_artifact_bytes"] ?? 0) < $minimum) {
+              throw new RuntimeException("Relation artifact stayed below 70 MiB.");
+          }
+          if (($fixture["canonical_relation_count"] ?? -1) !== ($fixture["graph_relation_count"] ?? -2)) {
+              throw new RuntimeException("Scale fixture canonical/SQLite relation counts differ.");
+          }
+          if (($legacy["report"] ?? null) !== ($sqlite["report"] ?? null)) {
+              throw new RuntimeException("Legacy and SQLite impact reports differ.");
+          }
+          if (($legacy["relation_count_loaded"] ?? 0) < 100000) {
+              throw new RuntimeException("Legacy path did not materialize the large relation graph.");
+          }
+          if (($sqlite["relation_count_loaded"] ?? -1) !== 0 || ($queries["relation_count_loaded"] ?? -1) !== 0) {
+              throw new RuntimeException("SQLite path materialized canonical relations.");
+          }
+          if (($queries["incoming_count"] ?? 0) < 10 || ($queries["outgoing_count"] ?? 0) < 10) {
+              throw new RuntimeException("Hot-node query did not exercise meaningful fan-in/fan-out.");
+          }
+          if (($rebuild["canonical_relation_count"] ?? -1) !== ($rebuild["graph_relation_count"] ?? -2)) {
+              throw new RuntimeException("Rebuild relation counts differ.");
+          }
+
+          $mib = static fn (int $bytes): float => $bytes / 1048576;
+          $summary = "## Graph scale benchmark\n\n";
+          $summary .= "- Canonical relation artifact: **" . number_format($mib((int) $fixture["relation_artifact_bytes"]), 2) . " MiB**\n";
+          $summary .= "- graph.sqlite: **" . number_format($mib((int) $fixture["graph_database_bytes"]), 2) . " MiB**\n";
+          $summary .= "- Relations: **" . number_format((int) $fixture["canonical_relation_count"]) . "**\n";
+          $summary .= "- Legacy impact: **" . number_format((float) $legacy["elapsed_ms"], 3) . " ms / " . number_format($mib((int) $legacy["peak_memory_bytes"]), 2) . " MiB peak**\n";
+          $summary .= "- SQLite impact: **" . number_format((float) $sqlite["elapsed_ms"], 3) . " ms / " . number_format($mib((int) $sqlite["peak_memory_bytes"]), 2) . " MiB peak**\n";
+          $summary .= "- Direct incoming/outgoing: **" . number_format((float) $queries["incoming_ms"], 3) . " / " . number_format((float) $queries["outgoing_ms"], 3) . " ms**\n";
+          $summary .= "- Bounded incoming/outgoing traversal: **" . number_format((float) $queries["incoming_traversal_ms"], 3) . " / " . number_format((float) $queries["outgoing_traversal_ms"], 3) . " ms**\n";
+          $summary .= "- Canonical decode for rebuild: **" . number_format((float) $rebuild["canonical_decode_ms"], 3) . " ms / " . number_format($mib((int) $rebuild["canonical_decode_peak_memory_bytes"]), 2) . " MiB peak**\n";
+          $summary .= "- Graph rebuild: **" . number_format((float) $rebuild["graph_rebuild_ms"], 3) . " ms / " . number_format($mib((int) $rebuild["graph_rebuild_peak_memory_bytes"]), 2) . " MiB peak**\n";
+          $summary .= "- SQLite path canonical relations materialized: **0**\n";
+          $summary .= "- Impact parity: **exact**\n";
+          file_put_contents((string) getenv("GITHUB_STEP_SUMMARY"), $summary, FILE_APPEND);
+          echo $summary;
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: graph-scale-benchmark
+          path: |
+            /tmp/agent-map-scale/scale-fixture.json
+            /tmp/agent-map-scale/impact-legacy.json
+            /tmp/agent-map-scale/impact-sqlite.json
+            /tmp/agent-map-scale/impact-compare.txt
+            /tmp/agent-map-scale/graph-queries.json
+            /tmp/agent-map-scale/graph-rebuild.json
+          if-no-files-found: error
