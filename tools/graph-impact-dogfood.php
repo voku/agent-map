@@ -14,7 +14,7 @@ $usage = static function (): never {
     fwrite(STDERR, "Usage:\n");
     fwrite(STDERR, "  php tools/graph-impact-dogfood.php legacy INDEX TARGET\n");
     fwrite(STDERR, "  php tools/graph-impact-dogfood.php sqlite INDEX TARGET\n");
-    fwrite(STDERR, "  php tools/graph-impact-dogfood.php queries INDEX TARGET\n");
+    fwrite(STDERR, "  php tools/graph-impact-dogfood.php queries INDEX NODE_ID\n");
     fwrite(STDERR, "  php tools/graph-impact-dogfood.php rebuild INDEX\n");
     fwrite(STDERR, "  php tools/graph-impact-dogfood.php compare LEGACY_JSON SQLITE_JSON\n");
     exit(2);
@@ -90,7 +90,7 @@ if ($mode === 'queries') {
     }
 
     $indexFile = $argv[2];
-    $target = $argv[3];
+    $nodeId = $argv[3];
     memory_reset_peak_usage();
 
     $filesStarted = hrtime(true);
@@ -105,24 +105,24 @@ if ($mode === 'queries') {
     $openElapsedMs = (hrtime(true) - $openStarted) / 1_000_000;
 
     $incomingStarted = hrtime(true);
-    $incoming = $graph->incoming($target);
+    $incoming = $graph->incoming($nodeId);
     $incomingElapsedMs = (hrtime(true) - $incomingStarted) / 1_000_000;
 
     $outgoingStarted = hrtime(true);
-    $outgoing = $graph->outgoing($target);
+    $outgoing = $graph->outgoing($nodeId);
     $outgoingElapsedMs = (hrtime(true) - $outgoingStarted) / 1_000_000;
 
     $incomingTraversalStarted = hrtime(true);
-    $incomingTraversal = $graph->traverse($target, TraversalDirection::INCOMING, 3, 500);
+    $incomingTraversal = $graph->traverse($nodeId, TraversalDirection::INCOMING, 3, 500);
     $incomingTraversalElapsedMs = (hrtime(true) - $incomingTraversalStarted) / 1_000_000;
 
     $outgoingTraversalStarted = hrtime(true);
-    $outgoingTraversal = $graph->traverse($target, TraversalDirection::OUTGOING, 3, 500);
+    $outgoingTraversal = $graph->traverse($nodeId, TraversalDirection::OUTGOING, 3, 500);
     $outgoingTraversalElapsedMs = (hrtime(true) - $outgoingTraversalStarted) / 1_000_000;
 
     $result = [
         'mode' => $mode,
-        'target' => $target,
+        'node_id' => $nodeId,
         'files_only_load_ms' => $filesElapsedMs,
         'graph_open_ms' => $openElapsedMs,
         'incoming_ms' => $incomingElapsedMs,
