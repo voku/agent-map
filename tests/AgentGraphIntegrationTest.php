@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Tests;
 
+use PDO;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use voku\AgentGraph\Graph\GraphRelation;
@@ -76,6 +77,25 @@ final class AgentGraphIntegrationTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Derived graph index is stale');
         (new MapGraphIndex())->openCurrent($indexFile);
+    }
+
+    public function testFullIntegrityScanRemainsAvailableAsExplicitVerification(): void
+    {
+        $indexFile = $this->root . '/php-symbols.json';
+        (new IndexWriter())->write($this->map(), $indexFile, 'json');
+        $graphFile = MapArtifactPaths::graphDatabaseFor($indexFile);
+
+        $pdo = new PDO('sqlite:' . $graphFile, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $pdo->exec('PRAGMA foreign_keys = OFF');
+        self::assertSame(1, $pdo->exec("DELETE FROM graph_relations WHERE relation_id = 'r1'"));
+        unset($pdo);
+
+        $graphIndex = new MapGraphIndex();
+        self::assertSame('sha256:', substr((string) $graphIndex->openCurrent($indexFile)->sourceFingerprint(), 0, 7));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Derived graph index failed integrity checks');
+        $graphIndex->verifyCurrent($indexFile);
     }
 
     private function map(): AgentMapIndex
