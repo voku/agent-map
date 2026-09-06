@@ -60,6 +60,31 @@ jobs:
           php tools/graph-impact-dogfood.php sqlite /tmp/agent-map-no-phpstan.json "$target" > /tmp/impact-sqlite.json
           php tools/graph-impact-dogfood.php compare /tmp/impact-legacy.json /tmp/impact-sqlite.json
 
+          php tools/graph-impact-dogfood.php queries /tmp/agent-map-no-phpstan.json "$target" > /tmp/graph-queries.json
+          php tools/graph-impact-dogfood.php rebuild /tmp/agent-map-no-phpstan.json > /tmp/graph-rebuild.json
+          php -r '
+          $queries = json_decode((string) file_get_contents("/tmp/graph-queries.json"), true, 512, JSON_THROW_ON_ERROR);
+          $rebuild = json_decode((string) file_get_contents("/tmp/graph-rebuild.json"), true, 512, JSON_THROW_ON_ERROR);
+          if (($queries["relation_count_loaded"] ?? -1) !== 0) {
+              fwrite(STDERR, "Query benchmark materialized canonical relations.\n");
+              exit(1);
+          }
+          if (($queries["graph_relation_count"] ?? 0) < 1) {
+              fwrite(STDERR, "Query benchmark did not observe graph relations.\n");
+              exit(1);
+          }
+          if (($rebuild["canonical_relation_count"] ?? -1) !== ($rebuild["graph_relation_count"] ?? -2)) {
+              fwrite(STDERR, "Rebuilt graph relation count differs from canonical relations.\n");
+              exit(1);
+          }
+          if (($rebuild["graph_database_bytes"] ?? 0) < 1) {
+              fwrite(STDERR, "Rebuild benchmark did not create graph.sqlite.\n");
+              exit(1);
+          }
+          '
+          cat /tmp/graph-queries.json
+          cat /tmp/graph-rebuild.json
+
   temporal-dogfood:
     runs-on: ubuntu-latest
     steps:
