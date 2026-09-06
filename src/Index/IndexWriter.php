@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Index;
 
 use RuntimeException;
+use voku\AgentGraph\Sqlite\SqliteRelationStore;
 use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Store\CanonicalArrayNormalizer;
 use voku\AgentMap\Store\CanonicalToonEncoder;
@@ -61,6 +62,9 @@ final readonly class IndexWriter
             @unlink($temporaryRelations);
             throw new RuntimeException('Unable to publish relations index: ' . $relationsFile);
         }
+
+        $graphStore = new SqliteRelationStore(MapArtifactPaths::graphDatabaseFor($file));
+        $graphStore->replace((new GraphProjectionFactory())->fromIndex($index), true);
     }
 
     /**
