@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace voku\AgentMap\Tests;
 
 use PHPUnit\Framework\TestCase;
+use voku\AgentGraph\Sqlite\GraphStore;
 use voku\AgentMap\Discovery\ArchitectureMapBuilder;
 use voku\AgentMap\Discovery\ArchitectureRegion;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
+use voku\AgentMap\Index\GraphProjectionFactory;
 use voku\AgentMap\Index\MethodEntry;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\SymbolEntry;
@@ -37,6 +39,36 @@ final class ArchitectureMapBuilderTest extends TestCase
         $payload = $auth->toArray();
         self::assertArrayHasKey('evidence', $payload);
         self::assertArrayNotHasKey('confidence', $payload);
+    }
+
+    public function testSqliteRelationStreamProducesExactArchitectureParityWithoutMapRelations(): void
+    {
+        $map = $this->semanticMap();
+        $database = sys_get_temp_dir() . '/agent-map-architecture-graph-' . bin2hex(random_bytes(8)) . '.sqlite';
+
+        try {
+            $graph = new GraphStore($database);
+            $graph->replace((new GraphProjectionFactory())->relations($map), 'map:test', 'sha256:test');
+            $filesOnly = new AgentMapIndex(
+                $map->schemaVersion,
+                $map->root,
+                $map->backend,
+                $map->files,
+                [],
+                $map->diagnostics,
+                $map->fingerprint,
+            );
+            $digest = $map->mapDigest();
+
+            self::assertSame(
+                (new ArchitectureMapBuilder())->build($map)->toArray(),
+                (new ArchitectureMapBuilder())->build($filesOnly, $graph->relations(), $digest)->toArray(),
+            );
+        } finally {
+            if (is_file($database)) {
+                unlink($database);
+            }
+        }
     }
 
     public function testNamespaceLessLegacyPHPStillFormsDirectoryBackedRegions(): void
