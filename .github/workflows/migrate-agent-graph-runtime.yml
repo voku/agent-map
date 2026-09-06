@@ -1,0 +1,70 @@
+name: Migrate sqlite runtime ownership
+
+on:
+  push:
+    branches:
+      - refactor/use-agent-graph-sqlite-runtime
+    paths:
+      - .github/workflows/migrate-agent-graph-runtime.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rewrite consumers and remove duplicated runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              Path('src/Search/SearchIndexStore.php'): [
+                  ('use voku\\AgentMap\\Search\\Embedding\\SqliteVecBinary;', 'use voku\\AgentGraph\\Sqlite\\SqliteVecBinary;'),
+                  ('// The binary shipped with this package first, then whatever the host installed itself.', '// The binary shipped by agent-graph first, then whatever the host installed itself.'),
+              ],
+              Path('src/Cli/AgentMapApplication.php'): [
+                  ('\\voku\\AgentMap\\Search\\Embedding\\SqliteVecBinary::', '\\voku\\AgentGraph\\Sqlite\\SqliteVecBinary::'),
+              ],
+              Path('tests/SearchIndexTest.php'): [
+                  ('use voku\\AgentMap\\Search\\Embedding\\SqliteVecBinary;', 'use voku\\AgentGraph\\Sqlite\\SqliteVecBinary;'),
+                  ("self::assertIsString($path, 'the package ships a binary for ' . $platform);", "self::assertIsString($path, 'agent-graph ships a binary for ' . $platform);"),
+              ],
+          }
+
+          for path, pairs in replacements.items():
+              content = path.read_text()
+              for old, new in pairs:
+                  if old not in content:
+                      raise SystemExit(f'missing expected text in {path}: {old}')
+                  content = content.replace(old, new)
+              path.write_text(content)
+          PY
+
+          git rm src/Search/Embedding/SqliteVecBinary.php
+          git rm -r sqlite-vec
+
+          if grep -R --line-number --fixed-strings 'voku\\AgentMap\\Search\\Embedding\\SqliteVecBinary' src tests; then
+            echo 'old SqliteVecBinary owner reference remains' >&2
+            exit 1
+          fi
+
+          if grep -R --line-number --fixed-strings 'AGENT_MAP_SQLITE_VEC' src tests; then
+            echo 'old sqlite-vec environment contract remains' >&2
+            exit 1
+          fi
+
+      - name: Commit migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src tests
+          git commit -m "refactor: consume sqlite runtime from agent-graph"
+          git push origin HEAD:refactor/use-agent-graph-sqlite-runtime
