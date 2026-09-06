@@ -140,9 +140,9 @@ TEXT;
         $indexFile = $parsed['options']['index'] ?? $this->artifacts->indexJson();
         $map = $this->loadFresh($indexFile, false);
         $graph = (new MapGraphIndex())->openCurrent($indexFile);
-        $mapDigest = $graph->sourceFingerprint();
+        $mapDigest = $graph->sourceRevision();
         if ($mapDigest === null) {
-            throw new RuntimeException('Derived graph index has no source fingerprint; rebuild the agent-map index.');
+            throw new RuntimeException('Derived graph index has no source revision; rebuild the agent-map index.');
         }
 
         $report = (new ArchitectureImpactAnalyzer())->forMethodUsingGraph(
