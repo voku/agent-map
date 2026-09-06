@@ -1,0 +1,34 @@
+name: Probe stable agent-graph 0.2.0
+
+on:
+  push:
+    branches:
+      - release/use-agent-graph-0.2.0
+    paths:
+      - .github/workflows/probe-agent-graph-0.2.0.yml
+
+jobs:
+  composer-resolution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: composer:v2
+      - name: Resolve stable package from Packagist
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          cd "$tmp"
+          composer init --name=agent-map/packagist-probe --no-interaction
+          composer require voku/agent-graph:^0.2.0 --no-interaction --no-progress --prefer-dist
+          composer show voku/agent-graph --format=json > package.json
+          php -r '
+          $data = json_decode((string) file_get_contents("package.json"), true, 512, JSON_THROW_ON_ERROR);
+          if (($data["versions"][0] ?? null) !== "0.2.0") {
+              fwrite(STDERR, "Expected stable voku/agent-graph 0.2.0, got " . json_encode($data["versions"] ?? null) . "\n");
+              exit(1);
+          }
+          '
