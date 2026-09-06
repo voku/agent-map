@@ -57,9 +57,16 @@ final class AgentGraphIntegrationTest extends TestCase
         (new IndexWriter())->write($map, $indexFile, 'json');
 
         $graphFile = MapArtifactPaths::graphDatabaseFor($indexFile);
+        $generationFile = MapArtifactPaths::graphGenerationFor($indexFile);
         self::assertFileExists($graphFile);
+        self::assertFileExists($generationFile);
+
+        $generation = json_decode((string) file_get_contents($generationFile), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('1', $generation['schema_version'] ?? null);
+        self::assertSame($map->mapDigest(), $generation['map_digest'] ?? null);
 
         $store = (new MapGraphIndex())->openCurrent($indexFile);
+        self::assertSame($map->mapDigest(), $store->sourceRevision());
         self::assertSame($this->ownerIds($map->incoming('target-a')), $this->graphIds($store->incoming('target-a')));
         self::assertSame($this->ownerIds($map->outgoing('source')), $this->graphIds($store->outgoing('source')));
         self::assertSame(['target-b', 'target-a'], $store->outgoing('source', 'calls')[0]->targetIds);
@@ -67,16 +74,31 @@ final class AgentGraphIntegrationTest extends TestCase
         self::assertSame([], $store->integrityFailures());
     }
 
-    public function testCanonicalArtifactChangeMakesOlderGraphFailClosed(): void
+    public function testGenerationMarkerChangeMakesOlderGraphFailClosed(): void
+    {
+        $indexFile = $this->root . '/php-symbols.json';
+        (new IndexWriter())->write($this->map(), $indexFile, 'json');
+        $generationFile = MapArtifactPaths::graphGenerationFor($indexFile);
+        self::assertIsInt(file_put_contents($generationFile, "{\"schema_version\":\"1\",\"map_digest\":\"sha256:changed\"}\n"));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Derived graph index is stale');
+        (new MapGraphIndex())->openCurrent($indexFile);
+    }
+
+    public function testCanonicalArtifactChangeFailsExplicitFingerprintVerification(): void
     {
         $indexFile = $this->root . '/php-symbols.json';
         (new IndexWriter())->write($this->map(), $indexFile, 'json');
         $relationsFile = MapArtifactPaths::relationsFileFor($indexFile);
         self::assertIsInt(file_put_contents($relationsFile, "\n", FILE_APPEND));
 
+        $graphIndex = new MapGraphIndex();
+        self::assertSame($this->map()->mapDigest(), $graphIndex->openCurrent($indexFile)->sourceRevision());
+
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Derived graph index is stale');
-        (new MapGraphIndex())->openCurrent($indexFile);
+        $this->expectExceptionMessage('failed canonical artifact fingerprint verification');
+        $graphIndex->verifyCurrent($indexFile);
     }
 
     public function testFullIntegrityScanRemainsAvailableAsExplicitVerification(): void
