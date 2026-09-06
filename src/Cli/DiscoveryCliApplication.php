@@ -14,6 +14,7 @@ use voku\AgentMap\Discovery\ArchitectureMapReport;
 use voku\AgentMap\Discovery\ArchitectureRegion;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
+use voku\AgentMap\Index\MapGraphIndex;
 use voku\AgentMap\MapArtifactPaths;
 
 final readonly class DiscoveryCliApplication
@@ -136,9 +137,18 @@ TEXT;
         $depth = $this->positiveInt('depth', $parsed['options']['depth'] ?? '2');
         $maximumNodes = $this->positiveInt('max-nodes', $parsed['options']['max-nodes'] ?? '100');
         $format = $this->format($parsed['options']['format'] ?? 'text');
-        $map = $this->loadFresh($parsed['options']['index'] ?? $this->artifacts->indexJson());
-        $report = (new ArchitectureImpactAnalyzer())->forMethod(
+        $indexFile = $parsed['options']['index'] ?? $this->artifacts->indexJson();
+        $map = $this->loadFresh($indexFile, false);
+        $graph = (new MapGraphIndex())->openCurrent($indexFile);
+        $mapDigest = $graph->sourceFingerprint();
+        if ($mapDigest === null) {
+            throw new RuntimeException('Derived graph index has no source fingerprint; rebuild the agent-map index.');
+        }
+
+        $report = (new ArchitectureImpactAnalyzer())->forMethodUsingGraph(
             $map,
+            $graph,
+            $mapDigest,
             $parsed['arguments'][0],
             $depth,
             $maximumNodes,
@@ -152,9 +162,10 @@ TEXT;
         return 0;
     }
 
-    private function loadFresh(string $path): AgentMapIndex
+    private function loadFresh(string $path, bool $loadRelations = true): AgentMapIndex
     {
-        $map = (new IndexReader())->read($path);
+        $reader = new IndexReader();
+        $map = $loadRelations ? $reader->read($path) : $reader->readSections($path, ['files']);
         $stale = $map->staleEntries();
         if ($stale !== []) {
             throw new RuntimeException(sprintf(
