@@ -7,6 +7,8 @@ namespace voku\AgentMap\Discovery;
 use InvalidArgumentException;
 use RuntimeException;
 use SplQueue;
+use voku\AgentGraph\Graph\GraphRelation;
+use voku\AgentGraph\Sqlite\GraphStore;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\RelationEntry;
 
@@ -26,16 +28,29 @@ final readonly class ImpactAnalyzer
         int $maximumDepth = 2,
         int $maximumNodes = 100,
     ): ImpactReport {
-        if ($maximumDepth < 1) {
-            throw new InvalidArgumentException('Impact depth must be at least 1.');
-        }
-        if ($maximumNodes < 1) {
-            throw new InvalidArgumentException('Impact node limit must be positive.');
-        }
-
         $resolved = $map->resolveMethod($target);
 
-        return $this->fromNodeId($map, $resolved->id, $maximumDepth, $maximumNodes);
+        return $this->analyze(
+            $map,
+            $resolved->id,
+            $maximumDepth,
+            $maximumNodes,
+            null,
+            $map->mapDigest(),
+        );
+    }
+
+    public function forMethodUsingGraph(
+        AgentMapIndex $map,
+        GraphStore $graph,
+        string $mapDigest,
+        string $target,
+        int $maximumDepth = 2,
+        int $maximumNodes = 100,
+    ): ImpactReport {
+        $resolved = $map->resolveMethod($target);
+
+        return $this->analyze($map, $resolved->id, $maximumDepth, $maximumNodes, $graph, $mapDigest);
     }
 
     public function fromNodeId(
@@ -43,6 +58,24 @@ final readonly class ImpactAnalyzer
         string $targetId,
         int $maximumDepth = 2,
         int $maximumNodes = 100,
+    ): ImpactReport {
+        return $this->analyze(
+            $map,
+            $targetId,
+            $maximumDepth,
+            $maximumNodes,
+            null,
+            $map->mapDigest(),
+        );
+    }
+
+    private function analyze(
+        AgentMapIndex $map,
+        string $targetId,
+        int $maximumDepth,
+        int $maximumNodes,
+        ?GraphStore $graph,
+        string $mapDigest,
     ): ImpactReport {
         if ($maximumDepth < 1) {
             throw new InvalidArgumentException('Impact depth must be at least 1.');
@@ -52,7 +85,7 @@ final readonly class ImpactAnalyzer
         }
 
         $catalog = new GraphNodeCatalog($map);
-        $adjacency = new GraphAdjacency($map);
+        $adjacency = $graph === null ? new GraphAdjacency($map) : null;
         $target = $catalog->find($targetId);
         if ($target === null) {
             throw new RuntimeException('Impact target is not an indexed repository node: ' . $targetId);
@@ -82,7 +115,10 @@ final readonly class ImpactAnalyzer
                 continue;
             }
 
-            foreach ($adjacency->incoming($current['id']) as $relation) {
+            $relations = $graph === null
+                ? $adjacency?->incoming($current['id']) ?? []
+                : $graph->incoming($current['id']);
+            foreach ($relations as $relation) {
                 if (!$this->canPropagateImpact($relation)) {
                     continue;
                 }
@@ -93,7 +129,7 @@ final readonly class ImpactAnalyzer
                 }
 
                 $depth = $current['depth'] + 1;
-                $pathUncertain = $current['uncertain'] || $this->isUncertain($relation);
+                $pathUncertain = $current['uncertain'] || GraphRelationFacts::isUncertain($relation);
                 if (!isset($found[$node->id])) {
                     if (count($found) >= $maximumNodes) {
                         $truncated = true;
@@ -165,7 +201,7 @@ final readonly class ImpactAnalyzer
             maximumDepth: $maximumDepth,
             maximumNodes: $maximumNodes,
             truncated: $truncated,
-            mapDigest: $map->mapDigest(),
+            mapDigest: $mapDigest,
         );
     }
 
@@ -174,7 +210,7 @@ final readonly class ImpactAnalyzer
         return $nodeId . "\0" . ($uncertain ? 'uncertain' : 'certain');
     }
 
-    private function canPropagateImpact(RelationEntry $relation): bool
+    private function canPropagateImpact(RelationEntry|GraphRelation $relation): bool
     {
         return in_array($relation->kind, [
             'calls',
@@ -185,10 +221,5 @@ final readonly class ImpactAnalyzer
             'references_type',
             'uses_trait',
         ], true);
-    }
-
-    private function isUncertain(RelationEntry $relation): bool
-    {
-        return in_array($relation->resolution, ['dynamic', 'multiple_targets'], true);
     }
 }
