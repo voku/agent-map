@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
+use voku\AgentGraph\Graph\TraversalDirection;
 use voku\AgentMap\Discovery\ArchitectureImpactAnalyzer;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\MapGraphIndex;
@@ -13,6 +14,8 @@ $usage = static function (): never {
     fwrite(STDERR, "Usage:\n");
     fwrite(STDERR, "  php tools/graph-impact-dogfood.php legacy INDEX TARGET\n");
     fwrite(STDERR, "  php tools/graph-impact-dogfood.php sqlite INDEX TARGET\n");
+    fwrite(STDERR, "  php tools/graph-impact-dogfood.php queries INDEX NODE_ID\n");
+    fwrite(STDERR, "  php tools/graph-impact-dogfood.php rebuild INDEX\n");
     fwrite(STDERR, "  php tools/graph-impact-dogfood.php compare LEGACY_JSON SQLITE_JSON\n");
     exit(2);
 };
@@ -25,6 +28,18 @@ $readJson = static function (string $path): array {
     }
 
     return $data;
+};
+
+$artifactSizes = static function (string $indexFile): array {
+    $relationFile = MapArtifactPaths::relationsFileFor($indexFile);
+    $graphFile = MapArtifactPaths::graphDatabaseFor($indexFile);
+    $relationBytes = is_file($relationFile) ? filesize($relationFile) : false;
+    $graphBytes = is_file($graphFile) ? filesize($graphFile) : false;
+
+    return [
+        'relation_artifact_bytes' => is_int($relationBytes) ? $relationBytes : 0,
+        'graph_database_bytes' => is_int($graphBytes) ? $graphBytes : 0,
+    ];
 };
 
 $mode = $argv[1] ?? null;
@@ -67,13 +82,144 @@ if ($mode === 'compare') {
     exit(0);
 }
 
+$reader = new IndexReader();
+
+if ($mode === 'queries') {
+    if (count($argv) !== 4) {
+        $usage();
+    }
+
+    $indexFile = $argv[2];
+    $nodeId = $argv[3];
+    memory_reset_peak_usage();
+
+    $filesStarted = hrtime(true);
+    $map = $reader->readSections($indexFile, ['files']);
+    $filesElapsedMs = (hrtime(true) - $filesStarted) / 1_000_000;
+    if ($map->relations !== []) {
+        throw new RuntimeException('Graph query benchmark unexpectedly loaded canonical relations.');
+    }
+
+    $openStarted = hrtime(true);
+    $graph = (new MapGraphIndex())->openCurrent($indexFile);
+    $openElapsedMs = (hrtime(true) - $openStarted) / 1_000_000;
+
+    $incomingStarted = hrtime(true);
+    $incoming = $graph->incoming($nodeId);
+    $incomingElapsedMs = (hrtime(true) - $incomingStarted) / 1_000_000;
+
+    $outgoingStarted = hrtime(true);
+    $outgoing = $graph->outgoing($nodeId);
+    $outgoingElapsedMs = (hrtime(true) - $outgoingStarted) / 1_000_000;
+
+    $incomingTraversalStarted = hrtime(true);
+    $incomingTraversal = $graph->traverse($nodeId, TraversalDirection::INCOMING, 3, 500);
+    $incomingTraversalElapsedMs = (hrtime(true) - $incomingTraversalStarted) / 1_000_000;
+
+    $outgoingTraversalStarted = hrtime(true);
+    $outgoingTraversal = $graph->traverse($nodeId, TraversalDirection::OUTGOING, 3, 500);
+    $outgoingTraversalElapsedMs = (hrtime(true) - $outgoingTraversalStarted) / 1_000_000;
+
+    $result = [
+        'mode' => $mode,
+        'node_id' => $nodeId,
+        'files_only_load_ms' => $filesElapsedMs,
+        'graph_open_ms' => $openElapsedMs,
+        'incoming_ms' => $incomingElapsedMs,
+        'incoming_count' => count($incoming),
+        'outgoing_ms' => $outgoingElapsedMs,
+        'outgoing_count' => count($outgoing),
+        'incoming_traversal_ms' => $incomingTraversalElapsedMs,
+        'incoming_traversal_nodes' => count($incomingTraversal->nodeIds),
+        'incoming_traversal_relations' => count($incomingTraversal->relations),
+        'incoming_traversal_truncated' => $incomingTraversal->truncated,
+        'outgoing_traversal_ms' => $outgoingTraversalElapsedMs,
+        'outgoing_traversal_nodes' => count($outgoingTraversal->nodeIds),
+        'outgoing_traversal_relations' => count($outgoingTraversal->relations),
+        'outgoing_traversal_truncated' => $outgoingTraversal->truncated,
+        'graph_relation_count' => $graph->relationCount(),
+        'relation_count_loaded' => count($map->relations),
+        'peak_memory_bytes' => memory_get_peak_usage(true),
+        ...$artifactSizes($indexFile),
+    ];
+
+    echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+    exit(0);
+}
+
+if ($mode === 'rebuild') {
+    if (count($argv) !== 3) {
+        $usage();
+    }
+
+    $indexFile = $argv[2];
+    $relationFile = MapArtifactPaths::relationsFileFor($indexFile);
+    if (!is_file($indexFile) || !is_file($relationFile)) {
+        throw new RuntimeException('Graph rebuild benchmark requires a split index and its relation companion.');
+    }
+
+    $temporaryDirectory = sys_get_temp_dir() . '/agent-map-graph-benchmark-' . bin2hex(random_bytes(8));
+    if (!mkdir($temporaryDirectory, 0700, true) && !is_dir($temporaryDirectory)) {
+        throw new RuntimeException('Unable to create graph benchmark directory: ' . $temporaryDirectory);
+    }
+
+    $benchmarkIndex = $temporaryDirectory . '/' . basename($indexFile);
+    $benchmarkRelations = MapArtifactPaths::relationsFileFor($benchmarkIndex);
+
+    try {
+        if (!copy($indexFile, $benchmarkIndex) || !copy($relationFile, $benchmarkRelations)) {
+            throw new RuntimeException('Unable to stage canonical artifacts for graph rebuild benchmark.');
+        }
+
+        memory_reset_peak_usage();
+        $decodeStarted = hrtime(true);
+        $map = $reader->read($benchmarkIndex);
+        $decodeElapsedMs = (hrtime(true) - $decodeStarted) / 1_000_000;
+        $decodePeakMemoryBytes = memory_get_peak_usage(true);
+
+        memory_reset_peak_usage();
+        $rebuildStarted = hrtime(true);
+        (new MapGraphIndex())->rebuild($map, $benchmarkIndex);
+        $rebuildElapsedMs = (hrtime(true) - $rebuildStarted) / 1_000_000;
+        $rebuildPeakMemoryBytes = memory_get_peak_usage(true);
+
+        $graph = (new MapGraphIndex())->openCurrent($benchmarkIndex);
+        $result = [
+            'mode' => $mode,
+            'canonical_decode_ms' => $decodeElapsedMs,
+            'canonical_decode_peak_memory_bytes' => $decodePeakMemoryBytes,
+            'graph_rebuild_ms' => $rebuildElapsedMs,
+            'graph_rebuild_peak_memory_bytes' => $rebuildPeakMemoryBytes,
+            'canonical_relation_count' => count($map->relations),
+            'graph_relation_count' => $graph->relationCount(),
+            ...$artifactSizes($benchmarkIndex),
+        ];
+
+        echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+    } finally {
+        $files = glob($temporaryDirectory . '/*');
+        if ($files === false) {
+            throw new RuntimeException('Unable to list graph benchmark temporary files.');
+        }
+        foreach ($files as $file) {
+            if (is_file($file) && !unlink($file)) {
+                throw new RuntimeException('Unable to remove graph benchmark temporary file: ' . $file);
+            }
+        }
+        if (is_dir($temporaryDirectory) && !rmdir($temporaryDirectory)) {
+            throw new RuntimeException('Unable to remove graph benchmark temporary directory: ' . $temporaryDirectory);
+        }
+    }
+
+    exit(0);
+}
+
 if (!in_array($mode, ['legacy', 'sqlite'], true) || count($argv) !== 4) {
     $usage();
 }
 
 $indexFile = $argv[2];
 $target = $argv[3];
-$reader = new IndexReader();
 $started = hrtime(true);
 
 if ($mode === 'legacy') {
@@ -100,18 +246,12 @@ $elapsedMs = (hrtime(true) - $started) / 1_000_000;
 $reportData = $report->toArray();
 unset($reportData['map_digest']);
 
-$relationFile = MapArtifactPaths::relationsFileFor($indexFile);
-$graphFile = MapArtifactPaths::graphDatabaseFor($indexFile);
-$relationBytes = is_file($relationFile) ? filesize($relationFile) : false;
-$graphBytes = is_file($graphFile) ? filesize($graphFile) : false;
-
 $result = [
     'mode' => $mode,
     'elapsed_ms' => $elapsedMs,
     'peak_memory_bytes' => memory_get_peak_usage(true),
     'relation_count_loaded' => $relationCountLoaded,
-    'relation_artifact_bytes' => is_int($relationBytes) ? $relationBytes : 0,
-    'graph_database_bytes' => is_int($graphBytes) ? $graphBytes : 0,
+    ...$artifactSizes($indexFile),
     'report' => $reportData,
 ];
 
