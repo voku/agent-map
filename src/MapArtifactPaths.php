@@ -85,6 +85,11 @@ final readonly class MapArtifactPaths
         return $indexFile . '.graph.sqlite';
     }
 
+    public static function writerLockFor(string $indexFile): string
+    {
+        return $indexFile . '.lock';
+    }
+
     public function searchDatabase(): string
     {
         return $this->path('search.sqlite');
