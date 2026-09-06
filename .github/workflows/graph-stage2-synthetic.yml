@@ -1,0 +1,168 @@
+name: Stage 2 synthetic 70MB graph benchmark
+
+on:
+  push:
+    branches:
+      - dogfood/graph-stage2-70mb-synthetic
+    paths:
+      - .github/workflows/graph-stage2-synthetic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Generate synthetic 70+ MB canonical relation artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/agent-map-large
+          php -d memory_limit=2G <<'PHP'
+          <?php
+          declare(strict_types=1);
+
+          $directory = '/tmp/agent-map-large';
+          $indexFile = $directory . '/php-symbols.json';
+          $relationsFile = $directory . '/php-relations.json';
+          $relationCount = 300000;
+
+          $symbols = [
+              'schema_version' => '2.0',
+              'root' => $directory,
+              'backend' => 'structural',
+              'files' => [],
+              'relations' => [],
+              'diagnostics' => [],
+              'local_bindings' => [],
+              'local_exits' => [],
+              'relations_file' => 'php-relations.json',
+          ];
+          file_put_contents($indexFile, json_encode($symbols, JSON_THROW_ON_ERROR));
+
+          $handle = fopen($relationsFile, 'wb');
+          if ($handle === false) {
+              throw new RuntimeException('Unable to create synthetic relation artifact.');
+          }
+
+          fwrite($handle, '{"schema_version":"2.0","root":"/tmp/agent-map-large","backend":"structural","relations":[');
+          for ($i = 0; $i < $relationCount; ++$i) {
+              $next = ($i + 1) % $relationCount;
+              $targetIds = [sprintf('method:Node%06d::run', $next)];
+              if ($i % 10 === 0) {
+                  $targetIds[] = sprintf('method:Node%06d::run', ($i + 97) % $relationCount);
+              }
+
+              $row = [
+                  'id' => sprintf('relation:synthetic:%06d', $i),
+                  'source_id' => sprintf('method:Node%06d::run', $i),
+                  'kind' => 'calls',
+                  'target_ids' => $targetIds,
+                  'file' => sprintf('src/Synthetic%06d.php', $i % 10000),
+                  'line_start' => ($i % 500) + 1,
+                  'line_end' => ($i % 500) + 1,
+                  'resolution' => count($targetIds) > 1 ? 'multiple_targets' : 'phpstan_resolved',
+                  'receiver_type' => 'Synthetic\\Receiver',
+                  'result_type' => 'Synthetic\\Result',
+                  'start_file_pos' => $i * 3,
+                  'end_file_pos' => ($i * 3) + 2,
+              ];
+
+              if ($i !== 0) {
+                  fwrite($handle, ',');
+              }
+              fwrite($handle, json_encode($row, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+          }
+          fwrite($handle, '],"local_bindings":[],"local_exits":[]}');
+          fclose($handle);
+
+          clearstatcache(true, $relationsFile);
+          $bytes = filesize($relationsFile);
+          if (!is_int($bytes)) {
+              throw new RuntimeException('Unable to stat synthetic relation artifact.');
+          }
+          $minimum = 70 * 1024 * 1024;
+          if ($bytes < $minimum) {
+              throw new RuntimeException(sprintf('Synthetic relation artifact is only %d bytes; expected at least %d.', $bytes, $minimum));
+          }
+
+          printf("synthetic_relations=%d\nrelation_artifact_bytes=%d\n", $relationCount, $bytes);
+          PHP
+
+      - name: Measure canonical decode and graph rebuild
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -d memory_limit=2G tools/graph-impact-dogfood.php rebuild /tmp/agent-map-large/php-symbols.json | tee /tmp/graph-rebuild.json
+
+      - name: Build queryable graph for query benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -d memory_limit=2G -r '
+          require "vendor/autoload.php";
+          $index = $argv[1];
+          $map = (new voku\AgentMap\Index\IndexReader())->read($index);
+          (new voku\AgentMap\Index\MapGraphIndex())->rebuild($map, $index);
+          ' /tmp/agent-map-large/php-symbols.json
+
+      - name: Measure indexed queries and bounded traversal
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -d memory_limit=2G tools/graph-impact-dogfood.php queries /tmp/agent-map-large/php-symbols.json 'method:Node150000::run' | tee /tmp/graph-queries.json
+
+      - name: Assert scale proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r '
+          $rebuild = json_decode((string) file_get_contents("/tmp/graph-rebuild.json"), true, 512, JSON_THROW_ON_ERROR);
+          $queries = json_decode((string) file_get_contents("/tmp/graph-queries.json"), true, 512, JSON_THROW_ON_ERROR);
+          if (($rebuild["canonical_relation_count"] ?? 0) !== 300000 || ($rebuild["graph_relation_count"] ?? 0) !== 300000) {
+              throw new RuntimeException("Relation-count parity failed.");
+          }
+          if (($queries["relation_count_loaded"] ?? -1) !== 0) {
+              throw new RuntimeException("SQLite query path loaded canonical relations into PHP.");
+          }
+          if (($queries["graph_relation_count"] ?? 0) !== 300000) {
+              throw new RuntimeException("Query store relation count mismatch.");
+          }
+          if (($queries["relation_artifact_bytes"] ?? 0) < 70 * 1024 * 1024) {
+              throw new RuntimeException("Scale fixture fell below 70 MiB.");
+          }
+          echo "[PASS] synthetic 70+ MB graph scale proof\n";
+          '
+
+      - name: Publish benchmark summary
+        shell: bash
+        run: |
+          echo '### Synthetic 70+ MB graph benchmark' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This is a synthetic scale/profiling proof, not the missing real-repository Stage-2 decision artifact.' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/graph-rebuild.json >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/graph-queries.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-70mb-graph-benchmark
+          path: |
+            /tmp/graph-rebuild.json
+            /tmp/graph-queries.json
+          if-no-files-found: error
