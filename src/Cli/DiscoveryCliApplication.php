@@ -138,12 +138,7 @@ TEXT;
         $maximumNodes = $this->positiveInt('max-nodes', $parsed['options']['max-nodes'] ?? '100');
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $indexFile = $parsed['options']['index'] ?? $this->artifacts->indexJson();
-        $map = $this->loadFresh($indexFile, false);
-        $graph = (new MapGraphIndex())->openCurrent($indexFile);
-        $mapDigest = $graph->sourceRevision();
-        if ($mapDigest === null) {
-            throw new RuntimeException('Derived graph index has no source revision; rebuild the agent-map index.');
-        }
+        [$map, $graph, $mapDigest] = $this->loadGraphSnapshot($indexFile);
 
         $report = (new ArchitectureImpactAnalyzer())->forMethodUsingGraph(
             $map,
@@ -160,6 +155,34 @@ TEXT;
             $this->textRenderer->impact($report),
         );
         return 0;
+    }
+
+    /** @return array{0: AgentMapIndex, 1: \voku\AgentGraph\Sqlite\GraphStore, 2: string} */
+    private function loadGraphSnapshot(string $indexFile): array
+    {
+        $lockFile = MapArtifactPaths::writerLockFor($indexFile);
+        $lock = fopen($lockFile, 'c');
+        if ($lock === false) {
+            throw new RuntimeException('Unable to open index reader lock: ' . $lockFile);
+        }
+        if (!flock($lock, LOCK_SH)) {
+            fclose($lock);
+            throw new RuntimeException('Unable to acquire index reader lock: ' . $lockFile);
+        }
+
+        try {
+            $map = $this->loadFresh($indexFile, false);
+            $graph = (new MapGraphIndex())->openCurrent($indexFile);
+            $mapDigest = $graph->sourceRevision();
+            if ($mapDigest === null) {
+                throw new RuntimeException('Derived graph index has no source revision; rebuild the agent-map index.');
+            }
+
+            return [$map, $graph, $mapDigest];
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 
     private function loadFresh(string $path, bool $loadRelations = true): AgentMapIndex
