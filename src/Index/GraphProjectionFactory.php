@@ -9,18 +9,21 @@ use voku\AgentGraph\Graph\GraphRelation;
 
 final readonly class GraphProjectionFactory
 {
-    public function fromIndex(AgentMapIndex $map): GraphProjection
+    /** @return iterable<GraphRelation> */
+    public function relations(AgentMapIndex $map): iterable
     {
-        $relations = [];
         foreach ($map->relations as $relation) {
-            $relations[] = new GraphRelation(
+            yield new GraphRelation(
                 $relation->id,
                 $relation->sourceId,
                 $relation->kind,
                 $relation->targetIds,
             );
         }
+    }
 
-        return new GraphProjection($relations);
+    public function fromIndex(AgentMapIndex $map): GraphProjection
+    {
+        return new GraphProjection(iterator_to_array($this->relations($map), false));
     }
 }
