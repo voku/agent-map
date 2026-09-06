@@ -22,7 +22,7 @@ final readonly class MapGraphIndex
         $store = new GraphStore(MapArtifactPaths::graphDatabaseFor($indexFile));
         $store->replace(
             $this->projectionFactory->relations($index),
-            sourceRevision: 'agent-map:' . $index->schemaVersion . ':' . $fingerprint,
+            sourceRevision: $index->mapDigest(),
             sourceFingerprint: $fingerprint,
             allowEmpty: true,
         );
