@@ -206,7 +206,7 @@ final class ArchitectureMapBuilderTest extends TestCase
             'src/Auth/Token.php',
             $line,
             $line,
-            'multiple_targets',
+            'phpstan_resolved',
         );
 
         return new AgentMapIndex('2.0', '/tmp/agent-map-regions', 'test', $files, $relations);
