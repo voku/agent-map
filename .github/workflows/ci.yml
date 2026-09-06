@@ -48,6 +48,17 @@ jobs:
               exit(1);
           }
           '
+      - name: Dogfood graph-backed impact without relation decode
+        run: |
+          set -euo pipefail
+          test -s /tmp/agent-map-no-phpstan.graph.sqlite
+          test -s /tmp/agent-map-no-phpstan.relations.json
+          wc -c /tmp/agent-map-no-phpstan.relations.json /tmp/agent-map-no-phpstan.graph.sqlite
+
+          target='voku\AgentMap\Cli\AgentMapApplication::run'
+          php tools/graph-impact-dogfood.php legacy /tmp/agent-map-no-phpstan.json "$target" > /tmp/impact-legacy.json
+          php tools/graph-impact-dogfood.php sqlite /tmp/agent-map-no-phpstan.json "$target" > /tmp/impact-sqlite.json
+          php tools/graph-impact-dogfood.php compare /tmp/impact-legacy.json /tmp/impact-sqlite.json
 
   temporal-dogfood:
     runs-on: ubuntu-latest

@@ -10,10 +10,12 @@ use RuntimeException;
 use Throwable;
 use voku\AgentMap\Discovery\ArchitectureDiscovery;
 use voku\AgentMap\Discovery\ArchitectureImpactAnalyzer;
+use voku\AgentMap\Discovery\ArchitectureImpactReport;
 use voku\AgentMap\Discovery\ArchitectureMapReport;
 use voku\AgentMap\Discovery\ArchitectureRegion;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
+use voku\AgentMap\Index\MapGraphIndex;
 use voku\AgentMap\MapArtifactPaths;
 
 final readonly class DiscoveryCliApplication
@@ -136,9 +138,9 @@ TEXT;
         $depth = $this->positiveInt('depth', $parsed['options']['depth'] ?? '2');
         $maximumNodes = $this->positiveInt('max-nodes', $parsed['options']['max-nodes'] ?? '100');
         $format = $this->format($parsed['options']['format'] ?? 'text');
-        $map = $this->loadFresh($parsed['options']['index'] ?? $this->artifacts->indexJson());
-        $report = (new ArchitectureImpactAnalyzer())->forMethod(
-            $map,
+        $indexFile = $parsed['options']['index'] ?? $this->artifacts->indexJson();
+        $report = $this->graphImpactReport(
+            $indexFile,
             $parsed['arguments'][0],
             $depth,
             $maximumNodes,
@@ -152,9 +154,48 @@ TEXT;
         return 0;
     }
 
-    private function loadFresh(string $path): AgentMapIndex
+    private function graphImpactReport(
+        string $indexFile,
+        string $target,
+        int $maximumDepth,
+        int $maximumNodes,
+    ): ArchitectureImpactReport {
+        $lockFile = MapArtifactPaths::writerLockFor($indexFile);
+        $lock = fopen($lockFile, 'c');
+        if ($lock === false) {
+            throw new RuntimeException('Unable to open index reader lock: ' . $lockFile);
+        }
+        if (!flock($lock, LOCK_SH)) {
+            fclose($lock);
+            throw new RuntimeException('Unable to acquire index reader lock: ' . $lockFile);
+        }
+
+        try {
+            $map = $this->loadFresh($indexFile, false);
+            $graph = (new MapGraphIndex())->openCurrent($indexFile);
+            $mapDigest = $graph->sourceRevision();
+            if ($mapDigest === null) {
+                throw new RuntimeException('Derived graph index has no source revision; rebuild the agent-map index.');
+            }
+
+            return (new ArchitectureImpactAnalyzer())->forMethodUsingGraph(
+                $map,
+                $graph,
+                $mapDigest,
+                $target,
+                $maximumDepth,
+                $maximumNodes,
+            );
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    private function loadFresh(string $path, bool $loadRelations = true): AgentMapIndex
     {
-        $map = (new IndexReader())->read($path);
+        $reader = new IndexReader();
+        $map = $loadRelations ? $reader->read($path) : $reader->readSections($path, ['files']);
         $stale = $map->staleEntries();
         if ($stale !== []) {
             throw new RuntimeException(sprintf(

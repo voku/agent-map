@@ -46,6 +46,11 @@ final readonly class MapArtifactPaths
         return $this->path('php-relations.toon');
     }
 
+    public function graphDatabase(): string
+    {
+        return $this->path('graph.sqlite');
+    }
+
     public static function relationsFileFor(string $indexFile): string
     {
         $dir = dirname($indexFile);
@@ -64,6 +69,25 @@ final readonly class MapArtifactPaths
         }
 
         return $indexFile . '.relations';
+    }
+
+    public static function graphDatabaseFor(string $indexFile): string
+    {
+        $dir = dirname($indexFile);
+        $base = basename($indexFile);
+        if ($base === 'php-symbols.json' || $base === 'php-symbols.toon') {
+            return $dir . '/graph.sqlite';
+        }
+        if (str_ends_with(strtolower($base), '.json') || str_ends_with(strtolower($base), '.toon')) {
+            return $dir . '/' . substr($base, 0, -5) . '.graph.sqlite';
+        }
+
+        return $indexFile . '.graph.sqlite';
+    }
+
+    public static function writerLockFor(string $indexFile): string
+    {
+        return $indexFile . '.lock';
     }
 
     public function searchDatabase(): string

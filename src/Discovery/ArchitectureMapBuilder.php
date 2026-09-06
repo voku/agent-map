@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Discovery;
 
+use voku\AgentGraph\Graph\GraphRelation;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
+use voku\AgentMap\Index\RelationEntry;
 
 final readonly class ArchitectureMapBuilder
 {
@@ -18,9 +20,13 @@ final readonly class ArchitectureMapBuilder
     ) {
     }
 
-    public function build(AgentMapIndex $map): ArchitectureMapReport
-    {
-        $rawGraph = $this->graphBuilder->build($map);
+    /** @param iterable<RelationEntry|GraphRelation>|null $relations */
+    public function build(
+        AgentMapIndex $map,
+        ?iterable $relations = null,
+        ?string $mapDigest = null,
+    ): ArchitectureMapReport {
+        $rawGraph = $this->graphBuilder->build($map, $relations);
         $crosscut = $this->crosscutAnalyzer->analyze($rawGraph);
         $partitions = $this->communityDetector->cluster($this->crosscutAnalyzer->penalize($rawGraph, $crosscut));
         $fileEntries = $this->fileEntries($map);
@@ -75,7 +81,7 @@ final readonly class ArchitectureMapBuilder
         }
 
         return new ArchitectureMapReport(
-            mapDigest: $map->mapDigest(),
+            mapDigest: $mapDigest ?? $map->mapDigest(),
             regions: $regions,
             rootRegionIds: $rootRegionIds,
             crosscutFiles: $this->crosscutAnalyzer->reported($crosscut),

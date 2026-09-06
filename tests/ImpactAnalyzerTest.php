@@ -6,10 +6,12 @@ namespace voku\AgentMap\Tests;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
+use voku\AgentGraph\Sqlite\GraphStore;
 use voku\AgentMap\Discovery\ImpactAnalyzer;
 use voku\AgentMap\Discovery\ImpactNode;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
+use voku\AgentMap\Index\GraphProjectionFactory;
 use voku\AgentMap\Index\MethodEntry;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\SymbolEntry;
@@ -34,6 +36,43 @@ final class ImpactAnalyzerTest extends TestCase
         ));
         self::assertFalse($report->truncated);
         self::assertStringStartsWith('sha256:', $report->mapDigest);
+    }
+
+    public function testSqliteTopologyProducesExactImpactParityWithoutMapRelations(): void
+    {
+        $map = $this->map();
+        $database = sys_get_temp_dir() . '/agent-map-impact-graph-' . bin2hex(random_bytes(8)) . '.sqlite';
+
+        try {
+            $graph = new GraphStore($database);
+            $graph->replace((new GraphProjectionFactory())->relations($map), 'map:test', 'sha256:test');
+            $filesOnly = new AgentMapIndex(
+                $map->schemaVersion,
+                $map->root,
+                $map->backend,
+                $map->files,
+                [],
+                $map->diagnostics,
+                $map->fingerprint,
+            );
+            $digest = $map->mapDigest();
+
+            $expected = (new ImpactAnalyzer())->forMethod($map, 'Demo\\Contract::run', 3, 20);
+            $actual = (new ImpactAnalyzer())->forMethodUsingGraph(
+                $filesOnly,
+                $graph,
+                $digest,
+                'Demo\\Contract::run',
+                3,
+                20,
+            );
+
+            self::assertSame($expected->toArray(), $actual->toArray());
+        } finally {
+            if (is_file($database)) {
+                unlink($database);
+            }
+        }
     }
 
     public function testPropagatesUncertaintyAndKeepsTheImmediatePathEvidence(): void

@@ -14,6 +14,7 @@ final readonly class IndexWriter
     public function __construct(
         private CanonicalArrayNormalizer $normalizer = new CanonicalArrayNormalizer(),
         private CanonicalToonEncoder $toonEncoder = new CanonicalToonEncoder(),
+        private MapGraphIndex $graphIndex = new MapGraphIndex(),
     ) {
     }
 
@@ -24,42 +25,63 @@ final readonly class IndexWriter
             throw new RuntimeException('Unable to create index directory: ' . $directory);
         }
 
-        $format ??= str_ends_with(strtolower($file), '.toon') ? 'toon' : 'json';
-        $payload = $index->toArray();
-
-        $relationsFile = MapArtifactPaths::relationsFileFor($file);
-        $relationsPayload = [
-            'schema_version' => $index->schemaVersion,
-            'root' => $index->root,
-            'backend' => $index->backend,
-            'relations' => $payload['relations'] ?? [],
-            'local_bindings' => $payload['local_bindings'] ?? [],
-            'local_exits' => $payload['local_exits'] ?? [],
-        ];
-        if ($index->fingerprint !== null) {
-            $relationsPayload['fingerprint'] = $payload['fingerprint'] ?? null;
+        $lockFile = MapArtifactPaths::writerLockFor($file);
+        $lock = fopen($lockFile, 'c');
+        if ($lock === false) {
+            throw new RuntimeException('Unable to open index writer lock: ' . $lockFile);
+        }
+        if (!flock($lock, LOCK_EX)) {
+            fclose($lock);
+            throw new RuntimeException('Unable to acquire index writer lock: ' . $lockFile);
         }
 
-        $payload['relations'] = [];
-        $payload['local_bindings'] = [];
-        $payload['local_exits'] = [];
-        $payload['relations_file'] = basename($relationsFile);
+        try {
+            $format ??= str_ends_with(strtolower($file), '.toon') ? 'toon' : 'json';
+            $payload = $index->toArray();
 
-        $temporary = $file . '.tmp-' . getmypid();
-        $temporaryRelations = $relationsFile . '.tmp-' . getmypid();
+            $relationsFile = MapArtifactPaths::relationsFileFor($file);
+            $relationsPayload = [
+                'schema_version' => $index->schemaVersion,
+                'root' => $index->root,
+                'backend' => $index->backend,
+                'relations' => $payload['relations'] ?? [],
+                'local_bindings' => $payload['local_bindings'] ?? [],
+                'local_exits' => $payload['local_exits'] ?? [],
+            ];
+            if ($index->fingerprint !== null) {
+                $relationsPayload['fingerprint'] = $payload['fingerprint'] ?? null;
+            }
 
-        $this->writePayload($payload, $temporary, $format);
-        $this->writePayload($relationsPayload, $temporaryRelations, $format);
+            $payload['relations'] = [];
+            $payload['local_bindings'] = [];
+            $payload['local_exits'] = [];
+            $payload['relations_file'] = basename($relationsFile);
 
-        if (!rename($temporary, $file)) {
-            @unlink($temporary);
-            @unlink($temporaryRelations);
-            throw new RuntimeException('Unable to publish index: ' . $file);
-        }
+            $temporary = $file . '.tmp-' . getmypid();
+            $temporaryRelations = $relationsFile . '.tmp-' . getmypid();
 
-        if (!rename($temporaryRelations, $relationsFile)) {
-            @unlink($temporaryRelations);
-            throw new RuntimeException('Unable to publish relations index: ' . $relationsFile);
+            $this->writePayload($payload, $temporary, $format);
+            $this->writePayload($relationsPayload, $temporaryRelations, $format);
+
+            if (!rename($temporary, $file)) {
+                @unlink($temporary);
+                @unlink($temporaryRelations);
+                throw new RuntimeException('Unable to publish index: ' . $file);
+            }
+
+            if (!rename($temporaryRelations, $relationsFile)) {
+                @unlink($temporaryRelations);
+                throw new RuntimeException('Unable to publish relations index: ' . $relationsFile);
+            }
+
+            // SQLite is a disposable acceleration index. Canonical JSON/TOON publishes first; the
+            // graph store records their byte fingerprint and readers reject an older generation.
+            // Keep the writer lock through rebuild so the in-memory index, canonical artifacts and
+            // graph provenance cannot be mixed with another writer's generation.
+            $this->graphIndex->rebuild($index, $file);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
         }
     }
 
