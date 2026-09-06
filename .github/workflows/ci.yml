@@ -59,6 +59,13 @@ jobs:
           php tools/graph-impact-dogfood.php legacy /tmp/agent-map-no-phpstan.json "$target" > /tmp/impact-legacy.json
           php tools/graph-impact-dogfood.php sqlite /tmp/agent-map-no-phpstan.json "$target" > /tmp/impact-sqlite.json
           php tools/graph-impact-dogfood.php compare /tmp/impact-legacy.json /tmp/impact-sqlite.json
+      - name: Smoke the large-index decision benchmark harness
+        run: |
+          set -euo pipefail
+          target='voku\AgentMap\Cli\AgentMapApplication::run'
+          php tools/graph-large-benchmark.php /tmp/agent-map-no-phpstan.json "$target" > /tmp/graph-large-benchmark.txt
+          grep -F '[PASS] graph benchmark:' /tmp/graph-large-benchmark.txt
+          cat /tmp/graph-large-benchmark.txt
 
   temporal-dogfood:
     runs-on: ubuntu-latest
