@@ -88,9 +88,9 @@ if ($mode === 'legacy') {
     }
 
     $graph = (new MapGraphIndex())->openCurrent($indexFile);
-    $mapDigest = $graph->sourceFingerprint();
+    $mapDigest = $graph->sourceRevision();
     if ($mapDigest === null) {
-        throw new RuntimeException('Derived graph index has no source fingerprint.');
+        throw new RuntimeException('Derived graph index has no source revision.');
     }
 
     $report = (new ArchitectureImpactAnalyzer())->forMethodUsingGraph($map, $graph, $mapDigest, $target, 3, 500);
