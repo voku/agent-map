@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace voku\AgentMap\Index;
 
 use RuntimeException;
-use Throwable;
-use voku\AgentGraph\Sqlite\SqliteRelationStore;
 use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Store\CanonicalArrayNormalizer;
 use voku\AgentMap\Store\CanonicalToonEncoder;
@@ -30,7 +28,6 @@ final readonly class IndexWriter
         $payload = $index->toArray();
 
         $relationsFile = MapArtifactPaths::relationsFileFor($file);
-        $graphFile = MapArtifactPaths::graphDatabaseFor($file);
         $relationsPayload = [
             'schema_version' => $index->schemaVersion,
             'root' => $index->root,
@@ -48,126 +45,22 @@ final readonly class IndexWriter
         $payload['local_exits'] = [];
         $payload['relations_file'] = basename($relationsFile);
 
-        $suffix = '.tmp-' . getmypid() . '-' . bin2hex(random_bytes(4));
-        $temporary = $file . $suffix;
-        $temporaryRelations = $relationsFile . $suffix;
-        $temporaryGraph = $graphFile . $suffix;
-        $stagedArtifacts = [
-            $file => $temporary,
-            $relationsFile => $temporaryRelations,
-            $graphFile => $temporaryGraph,
-        ];
+        $temporary = $file . '.tmp-' . getmypid();
+        $temporaryRelations = $relationsFile . '.tmp-' . getmypid();
 
-        try {
-            $this->writePayload($payload, $temporary, $format);
-            $this->writePayload($relationsPayload, $temporaryRelations, $format);
+        $this->writePayload($payload, $temporary, $format);
+        $this->writePayload($relationsPayload, $temporaryRelations, $format);
 
-            $graphStore = new SqliteRelationStore($temporaryGraph);
-            $graphStore->replace((new GraphProjectionFactory())->fromIndex($index), true);
-            unset($graphStore);
-
-            $this->publishArtifactSet($stagedArtifacts);
-        } catch (Throwable $exception) {
-            $cleanupFailures = $this->removeFiles(array_values($stagedArtifacts));
-            if ($cleanupFailures !== []) {
-                throw new RuntimeException(
-                    'Unable to clean staged map artifacts after failure: ' . implode(', ', $cleanupFailures),
-                    0,
-                    $exception,
-                );
-            }
-
-            throw $exception;
-        }
-    }
-
-    /**
-     * @param array<string, string> $stagedByFinalPath final path => staged path
-     */
-    private function publishArtifactSet(array $stagedByFinalPath): void
-    {
-        $backupSuffix = '.backup-' . getmypid() . '-' . bin2hex(random_bytes(4));
-        /** @var array<string, string> $backups final path => backup path */
-        $backups = [];
-        /** @var list<string> $published */
-        $published = [];
-
-        try {
-            foreach ($stagedByFinalPath as $finalPath => $stagedPath) {
-                if (!is_file($stagedPath)) {
-                    throw new RuntimeException('Staged map artifact is missing: ' . $stagedPath);
-                }
-
-                if (!is_file($finalPath)) {
-                    continue;
-                }
-
-                $backup = $finalPath . $backupSuffix;
-                if (!rename($finalPath, $backup)) {
-                    throw new RuntimeException('Unable to stage previous map artifact for rollback: ' . $finalPath);
-                }
-                $backups[$finalPath] = $backup;
-            }
-
-            foreach ($stagedByFinalPath as $finalPath => $stagedPath) {
-                if (!rename($stagedPath, $finalPath)) {
-                    throw new RuntimeException('Unable to publish staged map artifact: ' . $finalPath);
-                }
-                $published[] = $finalPath;
-            }
-        } catch (Throwable $exception) {
-            $rollbackFailures = [];
-
-            foreach ($published as $finalPath) {
-                if (is_file($finalPath) && !unlink($finalPath)) {
-                    $rollbackFailures[] = 'remove-new:' . $finalPath;
-                }
-            }
-
-            foreach ($backups as $finalPath => $backup) {
-                if (is_file($backup) && !rename($backup, $finalPath)) {
-                    $rollbackFailures[] = 'restore-old:' . $finalPath;
-                }
-            }
-
-            $rollbackFailures = array_merge(
-                $rollbackFailures,
-                $this->removeFiles(array_values($stagedByFinalPath)),
-            );
-
-            if ($rollbackFailures !== []) {
-                throw new RuntimeException(
-                    'Map artifact publication failed and rollback was incomplete: ' . implode(', ', $rollbackFailures),
-                    0,
-                    $exception,
-                );
-            }
-
-            throw $exception;
+        if (!rename($temporary, $file)) {
+            @unlink($temporary);
+            @unlink($temporaryRelations);
+            throw new RuntimeException('Unable to publish index: ' . $file);
         }
 
-        $cleanupFailures = $this->removeFiles(array_values($backups));
-        if ($cleanupFailures !== []) {
-            throw new RuntimeException(
-                'Map artifact generation was published but old backups could not be removed: ' . implode(', ', $cleanupFailures),
-            );
+        if (!rename($temporaryRelations, $relationsFile)) {
+            @unlink($temporaryRelations);
+            throw new RuntimeException('Unable to publish relations index: ' . $relationsFile);
         }
-    }
-
-    /**
-     * @param list<string> $files
-     * @return list<string>
-     */
-    private function removeFiles(array $files): array
-    {
-        $failures = [];
-        foreach ($files as $file) {
-            if (is_file($file) && !unlink($file)) {
-                $failures[] = $file;
-            }
-        }
-
-        return $failures;
     }
 
     /**
