@@ -50,7 +50,7 @@
     "php": ">=8.2",
     "composer-runtime-api": "^2.2",
     "helgesverre/toon": "^3.1",
-    "voku/agent-graph": "^0.1.0",
+    "voku/agent-graph": "dev-main#48aa09a36416e265ab078f0f1f4f58a20a40b731",
     "voku/simple-php-code-parser": "^0.22",
     "voku/stop-words": "^2.0"
   },
