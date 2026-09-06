@@ -51,6 +51,11 @@ final readonly class MapArtifactPaths
         return $this->path('graph.sqlite');
     }
 
+    public function graphGeneration(): string
+    {
+        return $this->path('graph-generation.json');
+    }
+
     public static function relationsFileFor(string $indexFile): string
     {
         $dir = dirname($indexFile);
@@ -83,6 +88,20 @@ final readonly class MapArtifactPaths
         }
 
         return $indexFile . '.graph.sqlite';
+    }
+
+    public static function graphGenerationFor(string $indexFile): string
+    {
+        $dir = dirname($indexFile);
+        $base = basename($indexFile);
+        if ($base === 'php-symbols.json' || $base === 'php-symbols.toon') {
+            return $dir . '/graph-generation.json';
+        }
+        if (str_ends_with(strtolower($base), '.json') || str_ends_with(strtolower($base), '.toon')) {
+            return $dir . '/' . substr($base, 0, -5) . '.graph-generation.json';
+        }
+
+        return $indexFile . '.graph-generation.json';
     }
 
     public static function writerLockFor(string $indexFile): string
