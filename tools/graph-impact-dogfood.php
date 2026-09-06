@@ -165,11 +165,12 @@ if ($mode === 'rebuild') {
 
     $benchmarkIndex = $temporaryDirectory . '/' . basename($indexFile);
     $benchmarkRelations = MapArtifactPaths::relationsFileFor($benchmarkIndex);
-    if (!copy($indexFile, $benchmarkIndex) || !copy($relationFile, $benchmarkRelations)) {
-        throw new RuntimeException('Unable to stage canonical artifacts for graph rebuild benchmark.');
-    }
 
     try {
+        if (!copy($indexFile, $benchmarkIndex) || !copy($relationFile, $benchmarkRelations)) {
+            throw new RuntimeException('Unable to stage canonical artifacts for graph rebuild benchmark.');
+        }
+
         memory_reset_peak_usage();
         $decodeStarted = hrtime(true);
         $map = $reader->read($benchmarkIndex);
@@ -197,14 +198,17 @@ if ($mode === 'rebuild') {
         echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
     } finally {
         $files = glob($temporaryDirectory . '/*');
-        if (is_array($files)) {
-            foreach ($files as $file) {
-                if (is_file($file)) {
-                    @unlink($file);
-                }
+        if ($files === false) {
+            throw new RuntimeException('Unable to list graph benchmark temporary files.');
+        }
+        foreach ($files as $file) {
+            if (is_file($file) && !unlink($file)) {
+                throw new RuntimeException('Unable to remove graph benchmark temporary file: ' . $file);
             }
         }
-        @rmdir($temporaryDirectory);
+        if (is_dir($temporaryDirectory) && !rmdir($temporaryDirectory)) {
+            throw new RuntimeException('Unable to remove graph benchmark temporary directory: ' . $temporaryDirectory);
+        }
     }
 
     exit(0);
