@@ -48,6 +48,28 @@ jobs:
               exit(1);
           }
           '
+      - name: Dogfood graph-backed impact without relation decode
+        run: |
+          set -euo pipefail
+          test -s /tmp/agent-map-no-phpstan.graph.sqlite
+          test -s /tmp/agent-map-no-phpstan.relations.json
+          wc -c /tmp/agent-map-no-phpstan.relations.json /tmp/agent-map-no-phpstan.graph.sqlite
+          /usr/bin/time -f 'impact_elapsed_seconds=%e\nimpact_max_rss_kb=%M' -o /tmp/impact-metrics.txt \
+            php bin/agent-map impact 'voku\AgentMap\Cli\AgentMapApplication::run' \
+              --index=/tmp/agent-map-no-phpstan.json --depth=2 --max-nodes=100 --format=json \
+              > /tmp/impact.json
+          cat /tmp/impact-metrics.txt
+          php -r '
+          $impact = json_decode((string) file_get_contents("/tmp/impact.json"), true, 512, JSON_THROW_ON_ERROR);
+          if (($impact["type"] ?? null) !== "impact") {
+              fwrite(STDERR, "Expected graph-backed impact payload.\n");
+              exit(1);
+          }
+          if (($impact["target"]["id"] ?? null) !== "method:voku\\AgentMap\\Cli\\AgentMapApplication::run") {
+              fwrite(STDERR, "Graph-backed impact resolved the wrong target.\n");
+              exit(1);
+          }
+          '
 
   temporal-dogfood:
     runs-on: ubuntu-latest
