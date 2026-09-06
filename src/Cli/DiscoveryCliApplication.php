@@ -10,6 +10,7 @@ use RuntimeException;
 use Throwable;
 use voku\AgentMap\Discovery\ArchitectureDiscovery;
 use voku\AgentMap\Discovery\ArchitectureImpactAnalyzer;
+use voku\AgentMap\Discovery\ArchitectureImpactReport;
 use voku\AgentMap\Discovery\ArchitectureMapReport;
 use voku\AgentMap\Discovery\ArchitectureRegion;
 use voku\AgentMap\Index\AgentMapIndex;
@@ -138,12 +139,8 @@ TEXT;
         $maximumNodes = $this->positiveInt('max-nodes', $parsed['options']['max-nodes'] ?? '100');
         $format = $this->format($parsed['options']['format'] ?? 'text');
         $indexFile = $parsed['options']['index'] ?? $this->artifacts->indexJson();
-        [$map, $graph, $mapDigest] = $this->loadGraphSnapshot($indexFile);
-
-        $report = (new ArchitectureImpactAnalyzer())->forMethodUsingGraph(
-            $map,
-            $graph,
-            $mapDigest,
+        $report = $this->graphImpactReport(
+            $indexFile,
             $parsed['arguments'][0],
             $depth,
             $maximumNodes,
@@ -157,9 +154,12 @@ TEXT;
         return 0;
     }
 
-    /** @return array{0: AgentMapIndex, 1: \voku\AgentGraph\Sqlite\GraphStore, 2: string} */
-    private function loadGraphSnapshot(string $indexFile): array
-    {
+    private function graphImpactReport(
+        string $indexFile,
+        string $target,
+        int $maximumDepth,
+        int $maximumNodes,
+    ): ArchitectureImpactReport {
         $lockFile = MapArtifactPaths::writerLockFor($indexFile);
         $lock = fopen($lockFile, 'c');
         if ($lock === false) {
@@ -178,7 +178,14 @@ TEXT;
                 throw new RuntimeException('Derived graph index has no source revision; rebuild the agent-map index.');
             }
 
-            return [$map, $graph, $mapDigest];
+            return (new ArchitectureImpactAnalyzer())->forMethodUsingGraph(
+                $map,
+                $graph,
+                $mapDigest,
+                $target,
+                $maximumDepth,
+                $maximumNodes,
+            );
         } finally {
             flock($lock, LOCK_UN);
             fclose($lock);
