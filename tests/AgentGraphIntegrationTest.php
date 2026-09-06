@@ -6,6 +6,7 @@ namespace voku\AgentMap\Tests;
 
 use PHPUnit\Framework\TestCase;
 use voku\AgentGraph\Graph\GraphRelation;
+use voku\AgentGraph\Graph\GraphValidationException;
 use voku\AgentGraph\Sqlite\SqliteRelationStore;
 use voku\AgentMap\Discovery\GraphAdjacency;
 use voku\AgentMap\Index\AgentMapIndex;
@@ -58,6 +59,44 @@ final class AgentGraphIntegrationTest extends TestCase
         self::assertSame($this->ids($map->incoming('target-a')), $this->graphIds($store->incoming('target-a')));
         self::assertSame($this->ids($map->outgoing('source')), $this->graphIds($store->outgoing('source')));
         self::assertSame([], $store->integrityFailures());
+    }
+
+    public function testInvalidNextGraphLeavesPreviousPublishedGenerationUntouched(): void
+    {
+        $writer = new IndexWriter();
+        $indexFile = $this->root . '/php-symbols.json';
+        $relationsFile = MapArtifactPaths::relationsFileFor($indexFile);
+        $graphFile = MapArtifactPaths::graphDatabaseFor($indexFile);
+        $writer->write($this->map(), $indexFile, 'json');
+
+        $beforeIndex = file_get_contents($indexFile);
+        $beforeRelations = file_get_contents($relationsFile);
+        self::assertIsString($beforeIndex);
+        self::assertIsString($beforeRelations);
+
+        $invalid = new AgentMapIndex(
+            schemaVersion: AgentMapIndex::SCHEMA_VERSION,
+            root: $this->root,
+            backend: 'structural',
+            files: [],
+            relations: [
+                new RelationEntry('duplicate', 'new-source', 'calls', ['a'], 'src/New.php', 1, 1, 'resolved'),
+                new RelationEntry('duplicate', 'new-source', 'calls', ['b'], 'src/New.php', 2, 2, 'resolved'),
+            ],
+        );
+
+        try {
+            $writer->write($invalid, $indexFile, 'json');
+            self::fail('Expected graph validation to reject duplicate relation ids.');
+        } catch (GraphValidationException) {
+            self::assertSame($beforeIndex, file_get_contents($indexFile));
+            self::assertSame($beforeRelations, file_get_contents($relationsFile));
+        }
+
+        $store = new SqliteRelationStore($graphFile);
+        self::assertSame(['r2', 'r1'], $this->graphIds($store->outgoing('source')));
+        self::assertSame([], glob($this->root . '/*.tmp-*') ?: []);
+        self::assertSame([], glob($this->root . '/*.backup-*') ?: []);
     }
 
     private function map(): AgentMapIndex
