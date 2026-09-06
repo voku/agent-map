@@ -41,7 +41,16 @@ final readonly class MapGraphIndex
         if ($actualFingerprint === null || !hash_equals($expectedFingerprint, $actualFingerprint)) {
             throw new RuntimeException('Derived graph index is stale; rebuild the agent-map index: ' . $database);
         }
+        if ($store->sourceRevision() === null) {
+            throw new RuntimeException('Derived graph index has incomplete source provenance; rebuild the agent-map index: ' . $database);
+        }
 
+        return $store;
+    }
+
+    public function verifyCurrent(string $indexFile): GraphStore
+    {
+        $store = $this->openCurrent($indexFile);
         $integrityFailures = $store->integrityFailures();
         if ($integrityFailures !== []) {
             throw new RuntimeException('Derived graph index failed integrity checks: ' . implode(', ', $integrityFailures));
