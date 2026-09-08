@@ -6,6 +6,7 @@ namespace voku\AgentMap\Search;
 
 use PDO;
 use RuntimeException;
+use voku\AgentMap\Search\Embedding\CorpusEmbeddingProvider;
 use voku\AgentMap\Search\Embedding\EmbeddingModel;
 use voku\AgentGraph\Sqlite\SqliteVecBinary;
 use voku\AgentMap\Search\Embedding\EmbeddingVector;
@@ -24,6 +25,12 @@ use voku\AgentMap\Search\Embedding\EmbeddingVector;
 final class SearchIndexStore
 {
     public const SCHEMA_VERSION = '1.1';
+
+    /** The fitted weighting the stored vectors were produced with. */
+    private const META_EMBEDDING_STATE = 'embedding_state';
+
+    /** The model identity those vectors belong to. */
+    private const META_EMBEDDING_FINGERPRINT = 'embedding_fingerprint';
 
     private PDO $pdo;
 
@@ -121,7 +128,7 @@ final class SearchIndexStore
             throw new RuntimeException('The vector channel is not available in this SQLite build.');
         }
 
-        if ($this->meta('embedding_fingerprint') !== $model->fingerprint()) {
+        if ($this->meta(self::META_EMBEDDING_FINGERPRINT) !== $model->fingerprint()) {
             $this->pdo->exec('DROP TABLE IF EXISTS code_chunks_vec');
             $this->pdo->exec('DELETE FROM embedding_cache');
         }
@@ -130,7 +137,7 @@ final class SearchIndexStore
             'CREATE VIRTUAL TABLE IF NOT EXISTS code_chunks_vec USING vec0(rowid INTEGER PRIMARY KEY, embedding float[%d])',
             $model->dimensions,
         ));
-        $this->setMeta('embedding_fingerprint', $model->fingerprint());
+        $this->setMeta(self::META_EMBEDDING_FINGERPRINT, $model->fingerprint());
         $this->setMeta('embedding_model', (string)json_encode($model->toArray()));
     }
 
@@ -227,6 +234,49 @@ final class SearchIndexStore
         return $rows;
     }
 
+    /** Records the weighting the vectors about to be written were produced with. */
+    public function storeEmbeddingState(CorpusEmbeddingProvider $provider): void
+    {
+        $this->setMeta(self::META_EMBEDDING_STATE, (string)json_encode($provider->state()));
+    }
+
+    /**
+     * The embedding provider this index's vectors were actually written with, or
+     * null when the semantic channel cannot be served from here.
+     *
+     * Restored rather than refitted: the stored weighting is what the existing
+     * vectors were written with, and refitting would silently produce a different
+     * vector space. Null is returned - never a fresh provider - when sqlite-vec is
+     * unavailable, when nothing is embedded, when the recorded state is unusable,
+     * or when the restored model no longer matches the fingerprint the vectors
+     * belong to.
+     *
+     * This exists so a consumer can enable the semantic channel without
+     * reconstructing that contract: which metadata key holds the weighting, how it
+     * is shaped, and what makes it valid are this package's business, and a copy of
+     * that knowledge in an embedding host is a second definition of the vector
+     * space.
+     */
+    public function semanticProvider(?string $extensionPath = null): ?CorpusEmbeddingProvider
+    {
+        if (!$this->enableVectorSupport($extensionPath) || $this->vectorCount() === 0) {
+            return null;
+        }
+
+        $state = json_decode((string)$this->meta(self::META_EMBEDDING_STATE), true);
+        if (!is_array($state) || !is_string($state['revision'] ?? null) || !is_array($state['weights'] ?? null)) {
+            return null;
+        }
+
+        $provider = new CorpusEmbeddingProvider();
+        /** @var array{revision: string, weights: array<string, float>} $state */
+        $provider->restore($state);
+
+        return $provider->model()->fingerprint() === $this->meta(self::META_EMBEDDING_FINGERPRINT)
+            ? $provider
+            : null;
+    }
+
     public function vectorCount(): int
     {
         if ($this->vectorReady !== true) {
@@ -310,7 +360,15 @@ final class SearchIndexStore
                  VALUES (:rowid, :symbol_name, :signature, :content)',
             );
 
-            $seen = [];
+            // A full build deletes every row first, so the only duplicates it can meet
+            // are inside its own batch. A refresh deletes only the paths it is
+            // replacing, so a row belonging to an untouched file can still hold a
+            // canonical chunk id this batch is about to insert - two files declaring
+            // the same class name produce the same id. Seeding the seen set with the
+            // ids that survived the delete makes the refresh skip exactly what the
+            // build skips, instead of aborting the whole transaction on a UNIQUE
+            // constraint the build path documents as tolerable.
+            $seen = $replacedPaths === null ? [] : $this->existingChunkIds($chunks);
             $skipped = 0;
             foreach ($chunks as $chunk) {
                 if (isset($seen[$chunk->chunkId])) {
@@ -348,6 +406,43 @@ final class SearchIndexStore
 
             throw $exception;
         }
+    }
+
+    /**
+     * Which of these chunk ids already exist in the table.
+     *
+     * Asked only about the ids this batch would insert, in parameter-bounded
+     * batches, so the cost stays proportional to the refresh rather than to the
+     * whole index.
+     *
+     * @param list<CodeChunk> $chunks
+     *
+     * @return array<string, true>
+     */
+    private function existingChunkIds(array $chunks): array
+    {
+        $wanted = [];
+        foreach ($chunks as $chunk) {
+            $wanted[$chunk->chunkId] = true;
+        }
+        if ($wanted === []) {
+            return [];
+        }
+
+        $existing = [];
+        // SQLite's default host-parameter limit is 999; stay well inside it.
+        foreach (array_chunk(array_keys($wanted), 500) as $batch) {
+            $placeholders = implode(', ', array_fill(0, count($batch), '?'));
+            $statement = $this->pdo->prepare(
+                'SELECT chunk_id FROM code_chunks WHERE chunk_id IN (' . $placeholders . ')',
+            );
+            $statement->execute($batch);
+            foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $chunkId) {
+                $existing[(string)$chunkId] = true;
+            }
+        }
+
+        return $existing;
     }
 
     /**
