@@ -17,7 +17,7 @@ use voku\AgentMap\MapArtifactPaths;
  */
 final readonly class MapReadinessInspector
 {
-    public function inspect(MapArtifactPaths $artifacts): MapReadiness
+    public function inspect(MapArtifactPaths $artifacts, bool $loadRelations = true): MapReadiness
     {
         $mapPath = $artifacts->indexJson();
         $searchPath = $artifacts->searchDatabase();
@@ -30,7 +30,10 @@ final readonly class MapReadinessInspector
 
         if (is_file($mapPath)) {
             try {
-                $map = (new IndexReader())->read($mapPath);
+                $reader = new IndexReader();
+                $map = $loadRelations
+                    ? $reader->read($mapPath)
+                    : $reader->readSections($mapPath, ['files']);
                 /** @var list<array{path: string, reason: 'missing'|'hash'}> $staleEntries */
                 $staleEntries = $map->staleEntries();
                 $mapSnapshot = $map->fingerprint?->sourceDigest;
