@@ -430,18 +430,8 @@ function windowBytes(string $content, string $term): int
  */
 function corpusProvider(SearchIndexStore $store): ?CorpusEmbeddingProvider
 {
-    if (!$store->enableVectorSupport() || $store->vectorCount() === 0) {
-        return null;
-    }
-    $state = json_decode((string) $store->meta('embedding_state'), true);
-    if (!is_array($state) || !is_string($state['revision'] ?? null) || !is_array($state['weights'] ?? null)) {
-        return null;
-    }
-    $provider = new CorpusEmbeddingProvider();
-    /** @var array{revision: string, weights: array<string, float>} $state */
-    $provider->restore($state);
-
-    return $provider->model()->fingerprint() === $store->meta('embedding_fingerprint') ? $provider : null;
+    // The store owns the restoration; this replay is a caller, not a second definition.
+    return $store->semanticProvider();
 }
 
 /**

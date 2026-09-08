@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- Stop `search-index refresh` aborting on a canonical symbol id that is declared more than once in the repository. A full build deletes every row before inserting, so the only duplicates it can meet are inside its own batch, which it resolves by keeping the first and reporting a skipped count. A refresh deletes only the paths it replaces, so a row belonging to an untouched file could still hold a chunk id the incoming batch was about to insert, and the whole transaction died on `UNIQUE constraint failed: code_chunks.chunk_id`. Repositories with any duplicated canonical symbol id - legacy duplication, fixtures, vendored copies - could therefore build a search index but never refresh one. `replaceChunks()` now seeds its seen set from the ids that survived the delete, so a refresh skips exactly what a build skips.
+
+### Added
+
+- Add `SearchIndexStore::semanticProvider()`, the typed way to obtain the embedding provider an index's vectors were actually written with, and `SearchIndexStore::storeEmbeddingState()` to record it. Restoration was previously implemented only in a private CLI method reading the store's own metadata keys, so an embedding host that wanted the semantic channel had to reproduce which key holds the fitted weighting, how it is shaped, and what makes it valid - a second definition of the vector space living outside the package that owns it. The factory refuses rather than refits: it returns `null` when sqlite-vec is unavailable, when nothing is embedded, when the recorded state is unusable, or when the restored model no longer matches the fingerprint the stored vectors belong to. The CLI and the navigation-replay dogfood are now callers of it rather than second copies of it.
+
 ## 0.11.0 - 2026-09-07
 
 ### Added

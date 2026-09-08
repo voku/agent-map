@@ -405,7 +405,7 @@ final readonly class AgentMapApplication
 
         $model = $provider->model();
         $store->prepareVectorTable($model);
-        $store->setMeta('embedding_state', (string)json_encode($provider->state()));
+        $store->storeEmbeddingState($provider);
 
         $documents = $store->chunkContentsForPaths($changedPaths);
         if ($documents === []) {
@@ -443,25 +443,13 @@ final readonly class AgentMapApplication
     /**
      * Rebuilds the same provider the index was written with. The corpus weighting is derived from
      * the stored chunks, so a query embeds into the same space without any model file on disk.
+     *
+     * The restoration itself belongs to the store, which owns the metadata it reads; the CLI is
+     * one caller of it rather than the definition of it.
      */
     private function corpusProvider(SearchIndexStore $store): ?CorpusEmbeddingProvider
     {
-        if (!$store->enableVectorSupport() || $store->vectorCount() === 0) {
-            return null;
-        }
-
-        // Restored rather than refitted: the stored weighting is what the existing vectors were
-        // written with, and refitting here would silently produce a different vector space.
-        $state = json_decode((string)$store->meta('embedding_state'), true);
-        if (!is_array($state) || !is_string($state['revision'] ?? null) || !is_array($state['weights'] ?? null)) {
-            return null;
-        }
-
-        $provider = new CorpusEmbeddingProvider();
-        /** @var array{revision: string, weights: array<string, float>} $state */
-        $provider->restore($state);
-
-        return $provider->model()->fingerprint() === $store->meta('embedding_fingerprint') ? $provider : null;
+        return $store->semanticProvider();
     }
 
     private function searchIndexDoctor(AgentMapIndex $index, SearchIndexStore $store): int
