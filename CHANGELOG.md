@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.11.1 - 2026-09-08
 
 ### Fixed
 
@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Add `SearchIndexStore::semanticProvider()`, the typed way to obtain the embedding provider an index's vectors were actually written with, and `SearchIndexStore::storeEmbeddingState()` to record it. Restoration was previously implemented only in a private CLI method reading the store's own metadata keys, so an embedding host that wanted the semantic channel had to reproduce which key holds the fitted weighting, how it is shaped, and what makes it valid - a second definition of the vector space living outside the package that owns it. The factory refuses rather than refits: it returns `null` when sqlite-vec is unavailable, when nothing is embedded, when the recorded state is unusable, or when the restored model no longer matches the fingerprint the stored vectors belong to. The CLI and the navigation-replay dogfood are now callers of it rather than second copies of it.
+
+### Changed
+
+- Support skipping companion relation decoding in `MapReadinessInspector::inspect(MapArtifactPaths $artifacts, bool $loadRelations = true)` so callers inspecting map file freshness can avoid parsing relations payloads.
 
 ## 0.11.0 - 2026-09-07
 
