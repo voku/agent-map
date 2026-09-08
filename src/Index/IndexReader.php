@@ -10,15 +10,40 @@ use JsonException;
 use RuntimeException;
 use voku\AgentMap\MapArtifactPaths;
 
-final readonly class IndexReader
+final class IndexReader
 {
     /** Read size for the section scan; the largest section is read in pieces of this size. */
     private const CHUNK_BYTES = 65536;
 
-    public function read(string $file, bool $loadRelations = true): AgentMapIndex
+    /** @var array<string, AgentMapIndex> */
+    private static array $indexCache = [];
+
+    public static function clearCache(): void
+    {
+        self::$indexCache = [];
+    }
+
+    /**
+     * @param list<string>|null $sections
+     */
+    public function read(string $file, bool $loadRelations = true, ?array $sections = null): AgentMapIndex
     {
         if (!is_file($file)) {
             throw new RuntimeException('Index file not found: ' . $file);
+        }
+
+        clearstatcache(true, $file);
+        $mtime = filemtime($file) ?: 0;
+        $size = filesize($file) ?: 0;
+        $relationsFile = MapArtifactPaths::relationsFileFor($file);
+        clearstatcache(true, $relationsFile);
+        $relationsMtime = is_file($relationsFile) ? (filemtime($relationsFile) ?: 0) : 0;
+        $relationsSize = is_file($relationsFile) ? (filesize($relationsFile) ?: 0) : 0;
+        $sectionsKey = $sections !== null ? implode(',', $sections) : 'all';
+        $cacheKey = $file . '#' . $mtime . '#' . $size . '#' . ($loadRelations ? '1' : '0') . '#' . $relationsMtime . '#' . $relationsSize . '#' . $sectionsKey;
+
+        if (isset(self::$indexCache[$cacheKey])) {
+            return self::$indexCache[$cacheKey];
         }
         $content = file_get_contents($file);
         if (!is_string($content)) {
@@ -78,7 +103,25 @@ final readonly class IndexReader
             $data['local_exits'] = [];
         }
 
-        return AgentMapIndex::fromArray($data);
+        if ($sections !== null) {
+            if (!in_array('diagnostics', $sections, true)) {
+                $data['diagnostics'] = [];
+            }
+            if (!in_array('files', $sections, true)) {
+                $data['files'] = [];
+            }
+            if (!in_array('local_bindings', $sections, true)) {
+                $data['local_bindings'] = [];
+            }
+            if (!in_array('local_exits', $sections, true)) {
+                $data['local_exits'] = [];
+            }
+        }
+
+        $index = AgentMapIndex::fromArray($data);
+        self::$indexCache[$cacheKey] = $index;
+
+        return $index;
     }
 
     /**
@@ -128,24 +171,17 @@ final readonly class IndexReader
         $needsRelations = in_array('relations', $sections, true);
         $relationsFile = MapArtifactPaths::relationsFileFor($file);
         if (is_file($relationsFile)) {
-            $index = $this->read($file, $needsRelations);
-            $filterFiles = !in_array('files', $sections, true);
-            $filterDiagnostics = !in_array('diagnostics', $sections, true);
-            if ($filterFiles || $filterDiagnostics) {
-                return new AgentMapIndex(
-                    schemaVersion: $index->schemaVersion,
-                    root: $index->root,
-                    backend: $index->backend,
-                    files: $filterFiles ? [] : $index->files,
-                    relations: $index->relations,
-                    diagnostics: $filterDiagnostics ? [] : $index->diagnostics,
-                    fingerprint: $index->fingerprint,
-                    localBindings: $index->localBindings,
-                    localExits: $index->localExits,
-                );
-            }
+            return $this->read($file, $needsRelations, $sections);
+        }
 
-            return $index;
+        clearstatcache(true, $file);
+        $mtime = filemtime($file) ?: 0;
+        $size = filesize($file) ?: 0;
+        $sectionsKey = implode(',', $sections);
+        $cacheKey = $file . '#' . $mtime . '#' . $size . '#sections#' . $sectionsKey;
+
+        if (isset(self::$indexCache[$cacheKey])) {
+            return self::$indexCache[$cacheKey];
         }
 
         if (str_ends_with(strtolower($file), '.toon')) {
@@ -205,7 +241,10 @@ final readonly class IndexReader
             return $this->read($file);
         }
 
-        return AgentMapIndex::fromArray($data);
+        $index = AgentMapIndex::fromArray($data);
+        self::$indexCache[$cacheKey] = $index;
+
+        return $index;
     }
 
     /** Whether the chunk just read reaches the end of its line. */

@@ -26,6 +26,7 @@ final class IndexSectionReadTest extends TestCase
 
     protected function tearDown(): void
     {
+        IndexReader::clearCache();
         if (is_file($this->file)) {
             unlink($this->file);
         }
@@ -83,6 +84,31 @@ final class IndexSectionReadTest extends TestCase
         self::assertCount(1, $index->files);
         // The fallback is a full read, so the skipped sections come back populated.
         self::assertCount(1, $index->relations);
+    }
+
+    public function testIndexReaderCachesParsedIndexInProcess(): void
+    {
+        $reader = new IndexReader();
+        $first = $reader->read($this->file);
+        $second = $reader->read($this->file);
+
+        self::assertSame($first, $second);
+
+        $sectionFirst = $reader->readSections($this->file, ['files']);
+        $sectionSecond = $reader->readSections($this->file, ['files']);
+
+        self::assertSame($sectionFirst, $sectionSecond);
+    }
+
+    public function testClearCacheForcesReRead(): void
+    {
+        $reader = new IndexReader();
+        $first = $reader->read($this->file);
+        IndexReader::clearCache();
+        $second = $reader->read($this->file);
+
+        self::assertNotSame($first, $second);
+        self::assertEquals($first, $second);
     }
 
     private function index(): AgentMapIndex

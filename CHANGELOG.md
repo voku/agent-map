@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.11.2 - 2026-09-08
+
+### Performance
+
+- Cache parsed `AgentMapIndex` instances in `IndexReader` across repetitive queries within a process when mtime and filesize are unchanged, avoiding duplicate JSON decoding and object hydration.
+- In `IndexReader::read()`, pre-filter unneeded top-level sections (such as `diagnostics`, `local_bindings`, `local_exits`) before invoking `AgentMapIndex::fromArray()`, avoiding construction of thousands of diagnostic and entry objects during partial section reads.
+- Clear `IndexReader` cache and PHP stat cache in `IndexWriter::write()` to maintain immediate read-after-write consistency.
+
 ## 0.11.1 - 2026-09-08
 
 ### Fixed

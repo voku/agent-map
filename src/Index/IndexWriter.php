@@ -79,6 +79,9 @@ final readonly class IndexWriter
             // Keep the writer lock through rebuild so the in-memory index, canonical artifacts and
             // graph provenance cannot be mixed with another writer's generation.
             $this->graphIndex->rebuild($index, $file);
+            clearstatcache(true, $file);
+            clearstatcache(true, $relationsFile);
+            IndexReader::clearCache();
         } finally {
             flock($lock, LOCK_UN);
             fclose($lock);
