@@ -12,8 +12,8 @@ use voku\AgentMap\Search\SearchIndexStore;
  * A partial refresh must preserve the same duplicate winner a clean full build selects.
  *
  * The canonical map orders files by path, and Search keeps the first chunk that claims a canonical
- * id. When the earlier duplicate is the only changed path, deleting it before replacement must not
- * let the later retained duplicate become the winner merely because its row survived the delete.
+ * id. If an index already contains a later path and a refresh introduces an earlier duplicate, the
+ * retained row must not win merely because it survived the partial delete.
  *
  * @internal
  */
@@ -30,8 +30,7 @@ final class SearchRefreshDuplicateWinnerParityTest extends TestCase
         $this->root = sys_get_temp_dir() . '/agent-map-search-duplicate-winner-' . bin2hex(random_bytes(6));
         mkdir($this->root . '/src/first', 0o775, true);
         mkdir($this->root . '/src/second', 0o775, true);
-        $this->writeDuplicate('first', 'winnerbefore');
-        $this->writeDuplicate('second', 'loser');
+        $this->writeDuplicate('second', 'retainedloser');
     }
 
     protected function tearDown(): void
@@ -41,36 +40,39 @@ final class SearchRefreshDuplicateWinnerParityTest extends TestCase
         }
     }
 
-    public function testRefreshingOnlyTheFullBuildWinnerMatchesACleanBuild(): void
+    public function testAddingEarlierDuplicateThroughRefreshMatchesCleanBuild(): void
     {
         $index = $this->root . '/map.json';
         $refreshed = $this->root . '/refreshed.sqlite';
         $rebuilt = $this->root . '/rebuilt.sqlite';
 
+        // The first search snapshot legitimately contains only the later path.
         self::assertSame(0, $this->cli(['build', '--root=' . $this->root, '--paths=src', '--out=' . $index, '--backend=structural']));
         self::assertSame(0, $this->cli(['search-index', 'build', '--root=' . $this->root, '--index=' . $index, '--database=' . $refreshed]));
         self::assertSame(
-            ['method:Duplicated::which#body:v1@src/first/Duplicated.php'],
-            $this->searchableRows($refreshed, 'winnerbefore'),
+            ['method:Duplicated::which#body:v1@src/second/Duplicated.php'],
+            $this->searchableRows($refreshed, 'retainedloser'),
         );
 
-        // Only the path that wins a clean full build changes. The later duplicate stays untouched in
-        // the existing store, which is the exact retained-vs-incoming collision that used to drift.
-        $this->writeDuplicate('first', 'winnerafter');
+        // The new path sorts earlier and therefore wins a clean full build. Only this newly added
+        // path is absent from the existing search snapshot, so refresh re-extracts one side while
+        // the old claimant survives until duplicate precedence is resolved in the store.
+        $this->writeDuplicate('first', 'canonicalwinner');
         self::assertSame(0, $this->cli(['build', '--root=' . $this->root, '--paths=src', '--out=' . $index, '--backend=structural']));
 
         self::assertSame(0, $this->cli(['search-index', 'refresh', '--root=' . $this->root, '--index=' . $index, '--database=' . $refreshed]));
         self::assertSame(0, $this->cli(['search-index', 'build', '--root=' . $this->root, '--index=' . $index, '--database=' . $rebuilt]));
 
         self::assertSame(
-            $this->searchableRows($rebuilt, 'winnerafter'),
-            $this->searchableRows($refreshed, 'winnerafter'),
+            $this->searchableRows($rebuilt, 'canonicalwinner'),
+            $this->searchableRows($refreshed, 'canonicalwinner'),
             'one-sided refresh must expose the same searchable duplicate winner as a clean build',
         );
         self::assertSame(
             ['method:Duplicated::which#body:v1@src/first/Duplicated.php'],
-            $this->searchableRows($refreshed, 'winnerafter'),
+            $this->searchableRows($refreshed, 'canonicalwinner'),
         );
+        self::assertSame([], $this->searchableRows($refreshed, 'retainedloser'));
         self::assertSame(
             $this->chunkIdentities($rebuilt),
             $this->chunkIdentities($refreshed),
