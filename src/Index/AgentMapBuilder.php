@@ -37,6 +37,19 @@ final readonly class AgentMapBuilder
     }
 
     /**
+     * The backend identity a build by this instance would write.
+     *
+     * An incremental refresh can only merge into an index carrying this exact
+     * identity. Callers that know how to repair a mismatch - a CLI holding the
+     * root, paths and output path - need the answer before attempting the
+     * merge, not as the exception that follows it.
+     */
+    public function backend(): string
+    {
+        return self::STRUCTURAL_BACKEND . '+' . $this->semanticAnalyzer->backend();
+    }
+
+    /**
      * @param list<string> $paths
      * @param list<string> $excludes
      * @param list<string> $scanPaths directories that only need to resolve symbols, not be indexed
@@ -70,7 +83,7 @@ final readonly class AgentMapBuilder
             );
         }
 
-        $backend = self::STRUCTURAL_BACKEND . '+' . $semanticBackend;
+        $backend = $this->backend();
         if ($previous !== null && $previous->backend !== $backend) {
             throw new RuntimeException(
                 'Cannot incrementally merge map backend "' . $previous->backend . '" with "' . $backend

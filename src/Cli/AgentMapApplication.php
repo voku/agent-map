@@ -192,7 +192,29 @@ final readonly class AgentMapApplication
             return 0;
         }
 
-        $rebuilt = $this->builder($options)->build(
+        $builder = $this->builder($options);
+        if (!$phpStanRefresh && $index->backend !== $builder->backend()) {
+            // The merge below would refuse, and its message names the remedy in
+            // prose while this method holds every argument the remedy needs.
+            // A host that follows the prescribed command literally otherwise
+            // loops: refresh -> refusal -> refresh.
+            throw new RuntimeException(
+                'Cannot refresh ' . $options->index . ': it carries backend "' . $index->backend
+                . '" and this run resolves "' . $builder->backend()
+                . '". An incremental refresh cannot merge two semantic backends. Run a full build:'
+                . "\n  agent-map build --root=" . $options->root
+                . ' --paths=' . implode(',', $searchPaths)
+                . ' --out=' . $options->out
+                // Only worth saying when the stored backend is one the caller
+                // could still ask for; advising a flag that would not restore
+                // this index is worse than saying nothing.
+                . (str_ends_with($index->backend, '+structural-only')
+                    ? "\nAdd --backend=structural to that command to keep the index structural-only."
+                    : ''),
+            );
+        }
+
+        $rebuilt = $builder->build(
             $options->root,
             $phpStanRefresh ? $semanticScope->paths : array_keys($changed),
             $phpStanRefresh ? $semanticScope->excludes : $options->excludes,
