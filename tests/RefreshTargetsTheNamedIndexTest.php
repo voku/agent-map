@@ -60,29 +60,93 @@ final class RefreshTargetsTheNamedIndexTest extends TestCase
     public function testTheRemedyItPrintsActuallyRepairsTheIndex(): void
     {
         $index = $this->root . '/map.json';
-        $this->executeAgentMap(['build', '--root=' . $this->root, '--paths=src', '--out=' . $index]);
+        $this->executeAgentMap(['build', '--root=' . $this->root, '--paths=src', '--out=' . $index, '--backend=structural']);
         $this->rewriteBackend($index, 'simple-php-code-parser+some-other-backend');
         file_put_contents($this->root . '/src/Greeter.php', "<?php\n\nnamespace Demo;\n\nfinal class Greeter\n{\n}\n");
 
         [, , $stderr] = $this->executeAgentMap(['refresh', '--root=' . $this->root, '--paths=src', '--index=' . $index]);
 
-        $command = null;
-        foreach (explode("\n", $stderr) as $line) {
-            if (str_starts_with(trim($line), 'agent-map build ')) {
-                $command = trim($line);
-                break;
-            }
-        }
-        self::assertIsString($command, 'the refusal printed no build command: ' . $stderr);
-
-        // Run exactly what it printed. Nothing may be inferred, reordered or added.
-        $arguments = array_slice(explode(' ', $command), 1);
-        [$exit, , $buildStderr] = $this->executeAgentMap($arguments);
+        // Run it through a real shell, so quoting is judged by the thing that
+        // will actually judge it. Nothing is inferred, reordered or added.
+        [$exit, , $buildStderr] = $this->executeShell($this->printedBuildCommand($stderr));
         self::assertSame(0, $exit, $buildStderr);
 
         [$exit, $stdout] = $this->executeAgentMap(['refresh', '--root=' . $this->root, '--paths=src', '--index=' . $index]);
         self::assertSame(0, $exit);
         self::assertStringContainsString('up to date', $stdout);
+    }
+
+    public function testTheRemedyRebuildsTheIndexsOwnScopeRatherThanWideningIt(): void
+    {
+        // A nested coverage is the case the refresh search scope widens to its
+        // first path segment. A remedy that widens the index is not a repair.
+        if (!mkdir($this->root . '/src/Feature', 0o775, true)) {
+            throw new RuntimeException('Unable to create nested fixture directory.');
+        }
+        rename($this->root . '/src/Greeter.php', $this->root . '/src/Feature/Greeter.php');
+        file_put_contents(
+            $this->root . '/src/Outsider.php',
+            "<?php\n\nnamespace Demo;\n\nfinal class Outsider\n{\n}\n",
+        );
+
+        $index = $this->root . '/map.json';
+        $this->executeAgentMap([
+            'build', '--root=' . $this->root, '--paths=src/Feature', '--out=' . $index, '--backend=structural',
+        ]);
+        $this->rewriteBackend($index, 'simple-php-code-parser+some-other-backend');
+        file_put_contents($this->root . '/src/Feature/Greeter.php', "<?php\n\nnamespace Demo;\n\nfinal class Greeter\n{\n}\n");
+
+        [, , $stderr] = $this->executeAgentMap(['refresh', '--root=' . $this->root, '--index=' . $index]);
+        [$exit, , $buildStderr] = $this->executeShell($this->printedBuildCommand($stderr));
+        self::assertSame(0, $exit, $buildStderr);
+
+        $rebuilt = json_decode((string) file_get_contents($index), true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($rebuilt);
+        self::assertSame(
+            ['src/Feature/Greeter.php'],
+            array_column($rebuilt['files'], 'path'),
+            'the remedy pulled a file into the index that its own scope never covered',
+        );
+    }
+
+    public function testTheRemedyKeepsAStructuralOnlyIndexStructuralOnly(): void
+    {
+        $index = $this->root . '/map.json';
+        $this->executeAgentMap(['build', '--root=' . $this->root, '--paths=src', '--out=' . $index, '--backend=structural']);
+        self::assertSame('simple-php-code-parser+structural-only', $this->backendOf($index));
+
+        // The real-world mismatch, with nothing rewritten: an index deliberately
+        // built structural-only, refreshed by a run whose default backend
+        // resolves to PHPStan. The remedy is judged on whether it restores the
+        // backend this index was built with rather than the one that refused.
+        file_put_contents($this->root . '/src/Greeter.php', "<?php\n\nnamespace Demo;\n\nfinal class Greeter\n{\n}\n");
+        [, , $stderr] = $this->executeAgentMap(['refresh', '--root=' . $this->root, '--paths=src', '--index=' . $index]);
+        $command = $this->printedBuildCommand($stderr);
+        self::assertStringContainsString('--backend=structural', $command);
+
+        [$exit, , $buildStderr] = $this->executeShell($command);
+        self::assertSame(0, $exit, $buildStderr);
+        self::assertSame('simple-php-code-parser+structural-only', $this->backendOf($index));
+    }
+
+    public function testAPathWithSpacesIsQuotedSoTheRemedyStillRuns(): void
+    {
+        $spaced = $this->root . '/a project';
+        if (!mkdir($spaced . '/src', 0o775, true)) {
+            throw new RuntimeException('Unable to create spaced fixture root.');
+        }
+        file_put_contents($spaced . '/src/Greeter.php', "<?php\n\nnamespace Demo;\n\nfinal class Greeter\n{\n}\n");
+
+        $index = $spaced . '/map.json';
+        $this->executeAgentMap(['build', '--root=' . $spaced, '--paths=src', '--out=' . $index, '--backend=structural']);
+        $this->rewriteBackend($index, 'simple-php-code-parser+some-other-backend');
+        file_put_contents($spaced . '/src/Greeter.php', "<?php\n\nnamespace Demo;\n\nfinal class Greeter\n{\n    public function hi(): void\n    {\n    }\n}\n");
+
+        [, , $stderr] = $this->executeAgentMap(['refresh', '--root=' . $spaced, '--paths=src', '--index=' . $index]);
+        [$exit, , $buildStderr] = $this->executeShell($this->printedBuildCommand($stderr));
+
+        self::assertSame(0, $exit, $buildStderr);
+        self::assertFileExists($index);
     }
 
     public function testARefreshWritesBackToTheIndexItWasPointedAt(): void
@@ -130,6 +194,58 @@ final class RefreshTargetsTheNamedIndexTest extends TestCase
 
         self::assertSame(0, $exit, $stderr);
         self::assertStringContainsString('Refreshed', $stdout);
+    }
+
+    /** The build line the refusal printed, taken verbatim. */
+    private function printedBuildCommand(string $stderr): string
+    {
+        foreach (explode("\n", $stderr) as $line) {
+            if (str_starts_with(trim($line), 'agent-map build ')) {
+                return trim($line);
+            }
+        }
+
+        self::fail('the refusal printed no build command: ' . $stderr);
+    }
+
+    private function backendOf(string $index): string
+    {
+        $decoded = json_decode((string) file_get_contents($index), true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($decoded) || !is_string($decoded['backend'] ?? null)) {
+            throw new RuntimeException('Unable to read fixture backend.');
+        }
+
+        return $decoded['backend'];
+    }
+
+    /**
+     * Run the printed line through a real shell, with only `agent-map` resolved
+     * to this checkout's binary. Everything after it is tokenized by `sh`, so
+     * quoting is judged by the thing that will judge it in a terminal.
+     *
+     * @return array{int, string, string}
+     */
+    private function executeShell(string $command): array
+    {
+        $arguments = substr($command, strlen('agent-map '));
+        $script = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(dirname(__DIR__) . '/bin/agent-map') . ' ' . $arguments;
+
+        $process = proc_open(['sh', '-c', $script], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        if (!is_resource($process)) {
+            throw new RuntimeException('Unable to start a shell.');
+        }
+
+        $stdout = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exit = proc_close($process);
+
+        if (!is_string($stdout) || !is_string($stderr)) {
+            throw new RuntimeException('Unable to read shell output.');
+        }
+
+        return [$exit, $stdout, $stderr];
     }
 
     private function rewriteBackend(string $index, string $backend): void

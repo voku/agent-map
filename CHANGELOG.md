@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `AgentMapBuilder::backend()` reports the backend identity a build by that instance would write, so a caller can test an index for mergeability before attempting an incremental merge rather than reading it out of the exception afterwards.
-- A refresh that cannot merge two semantic backends now refuses with the full build command - root, paths and output - instead of prose describing that a full build is needed. The refusal already knew every argument; a host following the prescribed next action literally would otherwise loop `refresh` -> refusal -> `refresh` forever. Reported as `voku/agent-loop#404`.
+- A refresh that cannot merge two semantic backends now refuses with the full build command - root, paths, output and, for a structural-only index, `--backend=structural` - instead of prose describing that a full build is needed. The refusal already knew every argument; a host following the prescribed next action literally would otherwise loop `refresh` -> refusal -> `refresh` forever. The command rebuilds the scope the index recorded rather than the wider search scope a refresh uses, keeps a structural-only index structural-only, and quotes any value that would not survive being copied into a shell. Reported as `voku/agent-loop#404`.
 
 ## 0.11.5 - 2026-09-09
 
