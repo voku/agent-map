@@ -192,7 +192,34 @@ final readonly class AgentMapApplication
             return 0;
         }
 
-        $rebuilt = $this->builder($options)->build(
+        $builder = $this->builder($options);
+        if (!$phpStanRefresh && $index->backend !== $builder->backend()) {
+            // The merge below would refuse, and its message names the remedy in
+            // prose while this method holds every argument the remedy needs.
+            // A host that follows the prescribed command literally otherwise
+            // loops: refresh -> refusal -> refresh.
+            // The command has to rebuild *this* index, not something adjacent to
+            // it. The refresh search scope widens a nested coverage such as
+            // `src/Feature` to its first segment, so the repair takes the scope
+            // the index recorded; and a build with no --backend resolves `auto`,
+            // which would quietly move a structural-only index onto PHPStan.
+            $structuralOnly = str_ends_with($index->backend, '+structural-only');
+            throw new RuntimeException(
+                'Cannot refresh ' . $options->index . ': it carries backend "' . $index->backend
+                . '" and this run resolves "' . $builder->backend()
+                . '". An incremental refresh cannot merge two semantic backends. Run a full build:'
+                . "\n  agent-map build"
+                . ' --root=' . self::shellArgument($options->root)
+                . ' --paths=' . self::shellArgument(implode(',', $semanticScope->paths))
+                . ' --out=' . self::shellArgument($options->out)
+                . ($structuralOnly ? ' --backend=structural' : '')
+                . ($structuralOnly
+                    ? ''
+                    : "\nThe rebuilt index will carry \"" . $builder->backend() . '", not "' . $index->backend . '".'),
+            );
+        }
+
+        $rebuilt = $builder->build(
             $options->root,
             $phpStanRefresh ? $semanticScope->paths : array_keys($changed),
             $phpStanRefresh ? $semanticScope->excludes : $options->excludes,
@@ -246,6 +273,19 @@ final readonly class AgentMapApplication
         $composerLockHash = is_file($index->root . '/composer.lock') ? hash_file('sha256', $index->root . '/composer.lock') : false;
 
         return $fingerprint->composerLockSha256 !== (is_string($composerLockHash) ? 'sha256:' . $composerLockHash : 'sha256:none');
+    }
+
+    /**
+     * One shell argument, quoted only when it would not survive being copied.
+     *
+     * A remedy that has to be re-quoted by hand before it runs is the same
+     * defect as a remedy written in prose, and a project path containing a
+     * space is not exotic. Values that need no quoting are printed bare so the
+     * ordinary command stays readable.
+     */
+    private static function shellArgument(string $value): string
+    {
+        return preg_match('#^[A-Za-z0-9_@%+=:,./-]+$#', $value) === 1 ? $value : escapeshellarg($value);
     }
 
     private function builder(CliOptions $options): AgentMapBuilder

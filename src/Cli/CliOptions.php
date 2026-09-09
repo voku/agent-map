@@ -164,6 +164,17 @@ final readonly class CliOptions
             if (!$formatProvided && $values['out'] !== '' && str_ends_with(strtolower($values['out']), '.toon')) {
                 $values['format'] = 'toon';
             }
+            // A refresh updates the index it was pointed at. Falling through to
+            // the artifact-root default wrote the refreshed map to a second
+            // file and left the named index stale for every later run, so
+            // `refresh --index=map.json` reported success while map.json never
+            // changed.
+            if ($command === 'refresh' && $values['out'] === '' && $values['index'] !== '') {
+                $values['out'] = $values['index'];
+                if (!$formatProvided && str_ends_with(strtolower($values['out']), '.toon')) {
+                    $values['format'] = 'toon';
+                }
+            }
             if ($values['out'] === '') {
                 $values['out'] = $values['format'] === 'toon' ? $artifacts->indexToon() : $artifacts->indexJson();
             }

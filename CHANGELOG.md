@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.11.6 - 2026-09-09
+
+### Fixed
+
+- `refresh --index=<path>` writes the refreshed map back to that index. It resolved its output to the artifact root's default filename instead, so a project whose index is not named `php-symbols.json` had every refresh written to a second file while the named index stayed stale: the command reported `Refreshed 1 changed ... file(s)` and the next run read the same unchanged source again. An explicit `--out` still wins, and a `.toon` index keeps the TOON serializer without being told twice.
+
+### Added
+
+- `AgentMapBuilder::backend()` reports the backend identity a build by that instance would write, so a caller can test an index for mergeability before attempting an incremental merge rather than reading it out of the exception afterwards.
+- A refresh that cannot merge two semantic backends now refuses with the full build command - root, paths, output and, for a structural-only index, `--backend=structural` - instead of prose describing that a full build is needed. The refusal already knew every argument; a host following the prescribed next action literally would otherwise loop `refresh` -> refusal -> `refresh` forever. The command rebuilds the scope the index recorded rather than the wider search scope a refresh uses, keeps a structural-only index structural-only, and quotes any value that would not survive being copied into a shell. Reported as `voku/agent-loop#404`.
+
 ## 0.11.5 - 2026-09-09
 
 ### Added
