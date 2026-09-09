@@ -50,7 +50,7 @@ final class SearchIndexStore
         // `new PDO('sqlite:...')` returns a plain PDO even on 8.4, and a plain PDO has no
         // loadExtension(). The driver-specific subclass is what can load sqlite-vec at all, so it is
         // used when the runtime has it; older runtimes simply keep the lexical channel.
-        $this->pdo = class_exists('Pdo\Sqlite')
+        $this->pdo = class_exists('Pdo\\Sqlite')
             ? new \Pdo\Sqlite($dsn, null, null, $options)
             : new PDO($dsn, null, null, $options);
         $this->pdo->exec('PRAGMA journal_mode = WAL');
@@ -360,21 +360,34 @@ final class SearchIndexStore
                  VALUES (:rowid, :symbol_name, :signature, :content)',
             );
 
-            // A full build deletes every row first, so the only duplicates it can meet
-            // are inside its own batch. A refresh deletes only the paths it is
-            // replacing, so a row belonging to an untouched file can still hold a
-            // canonical chunk id this batch is about to insert - two files declaring
-            // the same class name produce the same id. Seeding the seen set with the
-            // ids that survived the delete makes the refresh skip exactly what the
-            // build skips, instead of aborting the whole transaction on a UNIQUE
-            // constraint the build path documents as tolerable.
-            $seen = $replacedPaths === null ? [] : $this->existingChunkIds($chunks);
+            // Full builds consume the map's path-ordered chunks and keep the first
+            // claimant of a canonical chunk id. A partial refresh must compare an
+            // incoming claimant with the retained claimant it did not delete; merely
+            // preferring the retained row makes the winner depend on which path changed.
+            $retainedPaths = $replacedPaths === null ? [] : $this->existingChunkPaths($chunks);
+            $seen = [];
             $skipped = 0;
             foreach ($chunks as $chunk) {
                 if (isset($seen[$chunk->chunkId])) {
                     ++$skipped;
                     continue;
                 }
+
+                $retainedPath = $retainedPaths[$chunk->chunkId] ?? null;
+                if ($retainedPath !== null) {
+                    if (strcmp($retainedPath, $chunk->filePath) <= 0) {
+                        $seen[$chunk->chunkId] = true;
+                        ++$skipped;
+                        continue;
+                    }
+
+                    // The incoming path would have appeared first in a clean build.
+                    // Remove the later retained claimant, including its external FTS
+                    // row, inside this same transaction before inserting the winner.
+                    $this->deleteWhere('chunk_id = :chunk_id', ['chunk_id' => $chunk->chunkId]);
+                    unset($retainedPaths[$chunk->chunkId]);
+                }
+
                 $seen[$chunk->chunkId] = true;
 
                 $insert->execute([
@@ -409,17 +422,18 @@ final class SearchIndexStore
     }
 
     /**
-     * Which of these chunk ids already exist in the table.
+     * Retained claimants for chunk ids this refresh is about to insert.
      *
-     * Asked only about the ids this batch would insert, in parameter-bounded
-     * batches, so the cost stays proportional to the refresh rather than to the
-     * whole index.
+     * The path is required because duplicate resolution is order-sensitive: the map
+     * is path ordered and a full build keeps the first claimant. Query only the ids
+     * this batch can collide with, in parameter-bounded batches, so refresh cost
+     * stays proportional to the changed scope.
      *
      * @param list<CodeChunk> $chunks
      *
-     * @return array<string, true>
+     * @return array<string, string> chunk id => retained file path
      */
-    private function existingChunkIds(array $chunks): array
+    private function existingChunkPaths(array $chunks): array
     {
         $wanted = [];
         foreach ($chunks as $chunk) {
@@ -434,11 +448,11 @@ final class SearchIndexStore
         foreach (array_chunk(array_keys($wanted), 500) as $batch) {
             $placeholders = implode(', ', array_fill(0, count($batch), '?'));
             $statement = $this->pdo->prepare(
-                'SELECT chunk_id FROM code_chunks WHERE chunk_id IN (' . $placeholders . ')',
+                'SELECT chunk_id, file_path FROM code_chunks WHERE chunk_id IN (' . $placeholders . ')',
             );
             $statement->execute($batch);
-            foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $chunkId) {
-                $existing[(string)$chunkId] = true;
+            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $existing[(string)$row['chunk_id']] = (string)$row['file_path'];
             }
         }
 
@@ -765,7 +779,7 @@ final class SearchIndexStore
      */
     private function toMatchExpression(string $query, string $operator): ?string
     {
-        $tokens = preg_split('/[^\p{L}\p{N}_:\\\\]+/u', $query) ?: [];
+        $tokens = preg_split('/[^\\p{L}\\p{N}_:\\\\\\\\]+/u', $query) ?: [];
         $quoted = [];
         foreach ($tokens as $token) {
             $token = trim($token);
