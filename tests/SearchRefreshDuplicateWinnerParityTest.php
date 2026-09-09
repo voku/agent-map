@@ -50,7 +50,10 @@ final class SearchRefreshDuplicateWinnerParityTest extends TestCase
         self::assertSame(0, $this->cli(['build', '--root=' . $this->root, '--paths=src', '--out=' . $index, '--backend=structural']));
         self::assertSame(0, $this->cli(['search-index', 'build', '--root=' . $this->root, '--index=' . $index, '--database=' . $refreshed]));
         self::assertSame(
-            ['method:Duplicated::which#body:v1@src/second/Duplicated.php'],
+            [
+                'class:Duplicated#overview:v1@src/second/Duplicated.php',
+                'method:Duplicated::which#body:v1@src/second/Duplicated.php',
+            ],
             $this->searchableRows($refreshed, 'retainedloser'),
         );
 
@@ -69,7 +72,10 @@ final class SearchRefreshDuplicateWinnerParityTest extends TestCase
             'one-sided refresh must expose the same searchable duplicate winner as a clean build',
         );
         self::assertSame(
-            ['method:Duplicated::which#body:v1@src/first/Duplicated.php'],
+            [
+                'class:Duplicated#overview:v1@src/first/Duplicated.php',
+                'method:Duplicated::which#body:v1@src/first/Duplicated.php',
+            ],
             $this->searchableRows($refreshed, 'canonicalwinner'),
         );
         self::assertSame([], $this->searchableRows($refreshed, 'retainedloser'));
