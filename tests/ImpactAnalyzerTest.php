@@ -7,6 +7,8 @@ namespace voku\AgentMap\Tests;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use voku\AgentGraph\Sqlite\GraphStore;
+use RuntimeException;
+use voku\AgentMap\Discovery\GraphNode;
 use voku\AgentMap\Discovery\ImpactAnalyzer;
 use voku\AgentMap\Discovery\ImpactNode;
 use voku\AgentMap\Index\AgentMapIndex;
@@ -115,6 +117,105 @@ final class ImpactAnalyzerTest extends TestCase
 
         self::assertTrue($report->truncated);
         self::assertCount(1, $report->impacts);
+    }
+
+    public function testFileImpactUnionsEveryDeclarationInTheFile(): void
+    {
+        // src/Pair.php declares Alpha and Beta, and each has a dependent the
+        // other does not. Seeding one declaration would answer for half the file.
+        $report = (new ImpactAnalyzer())->forFile($this->pairMap(), 'src/Pair.php', 2, 20);
+
+        self::assertSame('src/Pair.php', $report->path);
+        self::assertSame([
+            'class:Demo\\Alpha',
+            'class:Demo\\Beta',
+            'method:Demo\\Alpha::run',
+            'method:Demo\\Beta::run',
+        ], array_map(static fn (GraphNode $seed): string => $seed->id, $report->seeds));
+        self::assertSame([
+            'method:Demo\\CallsAlpha::call',
+            'method:Demo\\CallsBeta::call',
+        ], array_map(static fn (ImpactNode $impact): string => $impact->node->id, $report->impacts));
+        self::assertSame(['src/CallsAlpha.php', 'src/CallsBeta.php'], $report->impactedFiles());
+        self::assertFalse($report->truncated);
+        self::assertStringStartsWith('sha256:', $report->mapDigest);
+    }
+
+    public function testFileImpactExcludesTheFilesOwnDeclarations(): void
+    {
+        // Beta::run calls Alpha::run inside the same file, so the traversal
+        // reaches it. Changing src/Pair.php is not something src/Pair.php
+        // notices, and reporting it would inflate every scope comparison.
+        $report = (new ImpactAnalyzer())->forFile($this->pairMap(), 'src/Pair.php', 3, 20);
+
+        foreach ($report->impacts as $impact) {
+            self::assertNotSame('src/Pair.php', $impact->node->file);
+        }
+        self::assertNotContains(
+            'method:Demo\\Beta::run',
+            array_map(static fn (ImpactNode $impact): string => $impact->node->id, $report->impacts),
+        );
+    }
+
+    public function testFileImpactBoundsTheUnionRatherThanEachDeclaration(): void
+    {
+        $report = (new ImpactAnalyzer())->forFile($this->pairMap(), 'src/Pair.php', 2, 1);
+
+        self::assertCount(1, $report->impacts);
+        self::assertTrue($report->truncated);
+    }
+
+    public function testFileImpactKeepsUncertaintyFromTheDeclarationItArrivedThrough(): void
+    {
+        $report = (new ImpactAnalyzer())->forFile($this->map(), 'src/Implementation.php', 2, 20);
+
+        self::assertSame([
+            ['method:Demo\\Caller::call', 1, false],
+            ['method:Demo\\MaybeCaller::call', 1, true],
+            ['method:Demo\\DualTop::execute', 2, false],
+            ['method:Demo\\Top::execute', 2, false],
+            ['method:Demo\\MaybeTop::execute', 2, true],
+        ], array_map(
+            static fn (ImpactNode $impact): array => [$impact->node->id, $impact->depth, $impact->uncertain],
+            $report->impacts,
+        ));
+    }
+
+    public function testFileImpactRefusesAPathTheMapDoesNotIndex(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Impact target is not an indexed repository file: src/Absent.php');
+
+        (new ImpactAnalyzer())->forFile($this->map(), 'src/Absent.php', 2, 20);
+    }
+
+    public function testFileImpactRejectsZeroDepthBeforeReadingTheFile(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        (new ImpactAnalyzer())->forFile($this->map(), 'src/Absent.php', 0);
+    }
+
+    private function pairMap(): AgentMapIndex
+    {
+        $alpha = new SymbolEntry('class', 'Alpha', 'Demo\\Alpha', 1, 10, [new MethodEntry('run', 'public', 5, 6)]);
+        $beta = new SymbolEntry('class', 'Beta', 'Demo\\Beta', 12, 20, [new MethodEntry('run', 'public', 15, 16)]);
+        $callsAlpha = new SymbolEntry('class', 'CallsAlpha', 'Demo\\CallsAlpha', 1, 10, [new MethodEntry('call', 'public', 5, 6)]);
+        $callsBeta = new SymbolEntry('class', 'CallsBeta', 'Demo\\CallsBeta', 1, 10, [new MethodEntry('call', 'public', 5, 6)]);
+
+        $files = [
+            new FileEntry('src/Pair.php', 'sha256:pair', 'Demo', [$alpha, $beta]),
+            new FileEntry('src/CallsAlpha.php', 'sha256:calls-alpha', 'Demo', [$callsAlpha]),
+            new FileEntry('src/CallsBeta.php', 'sha256:calls-beta', 'Demo', [$callsBeta]),
+        ];
+
+        $relations = [
+            RelationEntry::create('method:Demo\\Beta::run', 'calls', ['method:Demo\\Alpha::run'], 'src/Pair.php', 15, 15, 'phpstan_resolved'),
+            RelationEntry::create('method:Demo\\CallsAlpha::call', 'calls', ['method:Demo\\Alpha::run'], 'src/CallsAlpha.php', 5, 5, 'phpstan_resolved'),
+            RelationEntry::create('method:Demo\\CallsBeta::call', 'calls', ['method:Demo\\Beta::run'], 'src/CallsBeta.php', 5, 5, 'phpstan_resolved'),
+        ];
+
+        return new AgentMapIndex('2.0', '/tmp/agent-map-file-impact', 'test', $files, $relations);
     }
 
     public function testRejectsZeroDepth(): void

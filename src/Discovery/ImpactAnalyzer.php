@@ -69,6 +69,64 @@ final readonly class ImpactAnalyzer
         );
     }
 
+    /**
+     * Find repository nodes outside one indexed file that can depend on it.
+     *
+     * A caller asking about a file - a Contract scope entry, a changed path -
+     * has no single node to start from, and picking one declaration out of the
+     * file would answer a narrower question than the one asked. Every
+     * declaration the file contains seeds the same traversal instead, and the
+     * node bound applies to their union so the result stays as bounded as a
+     * method impact.
+     *
+     * Nodes declared in the file itself are not impacts. Changing a file is not
+     * something that file notices; the question is what outside it does.
+     */
+    public function forFile(
+        AgentMapIndex $map,
+        string $path,
+        int $maximumDepth = 2,
+        int $maximumNodes = 100,
+    ): FileImpactReport {
+        $this->assertBounds($maximumDepth, $maximumNodes);
+
+        $file = $map->file($path);
+        if ($file === null) {
+            throw new RuntimeException('Impact target is not an indexed repository file: ' . $path);
+        }
+
+        $catalog = new GraphNodeCatalog($map);
+        $seeds = [];
+        $declared = [];
+        foreach ($catalog->all() as $node) {
+            if ($node->file !== $file->path) {
+                continue;
+            }
+            $seeds[] = $node;
+            $declared[$node->id] = true;
+        }
+
+        $traversal = $this->traverse(
+            $map,
+            $catalog,
+            array_keys($declared),
+            $declared,
+            $maximumDepth,
+            $maximumNodes,
+            null,
+        );
+
+        return new FileImpactReport(
+            path: $file->path,
+            seeds: $seeds,
+            impacts: $traversal['impacts'],
+            maximumDepth: $maximumDepth,
+            maximumNodes: $maximumNodes,
+            truncated: $traversal['truncated'],
+            mapDigest: $map->mapDigest(),
+        );
+    }
+
     private function analyze(
         AgentMapIndex $map,
         string $targetId,
@@ -77,24 +135,59 @@ final readonly class ImpactAnalyzer
         ?GraphStore $graph,
         string $mapDigest,
     ): ImpactReport {
-        if ($maximumDepth < 1) {
-            throw new InvalidArgumentException('Impact depth must be at least 1.');
-        }
-        if ($maximumNodes < 1) {
-            throw new InvalidArgumentException('Impact node limit must be positive.');
-        }
+        $this->assertBounds($maximumDepth, $maximumNodes);
 
         $catalog = new GraphNodeCatalog($map);
-        $adjacency = $graph === null ? new GraphAdjacency($map) : null;
         $target = $catalog->find($targetId);
         if ($target === null) {
             throw new RuntimeException('Impact target is not an indexed repository node: ' . $targetId);
         }
 
+        $traversal = $this->traverse(
+            $map,
+            $catalog,
+            [$targetId],
+            [$targetId => true],
+            $maximumDepth,
+            $maximumNodes,
+            $graph,
+        );
+
+        return new ImpactReport(
+            target: $target,
+            impacts: $traversal['impacts'],
+            maximumDepth: $maximumDepth,
+            maximumNodes: $maximumNodes,
+            truncated: $traversal['truncated'],
+            mapDigest: $mapDigest,
+        );
+    }
+
+    /**
+     * The reverse traversal both entry points share.
+     *
+     * @param list<string> $seedIds nodes the traversal starts from, all at depth 0
+     * @param array<string, true> $excludedIds nodes that may never be reported as impacts
+     * @return array{impacts: list<ImpactNode>, truncated: bool}
+     */
+    private function traverse(
+        AgentMapIndex $map,
+        GraphNodeCatalog $catalog,
+        array $seedIds,
+        array $excludedIds,
+        int $maximumDepth,
+        int $maximumNodes,
+        ?GraphStore $graph,
+    ): array {
+        $adjacency = $graph === null ? new GraphAdjacency($map) : null;
+
         /** @var SplQueue<array{id: string, depth: int, uncertain: bool}> $queue */
         $queue = new SplQueue();
-        $queue->enqueue(['id' => $targetId, 'depth' => 0, 'uncertain' => false]);
-        $queuedStates = [$this->stateKey($targetId, false) => true];
+        $queuedStates = [];
+        foreach ($seedIds as $seedId) {
+            $queue->enqueue(['id' => $seedId, 'depth' => 0, 'uncertain' => false]);
+            $queuedStates[$this->stateKey($seedId, false)] = true;
+        }
         /**
          * @var array<string, array{
          *   node: GraphNode,
@@ -124,7 +217,7 @@ final readonly class ImpactAnalyzer
                 }
 
                 $node = $catalog->find($relation->sourceId);
-                if ($node === null || $node->id === $targetId) {
+                if ($node === null || isset($excludedIds[$node->id])) {
                     continue;
                 }
 
@@ -195,14 +288,17 @@ final readonly class ImpactAnalyzer
                 ?: $left->node->id <=> $right->node->id;
         });
 
-        return new ImpactReport(
-            target: $target,
-            impacts: $impacts,
-            maximumDepth: $maximumDepth,
-            maximumNodes: $maximumNodes,
-            truncated: $truncated,
-            mapDigest: $mapDigest,
-        );
+        return ['impacts' => $impacts, 'truncated' => $truncated];
+    }
+
+    private function assertBounds(int $maximumDepth, int $maximumNodes): void
+    {
+        if ($maximumDepth < 1) {
+            throw new InvalidArgumentException('Impact depth must be at least 1.');
+        }
+        if ($maximumNodes < 1) {
+            throw new InvalidArgumentException('Impact node limit must be positive.');
+        }
     }
 
     private function stateKey(string $nodeId, bool $uncertain): string
