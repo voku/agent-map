@@ -1,0 +1,40 @@
+name: Dependency floor
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: dependency-floor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php-parser-floor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - name: Resolve lowest supported dependency graph
+        run: composer update --no-interaction --prefer-dist --prefer-lowest
+      - name: Assert php-parser 5 floor
+        run: |
+          php -r '
+          require "vendor/autoload.php";
+          $version = Composer\InstalledVersions::getPrettyVersion("nikic/php-parser");
+          if ($version === null || preg_match("/^v?5\\./", $version) !== 1) {
+              fwrite(STDERR, "Expected nikic/php-parser 5.x, got " . var_export($version, true) . PHP_EOL);
+              exit(1);
+          }
+          fwrite(STDOUT, "nikic/php-parser floor: {$version}" . PHP_EOL);
+          '
+      - run: composer validate --strict
+      - name: Exercise php-parser-5-dependent refactor paths
+        run: vendor/bin/phpunit tests/ClassMovePlannerTest.php tests/ClassRenamePlannerTest.php
