@@ -50,7 +50,7 @@ final class SearchIndexStore
         // `new PDO('sqlite:...')` returns a plain PDO even on 8.4, and a plain PDO has no
         // loadExtension(). The driver-specific subclass is what can load sqlite-vec at all, so it is
         // used when the runtime has it; older runtimes simply keep the lexical channel.
-        $this->pdo = class_exists('Pdo\\Sqlite')
+        $this->pdo = class_exists('Pdo\Sqlite')
             ? new \Pdo\Sqlite($dsn, null, null, $options)
             : new PDO($dsn, null, null, $options);
         $this->pdo->exec('PRAGMA journal_mode = WAL');
@@ -779,7 +779,7 @@ final class SearchIndexStore
      */
     private function toMatchExpression(string $query, string $operator): ?string
     {
-        $tokens = preg_split('/[^\\p{L}\\p{N}_:\\\\\\\\]+/u', $query) ?: [];
+        $tokens = preg_split('/[^\p{L}\p{N}_:\\\\]+/u', $query) ?: [];
         $quoted = [];
         foreach ($tokens as $token) {
             $token = trim($token);
