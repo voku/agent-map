@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.11.4 - 2026-09-09
+
+### Fixed
+
+- Declare `nikic/php-parser:^5.0` as a direct runtime dependency because agent-map production code directly consumes php-parser 5 APIs. Lowest-dependency consumers can no longer resolve php-parser 4.x and then type-error in class move/rename planning despite satisfying the published Composer metadata.
+
+### Validation
+
+- Add a dedicated `--prefer-lowest` dependency-floor check that asserts php-parser 5.x and exercises the class-move and class-rename planner regressions. Exact-head PHP 8.2, 8.3, 8.4 and 8.5 `composer ci`, structural/temporal checks, and rename/removal/class-move dogfood are green.
+
 ## 0.11.3 - 2026-09-09
 
 ### Fixed
