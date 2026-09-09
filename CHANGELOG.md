@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.11.5 - 2026-09-09
+
+### Added
+
+- `ImpactAnalyzer::forFile()` answers what can notice a change to one indexed file, returning a typed `FileImpactReport`. Impact was reachable only from a single method or node id, so a consumer holding a path - a Contract scope entry, a changed file - had to pick one declaration out of the file and accept a narrower answer, or union several traversals itself and get the shared bound and the uncertainty composition wrong. Every declaration in the file seeds one traversal, the node bound applies to their union, and the file's own declarations are excluded because changing a file is not something that file notices.
+
 ## 0.11.4 - 2026-09-09
 
 ### Fixed
