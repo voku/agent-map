@@ -4,12 +4,16 @@ on:
   push:
     branches:
       - release/0.11.4
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   prepare:
+    if: github.head_ref == 'release/0.11.4' || github.ref_name == 'release/0.11.4'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -48,5 +52,3 @@ jobs:
           git add CHANGELOG.md .github/workflows/prepare-0114-release.yml
           git commit -m 'chore(release): prepare 0.11.4'
           git push origin HEAD:release/0.11.4
-
-# carrier trigger
