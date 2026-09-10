@@ -808,19 +808,52 @@ final readonly class AgentMapApplication
      * says which index it judged and exactly what to run.
      */
     /**
+     * The observation scope the index itself recorded, ignoring this command's flags.
+     *
+     * `semanticScope()` deliberately honours `--paths`, `--exclude` and `--scan`,
+     * which is right for `build` and `refresh`: those commands exist to change what
+     * is observed. `CliOptions` accepts the same flags on read commands, so reusing
+     * that method here would let `scope Foo::bar --paths=other/place` persist a
+     * different observation scope as a side effect of asking a question. A read
+     * answers from the configured envelope; it never reconfigures it.
+     */
+    private function recordedSemanticScope(AgentMapIndex $index): SemanticScope
+    {
+        $stored = $index->fingerprint?->semanticScope;
+        if ($stored === null) {
+            return new SemanticScope(
+                paths: $this->indexedDirectories($index->files),
+                excludes: [],
+                scanDirectories: [],
+            );
+        }
+
+        return new SemanticScope(
+            paths: $stored->paths,
+            excludes: $stored->excludes,
+            scanDirectories: $stored->scanDirectories,
+        );
+    }
+
+    /**
      * The same incremental merge `refresh` performs, for one read.
      *
-     * Returns null when the repair cannot be completed, so the caller can fail
-     * closed with an actionable message rather than answering from a stale index.
+     * Returns the refreshed index, or null plus the reason it could not be produced.
+     * A parse failure, a PHPStan failure and an I/O failure are different problems
+     * and the host needs to know which one it has; collapsing them all into "refresh
+     * it explicitly" turns a diagnosable fault into a maintenance errand.
+     *
      * The note goes to STDERR: a repair that changed the index on disk is never
      * silent, and it stays out of the machine-readable answer on STDOUT.
+     *
+     * @return array{0: AgentMapIndex|null, 1: Throwable|null}
      */
     private function refreshForRead(
         CliOptions $options,
         AgentMapIndex $index,
         AgentMapBuilder $builder,
         SemanticScope $semanticScope,
-    ): ?AgentMapIndex {
+    ): array {
         $structural = $options->backend === 'structural';
         $phpStanRefresh = !$structural
             && PhpStanSemanticAnalyzer::isAvailable()
@@ -864,22 +897,34 @@ final readonly class AgentMapApplication
                 $options->index,
                 str_ends_with(strtolower($options->index), '.toon') ? 'toon' : 'json',
             );
-        } catch (Throwable) {
-            return null;
+        } catch (Throwable $exception) {
+            return [null, $exception];
         }
 
-        return $rebuilt;
+        return [$rebuilt, null];
     }
 
     private function currentIndexForRead(CliOptions $options): AgentMapIndex
     {
         $index = (new IndexReader())->read($options->index);
-        if ($index->staleEntries() === []) {
+        $builder = $this->builder($options);
+        $semanticScope = $this->recordedSemanticScope($index);
+
+        // Source hashes are not the whole definition of "current". A PHPStan-backed
+        // index also depends on its configuration and on composer.lock, and those can
+        // move while every indexed file's hash stays identical. `refresh` already knows
+        // this; a read that answered from stale semantic evidence would be reporting
+        // callers and types from the previous observation envelope, which is exactly
+        // what the PHPStan backend is being paid for. The `+phpstan` gate mirrors
+        // refresh: without a stored semantic scope the check always reports a change,
+        // which would repair a structural index on every single read.
+        $semanticInputsChanged = str_ends_with($index->backend, '+phpstan')
+            && PhpStanSemanticAnalyzer::isAvailable()
+            && $this->semanticInputsChanged($index, $options, $semanticScope);
+
+        if ($index->staleEntries() === [] && !$semanticInputsChanged) {
             return $index;
         }
-
-        $builder = $this->builder($options);
-        $semanticScope = $this->semanticScope($index, $options);
         if ($index->backend !== $builder->backend()) {
             $structuralOnly = str_ends_with($index->backend, '+structural-only');
 
@@ -899,12 +944,14 @@ final readonly class AgentMapApplication
             );
         }
 
-        $refreshed = $this->refreshForRead($options, $index, $builder, $semanticScope);
+        [$refreshed, $failure] = $this->refreshForRead($options, $index, $builder, $semanticScope);
         if ($refreshed === null) {
             throw new RuntimeException(
-                'Cannot use ' . $options->index . ': it is stale in ' . count($index->staleEntries())
-                . ' file(s) and the repair failed. Refresh it explicitly:'
+                'Cannot use ' . $options->index . ': the repair failed with: '
+                . ($failure?->getMessage() ?? 'no reported reason')
+                . "\nThe index was left unchanged. Refresh it explicitly:"
                 . "\n  agent-map refresh --index=" . self::shellArgument($options->index),
+                previous: $failure,
             );
         }
 

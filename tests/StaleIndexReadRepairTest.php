@@ -128,19 +128,89 @@ final class StaleIndexReadRepairTest extends TestCase
         );
     }
 
+    public function testAReadCommandCannotRewriteTheRecordedScopeThroughItsOwnFlags(): void
+    {
+        $this->build();
+        $this->write('src/Foo.php', "<?php\n\nnamespace Demo;\n\nclass Foo\n{\n    public function baz(): void\n    {\n    }\n}\n");
+        mkdir($this->root . '/other', 0o775, true);
+        $this->write('other/Elsewhere.php', "<?php\n\nnamespace Demo;\n\nclass Elsewhere\n{\n}\n");
+
+        // A question must not smuggle a reconfiguration into persistent derived state.
+        $this->runScope('Demo\Foo::baz', ['--backend=structural', '--paths=other']);
+
+        $index = $this->decodeIndex();
+        self::assertSame(
+            ['src'],
+            $index['fingerprint']['semantic_scope']['paths'] ?? null,
+            'A read command flag must never persist a different observation scope.',
+        );
+        $paths = array_column($index['files'], 'path');
+        sort($paths);
+        self::assertSame(['src/Foo.php', 'src/Other.php'], $paths);
+    }
+
+    public function testChangedSemanticInputsRepairEvenWhenEverySourceHashIsUnchanged(): void
+    {
+        if (!PhpStanSemanticAnalyzer::isAvailable()) {
+            self::markTestSkipped('Semantic input currentness only applies to a PHPStan-backed index.');
+        }
+
+        $this->write('composer.lock', "{\n    \"packages\": []\n}\n");
+        $this->buildWith([]);
+        $index = $this->decodeIndex();
+        if (!str_ends_with((string) $index['backend'], '+phpstan')) {
+            self::markTestSkipped('This environment did not resolve the PHPStan backend.');
+        }
+
+        // No PHP source changes at all: only the dependency lock moves.
+        $this->write('composer.lock', "{\n    \"packages\": [{\"name\": \"demo/added\"}]\n}\n");
+
+        [, , $stderr] = $this->runScope('Demo\Foo::bar', []);
+
+        self::assertStringContainsString(
+            'Repairing',
+            $stderr,
+            'Callers and types would otherwise be reported from the previous observation envelope.',
+        );
+    }
+
+    public function testAFailedRepairReportsTheUnderlyingCauseAndLeavesTheIndexAlone(): void
+    {
+        $this->build();
+        $before = (string) file_get_contents($this->root . '/map.json');
+
+        // An unparseable file: the index still reads and is stale, so the failure
+        // happens inside the repair rather than before it. A permission bit would not
+        // do - much CI runs as root and would sail straight through one.
+        $this->write('src/Foo.php', "<?php\n\nnamespace Demo;\n\nclass Foo\n{\n    public function baz(): void\n    {\n");
+
+        [$exit, , $stderr] = $this->runScope('Demo\Foo::baz', ['--backend=structural']);
+
+        self::assertNotSame(0, $exit);
+        self::assertStringContainsString('the repair failed with:', $stderr);
+        self::assertStringContainsString('Parsing failed for src/Foo.php', $stderr);
+        self::assertStringNotContainsString('no reported reason', $stderr);
+        self::assertSame($before, (string) file_get_contents($this->root . '/map.json'));
+    }
+
     private function build(): void
+    {
+        $this->buildWith(['--backend=structural']);
+    }
+
+    /** @param list<string> $extra */
+    private function buildWith(array $extra): void
     {
         ob_start();
 
         try {
-            (new AgentMapApplication())->run([
+            (new AgentMapApplication())->run(array_merge([
                 'agent-map',
                 'build',
                 '--root=' . $this->root,
                 '--paths=src',
                 '--out=' . $this->root . '/map.json',
-                '--backend=structural',
-            ]);
+            ], $extra));
         } finally {
             ob_end_clean();
         }
@@ -157,27 +227,32 @@ final class StaleIndexReadRepairTest extends TestCase
     /**
      * Run the CLI the way a host does, so STDOUT and STDERR stay separable.
      *
+     * @param list<string> $extra
+     *
      * @return array{0: int, 1: string, 2: string}
      */
-    private function scopeCapturingStderr(string $symbol, bool $forceStructural = true): array
+    private function runScope(string $symbol, array $extra): array
     {
-        $command = [
+        return $this->runScopeWithIndex($symbol, $this->root . '/map.json', $extra);
+    }
+
+    /**
+     * @param list<string> $extra
+     *
+     * @return array{0: int, 1: string, 2: string}
+     */
+    private function runScopeWithIndex(string $symbol, string $index, array $extra = []): array
+    {
+        $command = array_merge([
             \PHP_BINARY,
             dirname(__DIR__) . '/bin/agent-map',
             'scope',
             $symbol,
-            '--index=' . $this->root . '/map.json',
+            '--index=' . $index,
             '--root=' . $this->root,
-        ];
-        if ($forceStructural) {
-            $command[] = '--backend=structural';
-        }
+        ], $extra);
 
-        $process = proc_open(
-            $command,
-            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-            $pipes,
-        );
+        $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
         self::assertIsResource($process);
 
         $stdout = (string) stream_get_contents($pipes[1]);
@@ -186,6 +261,12 @@ final class StaleIndexReadRepairTest extends TestCase
         fclose($pipes[2]);
 
         return [proc_close($process), $stdout, $stderr];
+    }
+
+    /** @return array{0: int, 1: string, 2: string} */
+    private function scopeCapturingStderr(string $symbol, bool $forceStructural = true): array
+    {
+        return $this->runScope($symbol, $forceStructural ? ['--backend=structural'] : []);
     }
 
     /** @return array<string, mixed> */
