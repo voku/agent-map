@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## 0.11.6 - 2026-09-09
 
+### Changed
+
+- `scope` and `context` bring a stale index current before answering, when that is safe. A stale index used to end the conversation: `scope` threw `Agent map is stale. Rebuild it before inspecting a scope.` with no index path, no stale count and no command, so the host had to remember `stale` -> `refresh` -> re-issue the original question. Editing an unrelated Markdown file was enough to trigger it, and a tool that answers a maintenance errand instead of the question loses to text search, which has no freshness concept and always answers something. Repair is deliberately narrow: it runs only when the index and the current run resolve the same backend, which is the guard `refresh` already applies before merging, so PHPStan evidence is never quietly downgraded to structural-only; and it builds against the scope the index recorded rather than the files that happened to change, so a repair cannot shrink indexed coverage to whatever was edited last. It is never silent - the note goes to STDERR before the work starts, because a PHPStan-backed repair re-analyses the recorded semantic scope and can take tens of seconds. That is the same work a manual `refresh` would do, so the cost is unchanged; only the round trip disappears. Anything the repair cannot do safely still fails closed, and now names the index it judged, how many files are stale, and the exact command to run. Reported as #86.
+
 ### Fixed
 
 - `refresh --index=<path>` writes the refreshed map back to that index. It resolved its output to the artifact root's default filename instead, so a project whose index is not named `php-symbols.json` had every refresh written to a second file while the named index stayed stale: the command reported `Refreshed 1 changed ... file(s)` and the next run read the same unchanged source again. An explicit `--out` still wins, and a `.toon` index keeps the TOON serializer without being told twice.

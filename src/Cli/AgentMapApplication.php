@@ -790,12 +790,130 @@ final readonly class AgentMapApplication
         return $primary === [] ? 1 : 0;
     }
 
-    private function scope(CliOptions $options): int
+    /**
+     * Read the index an exact answer needs, bringing it current when that is safe.
+     *
+     * A stale index used to end the conversation: `scope` threw "Agent map is
+     * stale. Rebuild it before inspecting a scope." with no index path, no stale
+     * count and no command, so the host had to remember `stale` -> `refresh` ->
+     * re-issue. Editing an unrelated Markdown file was enough to trigger it, and a
+     * tool that answers a maintenance errand instead of the question loses to `rg`,
+     * which has no freshness concept at all.
+     *
+     * Repair here is deliberately narrow. It runs only when the index and this run
+     * resolve the same backend, which is the same guard `refresh` applies before
+     * merging, so PHPStan evidence is never quietly downgraded to structural-only.
+     * It reuses the scope the index recorded rather than the wider search scope, so
+     * indexed coverage cannot widen. Anything else keeps failing closed, and now
+     * says which index it judged and exactly what to run.
+     */
+    /**
+     * The same incremental merge `refresh` performs, for one read.
+     *
+     * Returns null when the repair cannot be completed, so the caller can fail
+     * closed with an actionable message rather than answering from a stale index.
+     * The note goes to STDERR: a repair that changed the index on disk is never
+     * silent, and it stays out of the machine-readable answer on STDOUT.
+     */
+    private function refreshForRead(
+        CliOptions $options,
+        AgentMapIndex $index,
+        AgentMapBuilder $builder,
+        SemanticScope $semanticScope,
+    ): ?AgentMapIndex {
+        $structural = $options->backend === 'structural';
+        $phpStanRefresh = !$structural
+            && PhpStanSemanticAnalyzer::isAvailable()
+            && str_ends_with($index->backend, '+phpstan');
+
+        $changed = [];
+        foreach ($index->staleEntries() as $entry) {
+            if ($entry['reason'] !== 'missing') {
+                $changed[$entry['path']] = true;
+            }
+        }
+
+        // Announced before the work, not after: a PHPStan-backed repair re-analyses the
+        // recorded semantic scope and can take tens of seconds, which is the same work a
+        // manual `refresh` would do but arrives unannounced in the middle of a read that
+        // is normally instant. The host should see why it is waiting while it waits.
+        fwrite(
+            \STDERR,
+            'Repairing ' . count($changed) . ' stale file(s) in ' . $options->index . " before answering.\n",
+        );
+
+        try {
+            // Build against the scope the index recorded, never the list of files that
+            // happened to change: the builder writes the requested paths into the new
+            // fingerprint, so passing the changed files would shrink the recorded scope
+            // to whatever was edited last and a later refresh would stop looking
+            // anywhere else.
+            $rebuilt = $builder->build(
+                $options->root,
+                $semanticScope->paths,
+                $phpStanRefresh ? $semanticScope->excludes : $options->excludes,
+                $structural ? null : $options->phpStanConfig,
+                $structural ? null : $options->phpStanMemoryLimit,
+                $phpStanRefresh ? null : $index,
+                $structural ? [] : ($phpStanRefresh ? $semanticScope->scanDirectories : $options->scanPaths),
+            );
+            // `$options->format` is how this read prints its answer (text/json/toon);
+            // the index's own serialization follows the artifact it is replacing.
+            (new IndexWriter())->write(
+                $rebuilt,
+                $options->index,
+                str_ends_with(strtolower($options->index), '.toon') ? 'toon' : 'json',
+            );
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $rebuilt;
+    }
+
+    private function currentIndexForRead(CliOptions $options): AgentMapIndex
     {
         $index = (new IndexReader())->read($options->index);
-        if ($index->staleEntries() !== []) {
-            throw new RuntimeException('Agent map is stale. Rebuild it before inspecting a scope.');
+        if ($index->staleEntries() === []) {
+            return $index;
         }
+
+        $builder = $this->builder($options);
+        $semanticScope = $this->semanticScope($index, $options);
+        if ($index->backend !== $builder->backend()) {
+            $structuralOnly = str_ends_with($index->backend, '+structural-only');
+
+            throw new RuntimeException(
+                'Cannot use ' . $options->index . ': it is stale in ' . count($index->staleEntries())
+                . ' file(s), it carries backend "' . $index->backend . '" and this run resolves "'
+                . $builder->backend() . '". An incremental repair cannot merge two semantic backends.'
+                . ' Run a full build:'
+                . "\n  agent-map build"
+                . ' --root=' . self::shellArgument($options->root)
+                . ' --paths=' . self::shellArgument(implode(',', $semanticScope->paths))
+                . ' --out=' . self::shellArgument($options->index)
+                . ($structuralOnly ? ' --backend=structural' : '')
+                . ($structuralOnly
+                    ? ''
+                    : "\nThe rebuilt index will carry \"" . $builder->backend() . '", not "' . $index->backend . '".'),
+            );
+        }
+
+        $refreshed = $this->refreshForRead($options, $index, $builder, $semanticScope);
+        if ($refreshed === null) {
+            throw new RuntimeException(
+                'Cannot use ' . $options->index . ': it is stale in ' . count($index->staleEntries())
+                . ' file(s) and the repair failed. Refresh it explicitly:'
+                . "\n  agent-map refresh --index=" . self::shellArgument($options->index),
+            );
+        }
+
+        return $refreshed;
+    }
+
+    private function scope(CliOptions $options): int
+    {
+        $index = $this->currentIndexForRead($options);
 
         $selection = (new ScopeSelector())->select($index, (string) $options->argument);
         if ($selection->status === 'not_found') {
@@ -869,7 +987,7 @@ final readonly class AgentMapApplication
 
     private function context(CliOptions $options): int
     {
-        $index = (new IndexReader())->read($options->index);
+        $index = $this->currentIndexForRead($options);
         $plan = (new EditContextPlanner())->plan(
             $index,
             (string) $options->argument,
