@@ -853,14 +853,16 @@ final readonly class AgentMapApplication
         AgentMapIndex $index,
         AgentMapBuilder $builder,
         SemanticScope $semanticScope,
+        string $format,
     ): array {
         $structural = $options->backend === 'structural';
         $phpStanRefresh = !$structural
             && PhpStanSemanticAnalyzer::isAvailable()
             && str_ends_with($index->backend, '+phpstan');
 
+        $stale = $index->staleEntries();
         $changed = [];
-        foreach ($index->staleEntries() as $entry) {
+        foreach ($stale as $entry) {
             if ($entry['reason'] !== 'missing') {
                 $changed[$entry['path']] = true;
             }
@@ -870,9 +872,11 @@ final readonly class AgentMapApplication
         // recorded semantic scope and can take tens of seconds, which is the same work a
         // manual `refresh` would do but arrives unannounced in the middle of a read that
         // is normally instant. The host should see why it is waiting while it waits.
+            // Deleted files are stale too, and they are not in `$changed`: counting that
+        // list alone announced "Repairing 0 stale file(s)" for a removal.
         fwrite(
             \STDERR,
-            'Repairing ' . count($changed) . ' stale file(s) in ' . $options->index . " before answering.\n",
+            'Repairing ' . count($stale) . ' stale file(s) in ' . $options->index . " before answering.\n",
         );
 
         try {
@@ -881,22 +885,21 @@ final readonly class AgentMapApplication
             // fingerprint, so passing the changed files would shrink the recorded scope
             // to whatever was edited last and a later refresh would stop looking
             // anywhere else.
+            // Every observation input comes from the index, not from this command.
+            // `$options->root` is the working directory the question was asked from, so
+            // a stale read run from elsewhere would rebuild the index against the wrong
+            // project; and taking excludes or scan directories from the read would drop
+            // or add coverage the index recorded.
             $rebuilt = $builder->build(
-                $options->root,
+                $index->root,
                 $semanticScope->paths,
-                $phpStanRefresh ? $semanticScope->excludes : $options->excludes,
+                $semanticScope->excludes,
                 $structural ? null : $options->phpStanConfig,
                 $structural ? null : $options->phpStanMemoryLimit,
                 $phpStanRefresh ? null : $index,
-                $structural ? [] : ($phpStanRefresh ? $semanticScope->scanDirectories : $options->scanPaths),
+                $structural ? [] : $semanticScope->scanDirectories,
             );
-            // `$options->format` is how this read prints its answer (text/json/toon);
-            // the index's own serialization follows the artifact it is replacing.
-            (new IndexWriter())->write(
-                $rebuilt,
-                $options->index,
-                str_ends_with(strtolower($options->index), '.toon') ? 'toon' : 'json',
-            );
+            (new IndexWriter())->write($rebuilt, $options->index, $format);
         } catch (Throwable $exception) {
             return [null, $exception];
         }
@@ -934,7 +937,7 @@ final readonly class AgentMapApplication
                 . $builder->backend() . '". An incremental repair cannot merge two semantic backends.'
                 . ' Run a full build:'
                 . "\n  agent-map build"
-                . ' --root=' . self::shellArgument($options->root)
+                . ' --root=' . self::shellArgument($index->root)
                 . ' --paths=' . self::shellArgument(implode(',', $semanticScope->paths))
                 . ' --out=' . self::shellArgument($options->index)
                 . ($structuralOnly ? ' --backend=structural' : '')
@@ -944,13 +947,19 @@ final readonly class AgentMapApplication
             );
         }
 
-        [$refreshed, $failure] = $this->refreshForRead($options, $index, $builder, $semanticScope);
+        $format = (new IndexReader())->detectFormat($options->index);
+        [$refreshed, $failure] = $this->refreshForRead($options, $index, $builder, $semanticScope, $format);
         if ($refreshed === null) {
             throw new RuntimeException(
                 'Cannot use ' . $options->index . ': the repair failed with: '
                 . ($failure?->getMessage() ?? 'no reported reason')
                 . "\nThe index was left unchanged. Refresh it explicitly:"
-                . "\n  agent-map refresh --index=" . self::shellArgument($options->index),
+                . "\n  agent-map refresh --index=" . self::shellArgument($options->index)
+                // Without the recorded root the remedy targets whatever directory it is
+                // pasted into, and without the backend a structural index resolves `auto`
+                // and refuses on the mismatch this repair already avoided.
+                . ' --root=' . self::shellArgument($index->root)
+                . ' --backend=' . (str_ends_with($index->backend, '+phpstan') ? 'phpstan' : 'structural'),
                 previous: $failure,
             );
         }

@@ -193,6 +193,67 @@ final class StaleIndexReadRepairTest extends TestCase
         self::assertSame($before, (string) file_get_contents($this->root . '/map.json'));
     }
 
+    public function testARenamedToonIndexIsNotSilentlyRewrittenAsJson(): void
+    {
+        $this->buildWith(['--backend=structural', '--format=toon']);
+        // The reader treats the extension as a hint, so a TOON index legitimately
+        // lives here under a .json name. A repair must not convert it on the way past.
+        self::assertNull(
+            json_decode((string) file_get_contents($this->root . '/map.json'), true),
+            'Fixture precondition: the index must start out as TOON content.',
+        );
+        $this->write('src/Foo.php', "<?php\n\nnamespace Demo;\n\nclass Foo\n{\n    public function baz(): void\n    {\n    }\n}\n");
+
+        [$exit] = $this->runScope('Demo\Foo::baz', ['--backend=structural']);
+
+        self::assertSame(0, $exit);
+        $written = (string) file_get_contents($this->root . '/map.json');
+        self::assertNull(json_decode($written, true), 'The repair rewrote a TOON index as JSON.');
+    }
+
+    public function testARepairForADeletedFileAnnouncesTheFileItRemoved(): void
+    {
+        $this->build();
+        unlink($this->root . '/src/Other.php');
+
+        [, , $stderr] = $this->runScope('Demo\Foo::bar', ['--backend=structural']);
+
+        self::assertStringContainsString(
+            'Repairing 1 stale file(s)',
+            $stderr,
+            'A deletion is stale too; counting only changed files announced zero.',
+        );
+    }
+
+    public function testTheRepairUsesTheRecordedRootRatherThanTheWorkingDirectory(): void
+    {
+        $this->build();
+        $this->write('src/Foo.php', "<?php\n\nnamespace Demo;\n\nclass Foo\n{\n    public function baz(): void\n    {\n    }\n}\n");
+
+        // A read issued from somewhere else entirely must still repair *this* project.
+        $elsewhere = $this->root . '/elsewhere';
+        mkdir($elsewhere, 0o775, true);
+        [$exit, $stdout] = $this->runScopeFrom('Demo\Foo::baz', $elsewhere);
+
+        self::assertSame(0, $exit, 'A stale read from another directory rebuilt against the wrong root.');
+        self::assertStringContainsString('Demo\Foo::baz', $stdout);
+        $paths = array_column($this->decodeIndex()['files'], 'path');
+        sort($paths);
+        self::assertSame(['src/Foo.php', 'src/Other.php'], $paths);
+    }
+
+    public function testAFailedRepairRemedyCarriesTheRootAndBackendItNeeds(): void
+    {
+        $this->build();
+        $this->write('src/Foo.php', "<?php\n\nnamespace Demo;\n\nclass Foo\n{\n    public function baz(): void\n    {\n");
+
+        [, , $stderr] = $this->runScope('Demo\Foo::baz', ['--backend=structural']);
+
+        self::assertStringContainsString('agent-map refresh --index=', $stderr);
+        self::assertStringContainsString('--root=' . $this->root, $stderr);
+        self::assertStringContainsString('--backend=structural', $stderr);
+    }
+
     private function build(): void
     {
         $this->buildWith(['--backend=structural']);
@@ -253,6 +314,32 @@ final class StaleIndexReadRepairTest extends TestCase
         ], $extra);
 
         $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        self::assertIsResource($process);
+
+        $stdout = (string) stream_get_contents($pipes[1]);
+        $stderr = (string) stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+
+        return [proc_close($process), $stdout, $stderr];
+    }
+
+    /** @return array{0: int, 1: string, 2: string} */
+    private function runScopeFrom(string $symbol, string $workingDirectory): array
+    {
+        $process = proc_open(
+            [
+                \PHP_BINARY,
+                dirname(__DIR__) . '/bin/agent-map',
+                'scope',
+                $symbol,
+                '--index=' . $this->root . '/map.json',
+                '--backend=structural',
+            ],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+            $workingDirectory,
+        );
         self::assertIsResource($process);
 
         $stdout = (string) stream_get_contents($pipes[1]);

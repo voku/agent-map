@@ -24,6 +24,31 @@ final class IndexReader
     }
 
     /**
+     * The serialization an existing index is actually written in.
+     *
+     * `read()` treats the extension as a hint and falls back to the other
+     * serializer, so a renamed or extension-free file still loads. Anything that
+     * rewrites an index in place has to know which serializer produced it, or a
+     * TOON index living in a `.json` name is silently converted on the next write.
+     *
+     * @return 'json'|'toon'
+     */
+    public function detectFormat(string $file): string
+    {
+        $content = file_get_contents($file);
+        if (!is_string($content)) {
+            throw new RuntimeException('Unable to read index: ' . $file);
+        }
+
+        $toonFirst = str_ends_with(strtolower($file), '.toon');
+        if (($toonFirst ? $this->decodeToon($content) : $this->decodeJson($content)) !== null) {
+            return $toonFirst ? 'toon' : 'json';
+        }
+
+        return $toonFirst ? 'json' : 'toon';
+    }
+
+    /**
      * @param list<string>|null $sections
      */
     public function read(string $file, bool $loadRelations = true, ?array $sections = null): AgentMapIndex
