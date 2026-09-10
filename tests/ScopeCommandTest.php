@@ -72,13 +72,21 @@ final class ScopeCommandTest extends TestCase
         self::assertSame(1, $result['exit']);
     }
 
-    public function testScopeRejectsAStaleMap(): void
+    /**
+     * A stale map is repaired and answered, not refused.
+     *
+     * This used to assert exit 1. Refusing was the behaviour that sent hosts back to
+     * `stale` -> `refresh` -> re-issue for an edit that need not even touch the symbol
+     * being asked about, which is how an exact index loses to text search.
+     */
+    public function testScopeRepairsAStaleMapAndStillAnswers(): void
     {
         file_put_contents($this->scopeRoot . '/src/Service/UserService.php', "\n// changed\n", FILE_APPEND);
 
         $result = $this->runApp(['agent-map', 'scope', 'Demo\\Service\\UserService::save', '--index=' . $this->indexPath]);
 
-        self::assertSame(1, $result['exit']);
+        self::assertSame(0, $result['exit']);
+        self::assertStringContainsString('Demo\\Service\\UserService::save', $result['output']);
     }
 
     public function testExistingCommandsAndCurrentSchemaAreUnaffectedByScope(): void
