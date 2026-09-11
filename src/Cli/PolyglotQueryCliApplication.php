@@ -105,12 +105,12 @@ final readonly class PolyglotQueryCliApplication
                 $definition->file,
                 $definition->lineStart,
                 $definition->lineEnd,
-              $definition->symbolId,
+                $definition->symbolId,
             );
         }
 
         return $format === 'markdown'
-            ? '## ' . $query . "\n\n\```text\n" . $text . "```\n"
+            ? '## ' . $query . "\n\n```text\n" . $text . "```\n"
             : $text;
     }
 }

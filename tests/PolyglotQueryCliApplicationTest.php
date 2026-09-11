@@ -61,6 +61,23 @@ JSON);
         self::assertSame([], glob($this->root . '/.agent-map-scip-*.json') ?: []);
     }
 
+    public function testMarkdownQueryUsesAValidFence(): void
+    {
+        file_put_contents($this->root . '/package.json', "{}\n");
+        mkdir($this->root . '/src', 0o775, true);
+        file_put_contents($this->root . '/src/demo.js', "export function demo() {}\n");
+        $this->writeIndexer('scip-typescript', 'scip-typescript 0.4.0');
+        $this->writeScip(<<<'JSON'
+{"documents":[{"relative_path":"src/demo.js","occurrences":[{"range":[0,16,0,20],"symbol":"scip-typescript npm demo 1.0 src/demo.js/demo().","symbol_roles":1}]}]}
+JSON);
+
+        $result = $this->runCli(['agent-map', 'query', 'demo', '--root=' . $this->root, '--format=markdown']);
+
+        self::assertSame(0, $result['exit']);
+        self::assertStringContainsString("```text\n", $result['output']);
+        self::assertStringNotContainsString('\\```text', $result['output']);
+    }
+
     public function testPythonQueryUsesPythonIndexerAndPreservesSameNameDefinitions(): void
     {
         file_put_contents($this->root . '/pyproject.toml', "[project]\nname = \"demo\"\n");
