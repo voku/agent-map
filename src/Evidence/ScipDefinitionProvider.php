@@ -196,16 +196,59 @@ final readonly class ScipDefinitionProvider
             throw new RuntimeException('Unable to start: ' . implode(' ', $command));
         }
 
-        $stdout = stream_get_contents($pipes[1]);
-        $stderr = stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
+        /** @var array<int, resource> $streams */
+        $streams = [1 => $pipes[1], 2 => $pipes[2]];
+        foreach ($streams as $stream) {
+            stream_set_blocking($stream, false);
+        }
+        $buffers = [1 => '', 2 => ''];
+
+        try {
+            while ($streams !== []) {
+                $read = array_values($streams);
+                $write = null;
+                $except = null;
+                $selected = stream_select($read, $write, $except, 1);
+                if ($selected === false) {
+                    throw new RuntimeException('Unable to read SCIP process output.');
+                }
+
+                foreach ($read as $stream) {
+                    $key = array_search($stream, $streams, true);
+                    if (!is_int($key)) {
+                        continue;
+                    }
+                    $chunk = stream_get_contents($stream);
+                    if ($chunk === false) {
+                        throw new RuntimeException('Unable to read SCIP process output.');
+                    }
+                    $buffers[$key] .= $chunk;
+                }
+
+                foreach ($streams as $key => $stream) {
+                    if (!feof($stream)) {
+                        continue;
+                    }
+                    fclose($stream);
+                    unset($streams[$key]);
+                }
+            }
+        } catch (Throwable $exception) {
+            foreach ($streams as $stream) {
+                fclose($stream);
+            }
+            proc_terminate($process);
+            proc_close($process);
+
+            throw $exception;
+        }
+
         $exit = proc_close($process);
 
         return [
             'exit' => $exit,
-            'stdout' => is_string($stdout) ? $stdout : '',
-            'stderr' => is_string($stderr) ? $stderr : '',
+            'stdout' => $buffers[1],
+            'stderr' => $buffers[2],
         ];
     }
 
