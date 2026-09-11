@@ -70,7 +70,7 @@
       "question": "Which file-level graph module is consumed by the symbol call graph?",
       "probe": {
         "source_symbol": "buildCallGraph",
-        "target_symbol": "buildFromCwd"
+        "target_symbol": "build"
       },
       "expected_paths": ["src/graph/call-graph.js", "src/graph/builder.js"],
       "expected_relations": ["src/graph/call-graph.js->src/graph/builder.js"]
