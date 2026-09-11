@@ -31,7 +31,25 @@ final readonly class PolyglotQueryCliApplication
             return false;
         }
 
-        return !is_file($options->index);
+        if (is_file($options->index)) {
+            return false;
+        }
+
+        // A missing PHP map is not evidence that PHP is absent. In a mixed PHP+JS
+        // repository, letting SCIP answer before the PHP owner is built can turn a
+        // real PHP symbol into semantic `not_found`. Keep that case on the existing
+        // PHP path and let this first slice own only clearly non-PHP projects.
+        $root = rtrim($options->root, '/\\');
+        if (is_file($root . '/composer.json') || (glob($root . '/*.php') ?: []) !== []) {
+            return false;
+        }
+
+        return is_file($root . '/package.json')
+            || is_file($root . '/tsconfig.json')
+            || is_file($root . '/jsconfig.json')
+            || is_file($root . '/pyproject.toml')
+            || is_file($root . '/setup.py')
+            || is_file($root . '/setup.cfg');
     }
 
     /** @param list<string> $argv */
