@@ -35,6 +35,11 @@ final readonly class PolyglotQueryCliApplication
             return false;
         }
 
+        $query = (string) $options->argument;
+        if (preg_match('/\A[A-Za-z_][A-Za-z0-9_]*\z/', $query) !== 1) {
+            return false;
+        }
+
         // A missing PHP map is not evidence that PHP is absent. In a mixed PHP+JS
         // repository, letting SCIP answer before the PHP owner is built can turn a
         // real PHP symbol into semantic `not_found`. Keep that case on the existing
