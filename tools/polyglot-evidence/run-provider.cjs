@@ -55,7 +55,8 @@ function run(command, args, options = {}) {
   appendLog(options.log, proc.stderr || '');
   appendLog(options.log, `[exit=${proc.status} elapsed_ms=${elapsedMs.toFixed(1)}]`);
   if (proc.error) throw proc.error;
-  if (proc.status !== 0) {
+  const allowedExitCodes = Array.isArray(options.allowedExitCodes) ? options.allowedExitCodes : [0];
+  if (!allowedExitCodes.includes(proc.status)) {
     throw new Error(`${command} failed with exit ${proc.status}: ${(proc.stderr || proc.stdout || '').trim()}`);
   }
   return { stdout: proc.stdout || '', stderr: proc.stderr || '', elapsedMs };
@@ -116,6 +117,7 @@ function rankByTermHits(repoRoot, terms, log) {
       cwd: repoRoot,
       log,
       timeout: 2 * 60 * 1000,
+      allowedExitCodes: [0, 1],
     });
     for (const line of result.stdout.split(/\r?\n/).filter(Boolean)) {
       const rel = normalizePath(line);
@@ -327,7 +329,7 @@ function buildScipIndexes(manifest, log) {
     bytes += fs.statSync(output).size;
     const printed = run('scip', ['print', '--json', output], { cwd: repo.path, log, timeout: 5 * 60 * 1000 });
     materialize += printed.elapsedMs;
-    indexes.set(id, parseJsonOutput(printed.stdout));
+    indexes.set(id, scipDefinitionIndex(parseJsonOutput(printed.stdout)));
   }
   return { indexes, metadata: { cold_index_ms: cold, warm_index_ms: warm, index_bytes: bytes, materialize_ms: materialize } };
 }
@@ -445,7 +447,7 @@ function main() {
         const paths = [...(treeIndexes.get(task.repository).get(symbol) || new Set())].sort();
         results.push(taskResult(task, paths.length ? 'answered' : 'not_found', paths, [], performance.now() - started));
       } else if (provider === 'scip') {
-        const index = scipDefinitionIndex(scipIndexes.get(task.repository));
+        const index = scipIndexes.get(task.repository);
         if (task.kind === 'relation') {
           const source = probe.source_symbol;
           const target = probe.target_symbol;
