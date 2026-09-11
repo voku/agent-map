@@ -58,7 +58,6 @@
       "kind": "locate",
       "question": "Where are PHP signatures extracted?",
       "probe": {
-        "symbol": "extract",
         "text_terms": ["PHP", "signature"]
       },
       "expected_paths": ["src/extractors/php.js"],
