@@ -1,0 +1,208 @@
+name: Polyglot evidence experiment
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/polyglot-evidence-experiment.yml
+      - docs/experiments/polyglot-evidence-providers.md
+      - tests/PolyglotEvidenceExperimentTest.php
+      - tools/polyglot-evidence-experiment.php
+      - tools/polyglot-evidence/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polyglot-evidence-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provider:
+    name: Provider ${{ matrix.provider }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        provider:
+          - rg
+          - sigmap
+          - tree-sitter
+          - scip
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          package-manager-cache: false
+
+      - uses: actions/setup-go@v7
+        if: matrix.provider == 'scip'
+        with:
+          go-version: '1.25.x'
+          cache: false
+
+      - name: Materialize pinned corpus repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-polyglot"
+          rm -rf "$root"
+          mkdir -p "$root/repos" "$root/results" "$root/logs"
+
+          php tools/polyglot-evidence/prepare-repositories.php \
+            --corpus=tools/polyglot-evidence/corpus.json \
+            --workdir="$root/repos" \
+            --manifest="$root/repositories.json"
+
+          cat "$root/repositories.json"
+
+      - name: Install pinned provider toolchain
+        shell: bash
+        env:
+          PROVIDER: ${{ matrix.provider }}
+        run: |
+          set -euo pipefail
+
+          case "$PROVIDER" in
+            rg)
+              version='15.2.0'
+              archive="ripgrep-${version}-x86_64-unknown-linux-musl.tar.gz"
+              expected='33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c'
+              dir="$RUNNER_TEMP/ripgrep-${version}"
+              mkdir -p "$dir"
+              curl --fail --location --silent --show-error \
+                "https://github.com/BurntSushi/ripgrep/releases/download/${version}/${archive}" \
+                --output "$RUNNER_TEMP/$archive"
+              printf '%s  %s\n' "$expected" "$RUNNER_TEMP/$archive" | sha256sum --check --strict
+              tar -xzf "$RUNNER_TEMP/$archive" -C "$dir" --strip-components=1
+              echo "$dir" >> "$GITHUB_PATH"
+              export PATH="$dir:$PATH"
+              rg --version
+              ;;
+            sigmap)
+              npm install --global --ignore-scripts sigmap@8.31.0
+              sigmap --version
+              ;;
+            tree-sitter)
+              npm install --global \
+                tree-sitter@0.25.1 \
+                tree-sitter-javascript@0.25.0 \
+                tree-sitter-python@0.25.0
+              echo "NODE_PATH=$(npm root --global)" >> "$GITHUB_ENV"
+              npm list --global --depth=0 \
+                tree-sitter tree-sitter-javascript tree-sitter-python
+              ;;
+            scip)
+              npm install --global \
+                @sourcegraph/scip-typescript@0.4.0 \
+                @sourcegraph/scip-python@0.6.6
+              export PATH="$(go env GOPATH)/bin:$PATH"
+              echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+              go install github.com/scip-code/scip/cmd/scip@v0.9.0
+              scip --version
+              scip-typescript --version
+              scip-python --version
+              ;;
+            *)
+              echo "Unsupported provider: $PROVIDER" >&2
+              exit 2
+              ;;
+          esac
+
+      - name: Run provider against pinned corpus
+        shell: bash
+        env:
+          PROVIDER: ${{ matrix.provider }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-polyglot"
+
+          node tools/polyglot-evidence/run-provider.cjs \
+            --provider="$PROVIDER" \
+            --corpus=tools/polyglot-evidence/corpus.json \
+            --repositories="$root/repositories.json" \
+            --out="$root/results/$PROVIDER.json" \
+            --log="$root/logs/$PROVIDER.log"
+
+          cat "$root/results/$PROVIDER.json"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: polyglot-${{ matrix.provider }}
+          path: |
+            ${{ runner.temp }}/agent-map-polyglot/results/${{ matrix.provider }}.json
+            ${{ runner.temp }}/agent-map-polyglot/logs/${{ matrix.provider }}.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  score:
+    name: Score provider evidence
+    needs: provider
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: polyglot-*
+          path: ${{ runner.temp }}/agent-map-polyglot/collected
+          merge-multiple: true
+
+      - name: Require one result from every provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-polyglot/collected"
+          for provider in rg sigmap tree-sitter scip; do
+            test -s "$root/$provider.json" || {
+              echo "Missing result artifact for $provider" >&2
+              exit 1
+            }
+          done
+
+      - name: Score normalized evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-polyglot/collected"
+
+          php tools/polyglot-evidence-experiment.php \
+            --corpus=tools/polyglot-evidence/corpus.json \
+            --results="$root/rg.json,$root/sigmap.json,$root/tree-sitter.json,$root/scip.json" \
+            | tee "$root/scoreboard.tsv"
+
+          {
+            echo '## Polyglot evidence experiment'
+            echo
+            echo 'Pinned real-repository corpus; lower false-absence is ranked before retrieval hit rate.'
+            echo
+            echo '```text'
+            cat "$root/scoreboard.tsv"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: polyglot-evidence-scoreboard
+          path: ${{ runner.temp }}/agent-map-polyglot/collected
+          if-no-files-found: error
+          retention-days: 30

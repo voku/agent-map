@@ -9,7 +9,7 @@ use RuntimeException;
 
 final class PolyglotEvidenceExperimentTest extends TestCase
 {
-    public function testScoresHitRatesFalseAbsenceAndRelations(): void
+    public function testScoresCoverageHitRatesFalseAbsenceAndRelations(): void
     {
         $root = sys_get_temp_dir() . '/agent-map-polyglot-experiment-' . bin2hex(random_bytes(4));
         self::assertTrue(mkdir($root, 0o775, true));
@@ -38,6 +38,12 @@ final class PolyglotEvidenceExperimentTest extends TestCase
       "kind": "locate",
       "expected_paths": ["src/Exists.php"],
       "expected_relations": []
+    },
+    {
+      "id": "relation.unavailable",
+      "kind": "relation",
+      "expected_paths": ["src/Other.php"],
+      "expected_relations": ["src/Other.php->src/Dependency.php"]
     }
   ]
 }
@@ -74,6 +80,13 @@ JSON);
       "paths": [],
       "relations": [],
       "elapsed_ms": 3
+    },
+    {
+      "id": "relation.unavailable",
+      "status": "unavailable",
+      "paths": [],
+      "relations": [],
+      "elapsed_ms": 4
     }
   ]
 }
@@ -83,16 +96,66 @@ JSON);
             [$exit, $stdout, $stderr] = $this->executeExperiment($corpus, $result);
 
             self::assertSame(0, $exit, $stderr);
+            self::assertStringContainsString(
+                "provider\tcoverage\tunavailable\terrors\thit@1\thit@5\tfalse-absence",
+                $stdout,
+            );
             self::assertStringContainsString('fixture@1', $stdout);
-            self::assertStringContainsString("66.7%\t66.7%\t33.3%\t50.0%\t100.0%", $stdout);
-            self::assertStringContainsString("2.0\t12.0\t2.0\t2048.0", $stdout);
+            self::assertStringContainsString("75.0%\t1\t0\t50.0%\t50.0%\t25.0%\t50.0%\t100.0%", $stdout);
+            self::assertStringContainsString("2.5\t12.0\t2.0\t2048.0", $stdout);
         } finally {
-            if (is_file($corpus)) {
-                unlink($corpus);
+            $this->remove($corpus);
+            $this->remove($result);
+            if (is_dir($root)) {
+                rmdir($root);
             }
-            if (is_file($result)) {
-                unlink($result);
-            }
+        }
+    }
+
+    public function testRejectsUnknownProviderStatus(): void
+    {
+        $root = sys_get_temp_dir() . '/agent-map-polyglot-experiment-' . bin2hex(random_bytes(4));
+        self::assertTrue(mkdir($root, 0o775, true));
+
+        $corpus = $root . '/corpus.json';
+        $result = $root . '/provider.json';
+        file_put_contents($corpus, <<<'JSON'
+{
+  "schema": "agent-map-polyglot-corpus@1",
+  "tasks": [
+    {
+      "id": "locate.good",
+      "kind": "locate",
+      "expected_paths": ["src/Good.php"],
+      "expected_relations": []
+    }
+  ]
+}
+JSON);
+        file_put_contents($result, <<<'JSON'
+{
+  "schema": "agent-map-polyglot-provider-result@1",
+  "provider": "fixture",
+  "version": "1",
+  "tasks": [
+    {
+      "id": "locate.good",
+      "status": "maybe",
+      "paths": [],
+      "relations": []
+    }
+  ]
+}
+JSON);
+
+        try {
+            [$exit, , $stderr] = $this->executeExperiment($corpus, $result);
+
+            self::assertSame(1, $exit);
+            self::assertStringContainsString('unsupported status "maybe"', $stderr);
+        } finally {
+            $this->remove($corpus);
+            $this->remove($result);
             if (is_dir($root)) {
                 rmdir($root);
             }
@@ -127,5 +190,12 @@ JSON);
         }
 
         return [$exit, $stdout, $stderr];
+    }
+
+    private function remove(string $path): void
+    {
+        if (is_file($path)) {
+            unlink($path);
+        }
     }
 }

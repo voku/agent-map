@@ -21,9 +21,11 @@
       "repository": "sigmap",
       "kind": "locate",
       "question": "Where is the cross-language file dependency graph built?",
-      "expected_paths": [
-        "src/graph/builder.js"
-      ],
+      "probe": {
+        "symbol": "buildFromCwd",
+        "text_terms": ["dependency graph", "buildFromCwd"]
+      },
+      "expected_paths": ["src/graph/builder.js"],
       "expected_relations": []
     },
     {
@@ -31,9 +33,11 @@
       "repository": "sigmap",
       "kind": "locate",
       "question": "Where is the symbol-level call graph built?",
-      "expected_paths": [
-        "src/graph/call-graph.js"
-      ],
+      "probe": {
+        "symbol": "buildCallGraph",
+        "text_terms": ["call graph", "buildCallGraph"]
+      },
+      "expected_paths": ["src/graph/call-graph.js"],
       "expected_relations": []
     },
     {
@@ -41,9 +45,11 @@
       "repository": "sigmap",
       "kind": "locate",
       "question": "Where are file extensions dispatched to language extractors?",
-      "expected_paths": [
-        "src/extractors/dispatch.js"
-      ],
+      "probe": {
+        "symbol": "extractFile",
+        "text_terms": ["extractFile", "extractors"]
+      },
+      "expected_paths": ["src/extractors/dispatch.js"],
       "expected_relations": []
     },
     {
@@ -51,9 +57,11 @@
       "repository": "sigmap",
       "kind": "locate",
       "question": "Where are PHP signatures extracted?",
-      "expected_paths": [
-        "src/extractors/php.js"
-      ],
+      "probe": {
+        "symbol": "extract",
+        "text_terms": ["PHP", "signature"]
+      },
+      "expected_paths": ["src/extractors/php.js"],
       "expected_relations": []
     },
     {
@@ -61,22 +69,23 @@
       "repository": "sigmap",
       "kind": "relation",
       "question": "Which file-level graph module is consumed by the symbol call graph?",
-      "expected_paths": [
-        "src/graph/call-graph.js",
-        "src/graph/builder.js"
-      ],
-      "expected_relations": [
-        "src/graph/call-graph.js->src/graph/builder.js"
-      ]
+      "probe": {
+        "source_symbol": "buildCallGraph",
+        "target_symbol": "buildFromCwd"
+      },
+      "expected_paths": ["src/graph/call-graph.js", "src/graph/builder.js"],
+      "expected_relations": ["src/graph/call-graph.js->src/graph/builder.js"]
     },
     {
       "id": "flask.wsgi-app",
       "repository": "flask",
       "kind": "locate",
       "question": "Where is the concrete Flask WSGI application class defined?",
-      "expected_paths": [
-        "src/flask/app.py"
-      ],
+      "probe": {
+        "symbol": "Flask",
+        "text_terms": ["class Flask", "WSGI"]
+      },
+      "expected_paths": ["src/flask/app.py"],
       "expected_relations": []
     },
     {
@@ -84,9 +93,11 @@
       "repository": "flask",
       "kind": "locate",
       "question": "Where is the sans-IO App base class defined?",
-      "expected_paths": [
-        "src/flask/sansio/app.py"
-      ],
+      "probe": {
+        "symbol": "App",
+        "text_terms": ["class App", "sansio"]
+      },
+      "expected_paths": ["src/flask/sansio/app.py"],
       "expected_relations": []
     },
     {
@@ -94,13 +105,12 @@
       "repository": "flask",
       "kind": "relation",
       "question": "Which module provides the App base class inherited by Flask?",
-      "expected_paths": [
-        "src/flask/app.py",
-        "src/flask/sansio/app.py"
-      ],
-      "expected_relations": [
-        "src/flask/app.py->src/flask/sansio/app.py"
-      ]
+      "probe": {
+        "source_symbol": "Flask",
+        "target_symbol": "App"
+      },
+      "expected_paths": ["src/flask/app.py", "src/flask/sansio/app.py"],
+      "expected_relations": ["src/flask/app.py->src/flask/sansio/app.py"]
     }
   ]
 }

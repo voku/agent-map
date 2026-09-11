@@ -63,7 +63,9 @@ final readonly class Score
         public string $provider,
         public string $version,
         public int $tasks,
-        public int $answered,
+        public int $supported,
+        public int $unavailable,
+        public int $errors,
         public int $hitAt1,
         public int $hitAt5,
         public int $falseAbsences,
@@ -75,6 +77,11 @@ final readonly class Score
         public int|float|null $warmIndexMs,
         public int|float|null $indexBytes,
     ) {
+    }
+
+    public function coverageRate(): float
+    {
+        return $this->tasks === 0 ? 0.0 : $this->supported / $this->tasks;
     }
 
     public function hitAt1Rate(): float
@@ -219,6 +226,7 @@ function loadProviderResult(string $path): ProviderResult
     }
 
     $tasks = [];
+    $allowedStatuses = ['answered', 'not_found', 'unavailable', 'error'];
     foreach ($rows as $offset => $row) {
         if (!is_array($row)) {
             throw new RuntimeException('Provider task #' . $offset . ' must be an object in: ' . $path);
@@ -229,10 +237,17 @@ function loadProviderResult(string $path): ProviderResult
             throw new RuntimeException('Duplicate provider task id "' . $id . '" in: ' . $path);
         }
 
+        $status = requiredString($row, 'status', $context);
+        if (!in_array($status, $allowedStatuses, true)) {
+            throw new RuntimeException(
+                $context . ' has unsupported status "' . $status . '".',
+            );
+        }
+
         $elapsedMs = nullableNumber($row, 'elapsed_ms');
         $tasks[$id] = new ProviderTaskResult(
             id: $id,
-            status: requiredString($row, 'status', $context),
+            status: $status,
             paths: stringList($row, 'paths', $context),
             relations: stringList($row, 'relations', $context),
             elapsedMs: $elapsedMs === null ? null : (float) $elapsedMs,
@@ -255,7 +270,9 @@ function loadProviderResult(string $path): ProviderResult
 /** @param array<non-empty-string, ExperimentTask> $corpus */
 function scoreProvider(array $corpus, ProviderResult $provider): Score
 {
-    $answered = 0;
+    $supported = 0;
+    $unavailable = 0;
+    $errors = 0;
     $hitAt1 = 0;
     $hitAt5 = 0;
     $falseAbsences = 0;
@@ -274,9 +291,14 @@ function scoreProvider(array $corpus, ProviderResult $provider): Score
             $queryTimes[] = $result->elapsedMs;
         }
 
-        if ($result->status === 'answered') {
-            ++$answered;
+        if ($result->status === 'answered' || $result->status === 'not_found') {
+            ++$supported;
+        } elseif ($result->status === 'unavailable') {
+            ++$unavailable;
+        } elseif ($result->status === 'error') {
+            ++$errors;
         }
+
         if ($result->status === 'not_found') {
             ++$falseAbsences;
         }
@@ -288,7 +310,10 @@ function scoreProvider(array $corpus, ProviderResult $provider): Score
             ++$hitAt5;
         }
 
-        if ($task->expectedRelations !== []) {
+        if (
+            $task->expectedRelations !== []
+            && ($result->status === 'answered' || $result->status === 'not_found')
+        ) {
             $returned = array_values(array_unique($result->relations));
             $expected = array_values(array_unique($task->expectedRelations));
             $relationReturned += count($returned);
@@ -301,7 +326,9 @@ function scoreProvider(array $corpus, ProviderResult $provider): Score
         provider: $provider->provider,
         version: $provider->version,
         tasks: count($corpus),
-        answered: $answered,
+        supported: $supported,
+        unavailable: $unavailable,
+        errors: $errors,
         hitAt1: $hitAt1,
         hitAt5: $hitAt5,
         falseAbsences: $falseAbsences,
@@ -328,12 +355,29 @@ function numberOrNa(int|float|null $value): string
 /** @param list<Score> $scores */
 function printScores(array $scores): void
 {
-    $header = ['provider', 'hit@1', 'hit@5', 'false-absence', 'rel-precision', 'rel-recall', 'query-ms', 'cold-index-ms', 'warm-index-ms', 'index-bytes'];
+    $header = [
+        'provider',
+        'coverage',
+        'unavailable',
+        'errors',
+        'hit@1',
+        'hit@5',
+        'false-absence',
+        'rel-precision',
+        'rel-recall',
+        'query-ms',
+        'cold-index-ms',
+        'warm-index-ms',
+        'index-bytes',
+    ];
     echo implode("\t", $header), PHP_EOL;
 
     foreach ($scores as $score) {
         echo implode("\t", [
             $score->provider . '@' . $score->version,
+            percent($score->coverageRate()),
+            (string) $score->unavailable,
+            (string) $score->errors,
             percent($score->hitAt1Rate()),
             percent($score->hitAt5Rate()),
             percent($score->falseAbsenceRate()),
@@ -374,7 +418,10 @@ try {
     }
 
     $corpus = loadCorpus($corpusPath);
-    $resultPaths = array_values(array_filter(array_map('trim', explode(',', $resultsOption)), static fn (string $path): bool => $path !== ''));
+    $resultPaths = array_values(array_filter(
+        array_map('trim', explode(',', $resultsOption)),
+        static fn (string $path): bool => $path !== '',
+    ));
     if ($resultPaths === []) {
         throw new InvalidArgumentException('--results must contain at least one file.');
     }
@@ -388,6 +435,7 @@ try {
         $scores,
         static fn (Score $left, Score $right): int => $left->falseAbsenceRate() <=> $right->falseAbsenceRate()
             ?: $right->hitAt5Rate() <=> $left->hitAt5Rate()
+            ?: $right->coverageRate() <=> $left->coverageRate()
             ?: $right->hitAt1Rate() <=> $left->hitAt1Rate()
             ?: $left->provider <=> $right->provider,
     );
