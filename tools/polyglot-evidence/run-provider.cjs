@@ -472,7 +472,11 @@ function main() {
             continue;
           }
           const relation = scipRelation(index, source, target);
-          results.push(taskResult(task, relation.relations.length ? 'answered' : 'not_found', relation.paths, relation.relations, performance.now() - started));
+          if (relation.relations.length) {
+            results.push(taskResult(task, 'answered', relation.paths, relation.relations, performance.now() - started));
+          } else {
+            results.push(taskResult(task, 'not_found', [], [], performance.now() - started));
+          }
         } else {
           const symbol = probe.symbol;
           if (typeof symbol !== 'string' || !symbol) {
