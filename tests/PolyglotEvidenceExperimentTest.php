@@ -114,25 +114,7 @@ JSON);
 
     public function testRejectsUnknownProviderStatus(): void
     {
-        $root = sys_get_temp_dir() . '/agent-map-polyglot-experiment-' . bin2hex(random_bytes(4));
-        self::assertTrue(mkdir($root, 0o775, true));
-
-        $corpus = $root . '/corpus.json';
-        $result = $root . '/provider.json';
-        file_put_contents($corpus, <<<'JSON'
-{
-  "schema": "agent-map-polyglot-corpus@1",
-  "tasks": [
-    {
-      "id": "locate.good",
-      "kind": "locate",
-      "expected_paths": ["src/Good.php"],
-      "expected_relations": []
-    }
-  ]
-}
-JSON);
-        file_put_contents($result, <<<'JSON'
+        [$root, $corpus, $result] = $this->singleTaskFixture(<<<'JSON'
 {
   "schema": "agent-map-polyglot-provider-result@1",
   "provider": "fixture",
@@ -154,11 +136,129 @@ JSON);
             self::assertSame(1, $exit);
             self::assertStringContainsString('unsupported status "maybe"', $stderr);
         } finally {
-            $this->remove($corpus);
-            $this->remove($result);
-            if (is_dir($root)) {
-                rmdir($root);
-            }
+            $this->cleanupFixture($root, $corpus, $result);
+        }
+    }
+
+    public function testRejectsEvidenceOnNonAnsweredResult(): void
+    {
+        [$root, $corpus, $result] = $this->singleTaskFixture(<<<'JSON'
+{
+  "schema": "agent-map-polyglot-provider-result@1",
+  "provider": "fixture",
+  "version": "1",
+  "tasks": [
+    {
+      "id": "locate.good",
+      "status": "not_found",
+      "paths": ["src/Good.php"],
+      "relations": []
+    }
+  ]
+}
+JSON);
+
+        try {
+            [$exit, , $stderr] = $this->executeExperiment($corpus, $result);
+
+            self::assertSame(1, $exit);
+            self::assertStringContainsString('must not contain path or relation evidence', $stderr);
+        } finally {
+            $this->cleanupFixture($root, $corpus, $result);
+        }
+    }
+
+    public function testRejectsMissingAndUnknownTaskIds(): void
+    {
+        [$root, $corpus, $result] = $this->singleTaskFixture(<<<'JSON'
+{
+  "schema": "agent-map-polyglot-provider-result@1",
+  "provider": "fixture",
+  "version": "1",
+  "tasks": [
+    {
+      "id": "locate.other",
+      "status": "unavailable",
+      "paths": [],
+      "relations": []
+    }
+  ]
+}
+JSON);
+
+        try {
+            [$exit, , $stderr] = $this->executeExperiment($corpus, $result);
+
+            self::assertSame(1, $exit);
+            self::assertStringContainsString('missing=[locate.good]', $stderr);
+            self::assertStringContainsString('unknown=[locate.other]', $stderr);
+        } finally {
+            $this->cleanupFixture($root, $corpus, $result);
+        }
+    }
+
+    public function testRejectsNegativeMeasurement(): void
+    {
+        [$root, $corpus, $result] = $this->singleTaskFixture(<<<'JSON'
+{
+  "schema": "agent-map-polyglot-provider-result@1",
+  "provider": "fixture",
+  "version": "1",
+  "metadata": {"cold_index_ms": -1},
+  "tasks": [
+    {
+      "id": "locate.good",
+      "status": "unavailable",
+      "paths": [],
+      "relations": []
+    }
+  ]
+}
+JSON);
+
+        try {
+            [$exit, , $stderr] = $this->executeExperiment($corpus, $result);
+
+            self::assertSame(1, $exit);
+            self::assertStringContainsString('cold_index_ms', $stderr);
+            self::assertStringContainsString('non-negative number or null', $stderr);
+        } finally {
+            $this->cleanupFixture($root, $corpus, $result);
+        }
+    }
+
+    /** @return array{string, string, string} */
+    private function singleTaskFixture(string $providerJson): array
+    {
+        $root = sys_get_temp_dir() . '/agent-map-polyglot-experiment-' . bin2hex(random_bytes(4));
+        self::assertTrue(mkdir($root, 0o775, true));
+
+        $corpus = $root . '/corpus.json';
+        $result = $root . '/provider.json';
+        file_put_contents($corpus, <<<'JSON'
+{
+  "schema": "agent-map-polyglot-corpus@1",
+  "tasks": [
+    {
+      "id": "locate.good",
+      "kind": "locate",
+      "expected_paths": ["src/Good.php"],
+      "expected_relations": []
+    }
+  ]
+}
+JSON);
+        file_put_contents($result, $providerJson);
+
+        return [$root, $corpus, $result];
+    }
+
+    private function cleanupFixture(string $root, string $corpus, string $result): void
+    {
+        $this->remove($corpus);
+        $this->remove($result);
+        if (is_dir($root)) {
+            rmdir($root);
         }
     }
 
