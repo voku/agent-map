@@ -61,14 +61,16 @@ JSON);
         self::assertSame([], glob($this->root . '/.agent-map-scip-*.json') ?: []);
     }
 
-    public function testPythonQueryUsesPythonIndexerAndCamelCaseScipFields(): void
+    public function testPythonQueryUsesPythonIndexerAndPreservesSameNameDefinitions(): void
     {
         file_put_contents($this->root . '/pyproject.toml', "[project]\nname = \"demo\"\n");
         mkdir($this->root . '/src/demo', 0o775, true);
+        mkdir($this->root . '/tests', 0o775, true);
         file_put_contents($this->root . '/src/demo/app.py', "class Flask:\n    pass\n");
+        file_put_contents($this->root . '/tests/test_config.py', "def test_custom_config_class():\n    class Flask:\n        pass\n");
         $this->writeIndexer('scip-python', 'scip-python 0.6.6');
         $this->writeScip(<<<'JSON'
-{"documents":[{"relativePath":"src/demo/app.py","occurrences":[{"range":[4,0,5],"symbol":"scip-python python demo 0.0 src/demo/app.py/Flask#","symbolRoles":1}]}]}
+{"documents":[{"relativePath":"src/demo/app.py","occurrences":[{"range":[4,0,5],"symbol":"scip-python python demo 0.0 src/demo/app.py/Flask#","symbolRoles":1}]},{"relativePath":"tests/test_config.py","occurrences":[{"range":[1,4,9],"symbol":"scip-python python demo 0.0 tests/test_config.py/test_custom_config_class().Flask#","symbolRoles":1}]}]}
 JSON);
 
         $result = $this->runCli(['agent-map', 'query', 'Flask', '--root=' . $this->root, '--format=json']);
@@ -77,7 +79,8 @@ JSON);
         self::assertIsArray($payload);
         self::assertSame(0, $result['exit']);
         self::assertSame('answered', $payload['status'] ?? null);
-        self::assertSame('src/demo/app.py', $payload['definitions'][0]['file']);
+        self::assertCount(2, $payload['definitions'] ?? []);
+        self::assertSame(['src/demo/app.py', 'tests/test_config.py'], array_column($payload['definitions'], 'file'));
         self::assertSame(5, $payload['definitions'][0]['line_start']);
         self::assertSame('scip-python 0.6.6', $payload['toolchain']['scip-python']);
     }
@@ -164,7 +167,10 @@ SH;
         }
     }
 
-    /** @param list<string> $argv @return array{exit: int, output: string} */
+    /**
+     * @param list<string> $argv
+     * @return array{exit: int, output: string}
+     */
     private function runCli(array $argv): array
     {
         ob_start();

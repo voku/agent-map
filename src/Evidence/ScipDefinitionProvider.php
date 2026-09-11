@@ -77,7 +77,6 @@ final readonly class ScipDefinitionProvider
             if (!is_file($indexFile)) {
                 return DefinitionEvidence::error($indexerName . ' reported success without creating ' . $indexFile . '.', $toolchain);
             }
-
             $indexBytes = filesize($indexFile);
             if (!is_int($indexBytes)) {
                 return DefinitionEvidence::error('Unable to measure SCIP artifact: ' . $indexFile, $toolchain);
@@ -274,7 +273,7 @@ final readonly class ScipDefinitionProvider
         // A SCIP child symbol contains every owner descriptor. Matching any
         // descriptor therefore turns `function().(parameter)` into another
         // definition of `function`. The queried descriptor must be terminal.
-        return preg_match('/(?:^|[\/ ])' . $escaped . '(?:#|\(\)\.|\.)\z/', $symbol) === 1;
+        return preg_match('/(?:^|[\/ #.])' . $escaped . '(?:#|\(\)\.|\.)\z/', $symbol) === 1;
     }
 
     /** @return array{0: int, 1: int} */
