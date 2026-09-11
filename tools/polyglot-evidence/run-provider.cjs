@@ -152,8 +152,10 @@ function sigmapRankedFiles(repoRoot, payload) {
   const contextPath = path.resolve(repoRoot, payload.contextPath);
   if (!fs.existsSync(contextPath)) return [];
   for (const line of fs.readFileSync(contextPath, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^###\s+(\S+)\s*$/);
-    if (match) files.push(normalizePath(match[1]));
+    const match = line.match(/^##\s+(\S+)\s*$/);
+    if (!match) continue;
+    const relative = normalizePath(match[1]);
+    if (fs.existsSync(path.join(repoRoot, relative))) files.push(relative);
   }
   return [...new Set(files)];
 }
@@ -201,14 +203,32 @@ function matchesScipName(symbol, name) {
   return new RegExp(`(?:^|[/ .])${escaped}(?:#|\\(\\)\\.|\\.|$)`).test(symbol);
 }
 
+function scipRelativePath(document) {
+  return document.relative_path || document.relativePath || '';
+}
+
+function scipSymbolRoles(occurrence) {
+  return Number(occurrence.symbol_roles ?? occurrence.symbolRoles ?? 0);
+}
+
+function scipExternalSymbols(index) {
+  if (Array.isArray(index.external_symbols)) return index.external_symbols;
+  if (Array.isArray(index.externalSymbols)) return index.externalSymbols;
+  return [];
+}
+
+function scipRelationFlag(relation, snakeCase, camelCase) {
+  return Boolean(relation[snakeCase] ?? relation[camelCase]);
+}
+
 function scipDefinitionIndex(payload) {
   const byName = new Map();
   const definitionPathBySymbol = new Map();
   const documents = Array.isArray(payload.documents) ? payload.documents : [];
   for (const doc of documents) {
-    const rel = normalizePath(doc.relativePath || '');
+    const rel = normalizePath(scipRelativePath(doc));
     for (const occ of Array.isArray(doc.occurrences) ? doc.occurrences : []) {
-      if ((Number(occ.symbolRoles || 0) & 1) !== 1 || typeof occ.symbol !== 'string') continue;
+      if ((scipSymbolRoles(occ) & 1) !== 1 || typeof occ.symbol !== 'string') continue;
       definitionPathBySymbol.set(occ.symbol, rel);
     }
   }
@@ -222,7 +242,7 @@ function scipDefinitionIndex(payload) {
       byName.set(name, set);
     }
   }
-  return { byName, definitionPathBySymbol, documents };
+  return { byName, definitionPathBySymbol, documents, externalSymbols: scipExternalSymbols(payload) };
 }
 
 function symbolsForName(definitionPathBySymbol, name) {
@@ -238,11 +258,11 @@ function scipRelation(index, sourceName, targetName) {
     const sourcePath = index.definitionPathBySymbol.get(sourceSymbol);
     if (!sourcePath) continue;
     paths.add(sourcePath);
-    const doc = index.documents.find((candidate) => normalizePath(candidate.relativePath || '') === sourcePath);
+    const doc = index.documents.find((candidate) => normalizePath(scipRelativePath(candidate)) === sourcePath);
     if (!doc) continue;
 
     for (const occ of Array.isArray(doc.occurrences) ? doc.occurrences : []) {
-      if (typeof occ.symbol === 'string' && targetSymbols.has(occ.symbol) && (Number(occ.symbolRoles || 0) & 1) !== 1) {
+      if (typeof occ.symbol === 'string' && targetSymbols.has(occ.symbol) && (scipSymbolRoles(occ) & 1) !== 1) {
         const targetPath = index.definitionPathBySymbol.get(occ.symbol);
         if (targetPath) {
           paths.add(targetPath);
@@ -253,13 +273,16 @@ function scipRelation(index, sourceName, targetName) {
 
     const infos = [
       ...(Array.isArray(doc.symbols) ? doc.symbols : []),
-      ...(Array.isArray(index.externalSymbols) ? index.externalSymbols : []),
+      ...index.externalSymbols,
     ];
     for (const info of infos) {
       if (info.symbol !== sourceSymbol) continue;
       for (const relation of Array.isArray(info.relationships) ? info.relationships : []) {
         if (typeof relation.symbol !== 'string' || !targetSymbols.has(relation.symbol)) continue;
-        if (!(relation.isReference || relation.isImplementation || relation.isTypeDefinition)) continue;
+        const relevant = scipRelationFlag(relation, 'is_reference', 'isReference')
+          || scipRelationFlag(relation, 'is_implementation', 'isImplementation')
+          || scipRelationFlag(relation, 'is_type_definition', 'isTypeDefinition');
+        if (!relevant) continue;
         const targetPath = index.definitionPathBySymbol.get(relation.symbol);
         if (targetPath) {
           paths.add(targetPath);
