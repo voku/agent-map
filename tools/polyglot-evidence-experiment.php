@@ -207,10 +207,18 @@ function loadCorpus(string $path): array
     return $tasks;
 }
 
-function nullableNumber(array $row, string $key): int|float|null
+function nullableNumber(array $row, string $key, string $context): int|float|null
 {
-    $value = $row[$key] ?? null;
-    return is_int($value) || is_float($value) ? $value : null;
+    if (!array_key_exists($key, $row) || $row[$key] === null) {
+        return null;
+    }
+
+    $value = $row[$key];
+    if ((!is_int($value) && !is_float($value)) || $value < 0) {
+        throw new RuntimeException($context . ' field "' . $key . '" must be a non-negative number or null.');
+    }
+
+    return $value;
 }
 
 function loadProviderResult(string $path): ProviderResult
@@ -244,12 +252,20 @@ function loadProviderResult(string $path): ProviderResult
             );
         }
 
-        $elapsedMs = nullableNumber($row, 'elapsed_ms');
+        $paths = stringList($row, 'paths', $context);
+        $relations = stringList($row, 'relations', $context);
+        if ($status !== 'answered' && ($paths !== [] || $relations !== [])) {
+            throw new RuntimeException(
+                $context . ' must not contain path or relation evidence when status is "' . $status . '".',
+            );
+        }
+
+        $elapsedMs = nullableNumber($row, 'elapsed_ms', $context);
         $tasks[$id] = new ProviderTaskResult(
             id: $id,
             status: $status,
-            paths: stringList($row, 'paths', $context),
-            relations: stringList($row, 'relations', $context),
+            paths: $paths,
+            relations: $relations,
             elapsedMs: $elapsedMs === null ? null : (float) $elapsedMs,
         );
     }
@@ -270,6 +286,19 @@ function loadProviderResult(string $path): ProviderResult
 /** @param array<non-empty-string, ExperimentTask> $corpus */
 function scoreProvider(array $corpus, ProviderResult $provider): Score
 {
+    $corpusIds = array_keys($corpus);
+    $providerIds = array_keys($provider->tasks);
+    sort($corpusIds);
+    sort($providerIds);
+    if ($corpusIds !== $providerIds) {
+        $missing = array_values(array_diff($corpusIds, $providerIds));
+        $unknown = array_values(array_diff($providerIds, $corpusIds));
+        throw new RuntimeException(
+            'Provider ' . $provider->provider . ' task ids must exactly match corpus; missing=['
+            . implode(', ', $missing) . '], unknown=[' . implode(', ', $unknown) . '].',
+        );
+    }
+
     $supported = 0;
     $unavailable = 0;
     $errors = 0;
@@ -282,10 +311,7 @@ function scoreProvider(array $corpus, ProviderResult $provider): Score
     $queryTimes = [];
 
     foreach ($corpus as $task) {
-        $result = $provider->tasks[$task->id] ?? null;
-        if ($result === null) {
-            continue;
-        }
+        $result = $provider->tasks[$task->id];
 
         if ($result->elapsedMs !== null) {
             $queryTimes[] = $result->elapsedMs;
@@ -303,22 +329,26 @@ function scoreProvider(array $corpus, ProviderResult $provider): Score
             ++$falseAbsences;
         }
 
-        if ($result->paths !== [] && in_array($result->paths[0], $task->expectedPaths, true)) {
-            ++$hitAt1;
-        }
-        if (array_intersect(array_slice($result->paths, 0, 5), $task->expectedPaths) !== []) {
-            ++$hitAt5;
+        if ($result->status === 'answered') {
+            if ($result->paths !== [] && in_array($result->paths[0], $task->expectedPaths, true)) {
+                ++$hitAt1;
+            }
+            if (array_intersect(array_slice($result->paths, 0, 5), $task->expectedPaths) !== []) {
+                ++$hitAt5;
+            }
         }
 
         if (
             $task->expectedRelations !== []
             && ($result->status === 'answered' || $result->status === 'not_found')
         ) {
-            $returned = array_values(array_unique($result->relations));
             $expected = array_values(array_unique($task->expectedRelations));
-            $relationReturned += count($returned);
             $relationExpected += count($expected);
-            $relationTruePositive += count(array_intersect($returned, $expected));
+            if ($result->status === 'answered') {
+                $returned = array_values(array_unique($result->relations));
+                $relationReturned += count($returned);
+                $relationTruePositive += count(array_intersect($returned, $expected));
+            }
         }
     }
 
@@ -336,9 +366,9 @@ function scoreProvider(array $corpus, ProviderResult $provider): Score
         relationReturned: $relationReturned,
         relationExpected: $relationExpected,
         meanQueryMs: $queryTimes === [] ? null : array_sum($queryTimes) / count($queryTimes),
-        coldIndexMs: nullableNumber($provider->metadata, 'cold_index_ms'),
-        warmIndexMs: nullableNumber($provider->metadata, 'warm_index_ms'),
-        indexBytes: nullableNumber($provider->metadata, 'index_bytes'),
+        coldIndexMs: nullableNumber($provider->metadata, 'cold_index_ms', 'Provider metadata'),
+        warmIndexMs: nullableNumber($provider->metadata, 'warm_index_ms', 'Provider metadata'),
+        indexBytes: nullableNumber($provider->metadata, 'index_bytes', 'Provider metadata'),
     );
 }
 
