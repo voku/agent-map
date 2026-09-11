@@ -55,12 +55,10 @@ final readonly class PolyglotQueryCliApplication
             return false;
         }
 
-        // A missing PHP map is not evidence that PHP is absent. In a mixed PHP+JS
-        // repository, letting SCIP answer before the PHP owner is built can turn a
-        // real PHP symbol into semantic `not_found`. This bounded scan stops on the
-        // first PHP source and prunes dependency/build trees rather than building a
-        // second language index merely to decide who owns the question.
-        if (is_file($root . '/composer.json') || $this->containsPhpSource($root)) {
+        // A missing PHP map is not evidence that PHP is absent. Keep obvious PHP
+        // owner source on the existing path, but do not let fixtures such as
+        // test/fixtures/php.php claim ownership of an otherwise JavaScript project.
+        if (is_file($root . '/composer.json') || $this->containsPhpOwnerSource($root)) {
             return false;
         }
 
@@ -103,8 +101,12 @@ final readonly class PolyglotQueryCliApplication
         return CliOptions::parse($argv, $this->artifacts, $this->defaultRoot);
     }
 
-    private function containsPhpSource(string $root): bool
+    private function containsPhpOwnerSource(string $root): bool
     {
+        if ((glob($root . '/*.php') ?: []) !== []) {
+            return true;
+        }
+
         $skipDirectories = [
             '.agent-map' => true,
             '.git' => true,
@@ -114,15 +116,27 @@ final readonly class PolyglotQueryCliApplication
             'node_modules' => true,
             'vendor' => true,
         ];
-        $directory = new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS);
-        $filter = new RecursiveCallbackFilterIterator(
-            $directory,
-            static fn (SplFileInfo $item): bool => !$item->isDir() || !isset($skipDirectories[$item->getFilename()]),
-        );
-        $iterator = new RecursiveIteratorIterator($filter);
-        foreach ($iterator as $item) {
-            if ($item->isFile() && str_ends_with($item->getFilename(), '.php')) {
-                return true;
+
+        foreach (['src', 'app', 'lib', 'packages', 'modules'] as $sourceDirectory) {
+            $path = $root . '/' . $sourceDirectory;
+            if (!is_dir($path)) {
+                continue;
+            }
+
+            $directory = new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS);
+            $filter = new RecursiveCallbackFilterIterator(
+                $directory,
+                static fn (SplFileInfo $item): bool => !$item->isDir() || !isset($skipDirectories[$item->getFilename()]),
+            );
+            $iterator = new RecursiveIteratorIterator(
+                $filter,
+                RecursiveIteratorIterator::LEAVES_ONLY,
+                RecursiveIteratorIterator::CATCH_GET_CHILD,
+            );
+            foreach ($iterator as $item) {
+                if ($item->isFile() && str_ends_with($item->getFilename(), '.php')) {
+                    return true;
+                }
             }
         }
 
