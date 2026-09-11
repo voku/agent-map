@@ -296,6 +296,21 @@ function scipRelation(index, sourceName, targetName) {
   return { paths: [...paths].sort(), relations: [...new Set(relations)].sort() };
 }
 
+function writeScipJavascriptConfig(repoRoot) {
+  const configRel = '.agent-map-polyglot/jsconfig.json';
+  const config = {
+    compilerOptions: {
+      allowJs: true,
+      checkJs: false,
+      skipLibCheck: true,
+    },
+    include: ['../**/*.js', '../**/*.cjs', '../**/*.mjs'],
+    exclude: ['../node_modules/**', '../dist/**', '../build/**', '../coverage/**'],
+  };
+  fs.writeFileSync(path.join(repoRoot, configRel), JSON.stringify(config, null, 2) + '\n');
+  return configRel;
+}
+
 function scipIndexerArgs(repo, outputRel) {
   if (repo.language === 'python') {
     return {
@@ -304,9 +319,10 @@ function scipIndexerArgs(repo, outputRel) {
       cwd: repo.path,
     };
   }
+  const configRel = writeScipJavascriptConfig(repo.path);
   return {
     command: 'scip-typescript',
-    args: ['index', '--infer-tsconfig', '--output', outputRel],
+    args: ['index', '--output', outputRel, configRel],
     cwd: repo.path,
   };
 }
