@@ -44,12 +44,6 @@ jobs:
           node-version: '20'
           package-manager-cache: false
 
-      - uses: actions/setup-go@v7
-        if: matrix.provider == 'scip'
-        with:
-          go-version: '1.25.x'
-          cache: false
-
       - name: Materialize pinned corpus repositories
         shell: bash
         run: |
@@ -105,9 +99,24 @@ jobs:
               npm install --global \
                 @sourcegraph/scip-typescript@0.4.0 \
                 @sourcegraph/scip-python@0.6.6
-              export PATH="$(go env GOPATH)/bin:$PATH"
-              echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-              go install github.com/scip-code/scip/cmd/scip@v0.9.0
+
+              version='0.9.0'
+              archive='scip-linux-amd64.tar.gz'
+              expected='fc2e7273e110be9f35924da1066000183791e8bfdb0391355de6eaaa070fec75'
+              dir="$RUNNER_TEMP/scip-${version}"
+              mkdir -p "$dir"
+              curl --fail --location --silent --show-error \
+                "https://github.com/scip-code/scip/releases/download/v${version}/${archive}" \
+                --output "$RUNNER_TEMP/$archive"
+              printf '%s  %s\n' "$expected" "$RUNNER_TEMP/$archive" | sha256sum --check --strict
+              tar -xzf "$RUNNER_TEMP/$archive" -C "$dir"
+              scip_bin="$(find "$dir" -type f -name scip -print -quit)"
+              test -n "$scip_bin"
+              chmod +x "$scip_bin"
+              bin_dir="$(dirname "$scip_bin")"
+              echo "$bin_dir" >> "$GITHUB_PATH"
+              export PATH="$bin_dir:$PATH"
+
               scip --version
               scip-typescript --version
               scip-python --version
