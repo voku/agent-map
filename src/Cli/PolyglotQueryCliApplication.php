@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace voku\AgentMap\Cli;
 
 use HelgeSverre\Toon\Toon;
+use RecursiveCallbackFilterIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
 use Throwable;
 use voku\AgentMap\Evidence\DefinitionEvidence;
 use voku\AgentMap\Evidence\ScipDefinitionProvider;
@@ -40,21 +44,27 @@ final readonly class PolyglotQueryCliApplication
             return false;
         }
 
-        // A missing PHP map is not evidence that PHP is absent. In a mixed PHP+JS
-        // repository, letting SCIP answer before the PHP owner is built can turn a
-        // real PHP symbol into semantic `not_found`. Keep that case on the existing
-        // PHP path and let this first slice own only clearly non-PHP projects.
         $root = rtrim($options->root, '/\\');
-        if (is_file($root . '/composer.json') || (glob($root . '/*.php') ?: []) !== []) {
-            return false;
-        }
-
-        return is_file($root . '/package.json')
+        $supportedProject = is_file($root . '/package.json')
             || is_file($root . '/tsconfig.json')
             || is_file($root . '/jsconfig.json')
             || is_file($root . '/pyproject.toml')
             || is_file($root . '/setup.py')
             || is_file($root . '/setup.cfg');
+        if (!$supportedProject) {
+            return false;
+        }
+
+        // A missing PHP map is not evidence that PHP is absent. In a mixed PHP+JS
+        // repository, letting SCIP answer before the PHP owner is built can turn a
+        // real PHP symbol into semantic `not_found`. This bounded scan stops on the
+        // first PHP source and prunes dependency/build trees rather than building a
+        // second language index merely to decide who owns the question.
+        if (is_file($root . '/composer.json') || $this->containsPhpSource($root)) {
+            return false;
+        }
+
+        return true;
     }
 
     /** @param list<string> $argv */
@@ -91,6 +101,32 @@ final readonly class PolyglotQueryCliApplication
         array_shift($argv);
 
         return CliOptions::parse($argv, $this->artifacts, $this->defaultRoot);
+    }
+
+    private function containsPhpSource(string $root): bool
+    {
+        $skipDirectories = [
+            '.agent-map' => true,
+            '.git' => true,
+            'build' => true,
+            'coverage' => true,
+            'dist' => true,
+            'node_modules' => true,
+            'vendor' => true,
+        ];
+        $directory = new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS);
+        $filter = new RecursiveCallbackFilterIterator(
+            $directory,
+            static fn (SplFileInfo $item): bool => !$item->isDir() || !isset($skipDirectories[$item->getFilename()]),
+        );
+        $iterator = new RecursiveIteratorIterator($filter);
+        foreach ($iterator as $item) {
+            if ($item->isFile() && str_ends_with($item->getFilename(), '.php')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function render(string $query, DefinitionEvidence $evidence, string $format): string
