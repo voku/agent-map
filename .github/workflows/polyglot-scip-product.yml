@@ -127,3 +127,45 @@ jobs:
 
           cat "$root/results/javascript.json"
           cat "$root/results/python.json"
+
+      - name: Replay real SigMap PR 579 review task
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-polyglot-product"
+          repo="$root/dogfood/sigmap-pr-579-base"
+          result="$root/results/sigmap-pr-579-scoreJvm.json"
+          base='17349b333d169c5cb216a65d9dd86744046dabc5'
+
+          mkdir -p "$repo"
+          git -C "$repo" init --quiet
+          git -C "$repo" remote add origin https://github.com/manojmallick/sigmap.git
+          git -C "$repo" fetch --quiet --depth=1 origin "$base"
+          git -C "$repo" checkout --quiet --detach FETCH_HEAD
+          test "$(git -C "$repo" rev-parse HEAD)" = "$base"
+
+          php bin/agent-map query scoreJvm --root="$repo" --format=json > "$result"
+
+          php -r '
+            $p=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+            $definitions=$p["definitions"] ?? [];
+            $files=is_array($definitions) ? array_values(array_unique(array_column($definitions, "file"))) : [];
+            if (($p["status"] ?? null) !== "answered" || ($p["provider"] ?? null) !== "scip" || $files !== ["scripts/run-retrieval-gate.mjs"]) {
+                fwrite(STDERR, "Real-task replay did not identify the implementation file changed by SigMap PR #579: " . json_encode($p, JSON_UNESCAPED_SLASHES) . PHP_EOL);
+                exit(1);
+            }
+            if (($p["metrics"]["build_ms"] ?? 0) <= 0 || ($p["metrics"]["materialize_ms"] ?? 0) <= 0) {
+                fwrite(STDERR, "Real-task replay lacks cost evidence." . PHP_EOL);
+                exit(1);
+            }
+            printf(
+                "Dogfood: SigMap PR #579 base %s, query scoreJvm -> %s:%d, build %.1f ms, materialize %.1f ms, one code file before review.\n",
+                $argv[2],
+                $definitions[0]["file"],
+                $definitions[0]["line_start"],
+                $p["metrics"]["build_ms"],
+                $p["metrics"]["materialize_ms"],
+            );
+          ' "$result" "$base" | tee "$root/results/sigmap-pr-579-dogfood.txt"
+
+          cat "$result"
