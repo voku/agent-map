@@ -59,7 +59,9 @@ final readonly class ScipDefinitionProvider
                 $command = $project === 'python'
                     ? [$indexer, 'index', '--cwd', $root, '--project-name', basename($root), '--output', $indexFile, '--quiet']
                     : [$indexer, 'index', '--output', $indexFile, $config = $this->javascriptConfig($root)];
+                $buildStarted = microtime(true);
                 $built = $this->run($command, $root);
+                $buildMilliseconds = (microtime(true) - $buildStarted) * 1000;
                 if ($built['exit'] !== 0) {
                     return DefinitionEvidence::error(
                         $indexerName . ' failed with exit ' . $built['exit'] . ': ' . $this->failureText($built),
@@ -76,7 +78,14 @@ final readonly class ScipDefinitionProvider
                 return DefinitionEvidence::error($indexerName . ' reported success without creating ' . $indexFile . '.', $toolchain);
             }
 
+            $indexBytes = filesize($indexFile);
+            if (!is_int($indexBytes)) {
+                return DefinitionEvidence::error('Unable to measure SCIP artifact: ' . $indexFile, $toolchain);
+            }
+
+            $materializeStarted = microtime(true);
             $printed = $this->run([$scip, 'print', '--json', $indexFile], $root);
+            $materializeMilliseconds = (microtime(true) - $materializeStarted) * 1000;
             if ($printed['exit'] !== 0) {
                 return DefinitionEvidence::error(
                     'scip print failed with exit ' . $printed['exit'] . ': ' . $this->failureText($printed),
@@ -85,10 +94,15 @@ final readonly class ScipDefinitionProvider
             }
 
             $definitions = $this->definitions($printed['stdout'], $symbol);
+            $metrics = [
+                'build_ms' => round($buildMilliseconds, 1),
+                'materialize_ms' => round($materializeMilliseconds, 1),
+                'index_bytes' => $indexBytes,
+            ];
 
             return $definitions === []
-                ? DefinitionEvidence::notFound($toolchain)
-                : DefinitionEvidence::answered($definitions, $toolchain);
+                ? DefinitionEvidence::notFound($toolchain, $metrics)
+                : DefinitionEvidence::answered($definitions, $toolchain, $metrics);
         } catch (Throwable $throwable) {
             return DefinitionEvidence::error($throwable->getMessage(), $toolchain);
         }
@@ -163,13 +177,8 @@ final readonly class ScipDefinitionProvider
     {
         $result = $this->run([$executable, '--version'], $root);
         $text = trim($result['stdout'] !== '' ? $result['stdout'] : $result['stderr']);
-        if ($result['exit'] !== 0 || $text === '') {
-            return 'unknown';
-        }
 
-        $line = strtok($text, "\n");
-
-        return is_string($line) && $line !== '' ? $line : 'unknown';
+        return $result['exit'] === 0 && $text !== '' ? strtok($text, "\n") ?: 'unknown' : 'unknown';
     }
 
     /**
@@ -260,15 +269,12 @@ final readonly class ScipDefinitionProvider
 
     private function matchesName(string $symbol, string $name): bool
     {
-        $parts = preg_split('/[\/ .]+/', $symbol) ?: [];
-        foreach ($parts as $part) {
-            $candidate = preg_replace('/[#`()\[\]]/', '', $part);
-            if (is_string($candidate) && rtrim($candidate, '.') === $name) {
-                return true;
-            }
-        }
+        $escaped = preg_quote($name, '/');
 
-        return false;
+        // A SCIP child symbol contains every owner descriptor. Matching any
+        // descriptor therefore turns `function().(parameter)` into another
+        // definition of `function`. The queried descriptor must be terminal.
+        return preg_match('/(?:^|[\/ ])' . $escaped . '(?:#|\(\)\.|\.)\z/', $symbol) === 1;
     }
 
     /** @return array{0: int, 1: int} */

@@ -40,7 +40,7 @@ final class PolyglotQueryCliApplicationTest extends TestCase
         file_put_contents($this->root . '/src/graph/call-graph.js', "export function buildCallGraph() {}\n");
         $this->writeIndexer('scip-typescript', 'scip-typescript 0.4.0');
         $this->writeScip(<<<'JSON'
-{"documents":[{"relative_path":"src/graph/call-graph.js","occurrences":[{"range":[10,1,10,15],"symbol":"scip-typescript npm sigmap 8.31.0 src/graph/call-graph.js/buildCallGraph().","symbol_roles":1}]}]}
+{"documents":[{"relative_path":"src/graph/call-graph.js","occurrences":[{"range":[10,1,10,15],"symbol":"scip-typescript npm sigmap 8.31.0 src/graph/call-graph.js/buildCallGraph().","symbol_roles":1},{"range":[10,31,10,34],"symbol":"scip-typescript npm sigmap 8.31.0 src/graph/call-graph.js/buildCallGraph().(cwd)","symbol_roles":1}]}]}
 JSON);
 
         $result = $this->runCli(['agent-map', 'query', 'buildCallGraph', '--root=' . $this->root, '--format=json']);
@@ -53,6 +53,10 @@ JSON);
         self::assertSame('definition', $payload['capability'] ?? null);
         self::assertSame('src/graph/call-graph.js', $payload['definitions'][0]['file'] ?? null);
         self::assertSame(11, $payload['definitions'][0]['line_start'] ?? null);
+        self::assertCount(1, $payload['definitions']);
+        self::assertIsFloat($payload['metrics']['build_ms'] ?? null);
+        self::assertIsFloat($payload['metrics']['materialize_ms'] ?? null);
+        self::assertGreaterThan(0, $payload['metrics']['index_bytes'] ?? 0);
         self::assertFileExists($this->root . '/.agent-map/scip-index.scip');
         self::assertSame([], glob($this->root . '/.agent-map-scip-*.json') ?: []);
     }

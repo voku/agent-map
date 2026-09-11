@@ -96,18 +96,21 @@ final readonly class PolyglotQueryCliApplication
         foreach ($evidence->toolchain as $name => $version) {
             $text .= '- ' . $name . ': ' . $version . "\n";
         }
+        foreach ($evidence->metrics as $name => $value) {
+            $text .= '- ' . $name . ': ' . $value . "\n";
+        }
         foreach ($evidence->definitions as $definition) {
             $text .= sprintf(
                 "  %s:%d-%d  %s\n",
                 $definition->file,
                 $definition->lineStart,
                 $definition->lineEnd,
-                $definition->symbolId,
+              $definition->symbolId,
             );
         }
 
         return $format === 'markdown'
-            ? '## ' . $query . "\n\n```text\n" . $text . "```\n"
+            ? '## ' . $query . "\n\n\```text\n" . $text . "```\n"
             : $text;
     }
 }

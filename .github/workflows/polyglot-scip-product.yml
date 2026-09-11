@@ -92,29 +92,38 @@ jobs:
           php bin/agent-map query buildCallGraph --root="$js_repo" --format=json > "$root/results/javascript.json"
           php bin/agent-map query Flask --root="$py_repo" --format=json > "$root/results/python.json"
 
-          php -r '
-            $p=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
-            if (($p["status"] ?? null) !== "answered" || ($p["provider"] ?? null) !== "scip" || ($p["capability"] ?? null) !== "definition" || ($p["definitions"][0]["file"] ?? null) !== $argv[2]) {
-                fwrite(STDERR, "Unexpected definition evidence: " . json_encode($p, JSON_UNESCAPED_SLASHES) . PHP_EOL);
-                exit(1);
-            }
-            if (($p["definitions"][0]["line_start"] ?? 0) < 1 || ($p["definitions"][0]["symbol_id"] ?? "") === "") {
-                fwrite(STDERR, "Definition lacks bounded source/provenance." . PHP_EOL);
-                exit(1);
-            }
-          ' "$root/results/javascript.json" 'src/graph/call-graph.js'
+          validate_definition() {
+            php -r '
+              $p=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+              $definitions=$p["definitions"] ?? [];
+              $files=is_array($definitions) ? array_column($definitions, "file") : [];
+              if (($p["status"] ?? null) !== "answered" || ($p["provider"] ?? null) !== "scip" || ($p["capability"] ?? null) !== "definition" || !in_array($argv[2], $files, true)) {
+                  fwrite(STDERR, "Unexpected definition evidence: " . json_encode($p, JSON_UNESCAPED_SLASHES) . PHP_EOL);
+                  exit(1);
+              }
+              foreach ($definitions as $definition) {
+                  if (($definition["line_start"] ?? 0) < 1 || ($definition["symbol_id"] ?? "") === "") {
+                      fwrite(STDERR, "Definition lacks bounded source/provenance." . PHP_EOL);
+                      exit(1);
+                  }
+              }
+              if (($p["metrics"]["build_ms"] ?? 0) <= 0 || ($p["metrics"]["materialize_ms"] ?? 0) <= 0 || ($p["metrics"]["index_bytes"] ?? 0) <= 0) {
+                  fwrite(STDERR, "Definition lacks native-index measurements." . PHP_EOL);
+                  exit(1);
+              }
+            ' "$1" "$2"
+          }
+
+          validate_definition "$root/results/javascript.json" 'src/graph/call-graph.js'
+          validate_definition "$root/results/python.json" 'src/flask/app.py'
 
           php -r '
             $p=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
-            if (($p["status"] ?? null) !== "answered" || ($p["provider"] ?? null) !== "scip" || ($p["capability"] ?? null) !== "definition" || ($p["definitions"][0]["file"] ?? null) !== $argv[2]) {
-                fwrite(STDERR, "Unexpected definition evidence: " . json_encode($p, JSON_UNESCAPED_SLASHES) . PHP_EOL);
+            if (count($p["definitions"] ?? []) !== 1) {
+                fwrite(STDERR, "The JavaScript exact definition leaked child SCIP symbols." . PHP_EOL);
                 exit(1);
             }
-            if (($p["definitions"][0]["line_start"] ?? 0) < 1 || ($p["definitions"][0]["symbol_id"] ?? "") === "") {
-                fwrite(STDERR, "Definition lacks bounded source/provenance." . PHP_EOL);
-                exit(1);
-            }
-          ' "$root/results/python.json" 'src/flask/app.py'
+          ' "$root/results/javascript.json"
 
           cat "$root/results/javascript.json"
           cat "$root/results/python.json"
