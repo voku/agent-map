@@ -181,7 +181,7 @@ jobs:
           set -euo pipefail
           root="$RUNNER_TEMP/agent-map-polyglot/collected"
           for provider in rg sigmap tree-sitter scip; do
-            test -s "$root/$provider.json" || {
+            test -s "$root/results/$provider.json" || {
               echo "Missing result artifact for $provider" >&2
               exit 1
             }
@@ -195,7 +195,7 @@ jobs:
 
           php tools/polyglot-evidence-experiment.php \
             --corpus=tools/polyglot-evidence/corpus.json \
-            --results="$root/rg.json,$root/sigmap.json,$root/tree-sitter.json,$root/scip.json" \
+            --results="$root/results/rg.json,$root/results/sigmap.json,$root/results/tree-sitter.json,$root/results/scip.json" \
             | tee "$root/scoreboard.tsv"
 
           {
