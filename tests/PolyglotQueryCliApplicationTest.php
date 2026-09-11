@@ -120,6 +120,22 @@ JSON);
         self::assertSame([], $payload['definitions'] ?? null);
     }
 
+    public function testIndexerFailureAfterLargeStderrReturnsErrorInsteadOfBlocking(): void
+    {
+        file_put_contents($this->root . '/package.json', "{}\n");
+        $this->writeNoisyFailingIndexer('scip-typescript', 'scip-typescript 0.4.0');
+        $this->writeScip('{"documents":[]}');
+
+        $result = $this->runCli(['agent-map', 'query', 'buildCallGraph', '--root=' . $this->root, '--format=json']);
+        $payload = json_decode($result['output'], true, 512, JSON_THROW_ON_ERROR);
+
+        self::assertIsArray($payload);
+        self::assertSame(1, $result['exit']);
+        self::assertSame('error', $payload['status'] ?? null);
+        self::assertIsString($payload['reason'] ?? null);
+        self::assertStringContainsString('scip-typescript failed with exit 7', $payload['reason']);
+    }
+
     public function testExistingPhpMapKeepsPolyglotRouterOutOfThePath(): void
     {
         mkdir($this->root . '/.agent-map', 0o775, true);
@@ -128,6 +144,14 @@ JSON);
         $router = new PolyglotQueryCliApplication(defaultRoot: $this->root);
 
         self::assertFalse($router->supports(['agent-map', 'query', 'Anything']));
+    }
+
+    public function testNonIdentifierQueryStaysOnExistingPathWithoutMap(): void
+    {
+        file_put_contents($this->root . '/package.json', "{}\n");
+        $router = new PolyglotQueryCliApplication(defaultRoot: $this->root);
+
+        self::assertFalse($router->supports(['agent-map', 'query', 'class Foo']));
     }
 
     public function testUnbuiltPhpOwnershipKeepsMixedRepositoryOutOfTheScipPath(): void
@@ -168,6 +192,27 @@ mkdir -p "$(dirname "$output")"
 printf 'fake scip index' > "$output"
 SH;
         $this->writeExecutable($name, str_replace('__VERSION__', $version, $script));
+    }
+
+    private function writeNoisyFailingIndexer(string $name, string $version): void
+    {
+        $script = <<<'SH'
+#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "__VERSION__"
+  exit 0
+fi
+__PHP__ -r 'fwrite(STDERR, str_repeat("x", 131072));'
+exit 7
+SH;
+        $this->writeExecutable(
+            $name,
+            str_replace(
+                ['__VERSION__', '__PHP__'],
+                [$version, escapeshellarg(PHP_BINARY)],
+                $script,
+            ),
+        );
     }
 
     private function writeScip(string $json): void
