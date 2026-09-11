@@ -130,6 +130,20 @@ JSON);
         self::assertFalse($router->supports(['agent-map', 'query', 'Anything']));
     }
 
+    public function testUnbuiltPhpOwnershipKeepsMixedRepositoryOutOfTheScipPath(): void
+    {
+        file_put_contents($this->root . '/package.json', "{}\n");
+        file_put_contents($this->root . '/composer.json', "{}\n");
+        $router = new PolyglotQueryCliApplication(defaultRoot: $this->root);
+
+        self::assertFalse($router->supports(['agent-map', 'query', 'PhpService']));
+
+        unlink($this->root . '/composer.json');
+        file_put_contents($this->root . '/index.php', "<?php\n");
+
+        self::assertFalse($router->supports(['agent-map', 'query', 'PhpService']));
+    }
+
     private function writeIndexer(string $name, string $version): void
     {
         $script = <<<'SH'
