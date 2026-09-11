@@ -136,7 +136,7 @@ function parseJsonOutput(text) {
   throw new Error('Command did not emit a JSON object');
 }
 
-function sigmapRankedFiles(payload) {
+function sigmapRankedFiles(repoRoot, payload) {
   const rows = Array.isArray(payload.rankedFiles) ? payload.rankedFiles : [];
   const files = [];
   for (const row of rows) {
@@ -145,6 +145,15 @@ function sigmapRankedFiles(payload) {
       const value = row.path || row.file || row.filename || row.relativePath;
       if (typeof value === 'string' && value) files.push(normalizePath(value));
     }
+  }
+  if (files.length) return [...new Set(files)];
+
+  if (typeof payload.contextPath !== 'string' || !payload.contextPath) return [];
+  const contextPath = path.resolve(repoRoot, payload.contextPath);
+  if (!fs.existsSync(contextPath)) return [];
+  for (const line of fs.readFileSync(contextPath, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^###\s+(\S+)\s*$/);
+    if (match) files.push(normalizePath(match[1]));
   }
   return [...new Set(files)];
 }
@@ -402,7 +411,7 @@ function main() {
           continue;
         }
         const asked = run('sigmap', ['ask', task.question, '--json', '--no-squeeze'], { cwd: repo.path, log: logPath, timeout: 2 * 60 * 1000 });
-        const paths = sigmapRankedFiles(parseJsonOutput(asked.stdout));
+        const paths = sigmapRankedFiles(repo.path, parseJsonOutput(asked.stdout));
         results.push(taskResult(task, paths.length ? 'answered' : 'not_found', paths, [], performance.now() - started));
       } else if (provider === 'tree-sitter') {
         const symbol = typeof probe.symbol === 'string' ? probe.symbol : null;
