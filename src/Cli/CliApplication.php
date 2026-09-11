@@ -47,6 +47,13 @@ final readonly class CliApplication
             return $discovery->run($argv);
         }
 
+        // Keep the existing PHP query path completely untouched when its map exists.
+        // Only a repository without that artifact reaches the first polyglot slice.
+        $polyglot = new PolyglotQueryCliApplication(artifacts: $artifacts, defaultRoot: $this->projectRoot);
+        if ($polyglot->supports($argv)) {
+            return $polyglot->run($argv);
+        }
+
         $status = (new AgentMapApplication(artifacts: $artifacts, defaultRoot: $this->projectRoot))->run($argv);
         $rest = array_slice($argv, 2);
         $generalHelp = in_array($argv[1] ?? null, ['help', '--help', '-h'], true)

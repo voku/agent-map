@@ -1,0 +1,120 @@
+name: Polyglot SCIP product proof
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/polyglot-scip-product.yml
+      - src/Cli/CliApplication.php
+      - src/Cli/PolyglotQueryCliApplication.php
+      - src/Evidence/**
+      - tests/PolyglotQueryCliApplicationTest.php
+      - tools/polyglot-evidence/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polyglot-scip-product-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  definition-query:
+    name: Fresh SCIP definition query
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          package-manager-cache: false
+
+      - name: Install agent-map dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Materialize pinned JavaScript and Python repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-polyglot-product"
+          rm -rf "$root"
+          mkdir -p "$root/repos" "$root/results"
+
+          php tools/polyglot-evidence/prepare-repositories.php \
+            --corpus=tools/polyglot-evidence/corpus.json \
+            --workdir="$root/repos" \
+            --manifest="$root/repositories.json"
+
+      - name: Install the measured SCIP toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global \
+            @sourcegraph/scip-typescript@0.4.0 \
+            @sourcegraph/scip-python@0.6.6
+
+          version='0.9.0'
+          archive='scip-linux-amd64.tar.gz'
+          expected='fc2e7273e110be9f35924da1066000183791e8bfdb0391355de6eaaa070fec75'
+          dir="$RUNNER_TEMP/scip-${version}"
+          mkdir -p "$dir"
+          curl --fail --location --silent --show-error \
+            "https://github.com/scip-code/scip/releases/download/v${version}/${archive}" \
+            --output "$RUNNER_TEMP/$archive"
+          printf '%s  %s\n' "$expected" "$RUNNER_TEMP/$archive" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$dir"
+          scip_bin="$(find "$dir" -type f -name scip -print -quit)"
+          test -n "$scip_bin"
+          chmod +x "$scip_bin"
+          echo "$(dirname "$scip_bin")" >> "$GITHUB_PATH"
+
+          scip-typescript --version
+          scip-python --version
+          "$scip_bin" --version
+
+      - name: Prove owner-routed definitions on pinned repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-polyglot-product"
+          manifest="$root/repositories.json"
+
+          js_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["sigmap"]["path"];' "$manifest")"
+          py_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["flask"]["path"];' "$manifest")"
+
+          php bin/agent-map query buildCallGraph --root="$js_repo" --format=json > "$root/results/javascript.json"
+          php bin/agent-map query Flask --root="$py_repo" --format=json > "$root/results/python.json"
+
+          php -r '
+            $p=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+            if (($p["status"] ?? null) !== "answered" || ($p["provider"] ?? null) !== "scip" || ($p["capability"] ?? null) !== "definition" || ($p["definitions"][0]["file"] ?? null) !== $argv[2]) {
+                fwrite(STDERR, "Unexpected definition evidence: " . json_encode($p, JSON_UNESCAPED_SLASHES) . PHP_EOL);
+                exit(1);
+            }
+            if (($p["definitions"][0]["line_start"] ?? 0) < 1 || ($p["definitions"][0]["symbol_id"] ?? "") === "") {
+                fwrite(STDERR, "Definition lacks bounded source/provenance." . PHP_EOL);
+                exit(1);
+            }
+          ' "$root/results/javascript.json" 'src/graph/call-graph.js'
+
+          php -r '
+            $p=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+            if (($p["status"] ?? null) !== "answered" || ($p["provider"] ?? null) !== "scip" || ($p["capability"] ?? null) !== "definition" || ($p["definitions"][0]["file"] ?? null) !== $argv[2]) {
+                fwrite(STDERR, "Unexpected definition evidence: " . json_encode($p, JSON_UNESCAPED_SLASHES) . PHP_EOL);
+                exit(1);
+            }
+            if (($p["definitions"][0]["line_start"] ?? 0) < 1 || ($p["definitions"][0]["symbol_id"] ?? "") === "") {
+                fwrite(STDERR, "Definition lacks bounded source/provenance." . PHP_EOL);
+                exit(1);
+            }
+          ' "$root/results/python.json" 'src/flask/app.py'
+
+          cat "$root/results/javascript.json"
+          cat "$root/results/python.json"
