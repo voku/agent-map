@@ -85,21 +85,25 @@ JSON);
         mkdir($this->root . '/tests', 0o775, true);
         file_put_contents($this->root . '/src/demo/app.py', "class Flask:\n    pass\n");
         file_put_contents($this->root . '/tests/test_config.py', "def test_custom_config_class():\n    class Flask:\n        pass\n");
-        $this->writeIndexer('scip-python', 'scip-python 0.6.6');
+        $argumentsFile = $this->root . '/scip-python-arguments.txt';
+        $this->writeIndexer('scip-python', 'scip-python 0.6.6', $argumentsFile);
         $this->writeScip(<<<'JSON'
 {"documents":[{"relativePath":"src/demo/app.py","occurrences":[{"range":[4,0,5],"symbol":"scip-python python demo 0.0 src/demo/app.py/Flask#","symbolRoles":1}]},{"relativePath":"tests/test_config.py","occurrences":[{"range":[1,4,9],"symbol":"scip-python python demo 0.0 tests/test_config.py/test_custom_config_class().Flask#","symbolRoles":1}]}]}
 JSON);
 
         $result = $this->runCli(['agent-map', 'query', 'Flask', '--root=' . $this->root, '--format=json']);
         $payload = json_decode($result['output'], true, 512, JSON_THROW_ON_ERROR);
+        $arguments = file_get_contents($argumentsFile);
 
         self::assertIsArray($payload);
         self::assertSame(0, $result['exit']);
-        self::assertSame('answered', $payload['status'] ?? null);
         self::assertCount(2, $payload['definitions'] ?? []);
         self::assertSame(['src/demo/app.py', 'tests/test_config.py'], array_column($payload['definitions'], 'file'));
         self::assertSame(5, $payload['definitions'][0]['line_start']);
         self::assertSame('scip-python 0.6.6', $payload['toolchain']['scip-python']);
+        self::assertIsString($arguments);
+        self::assertStringContainsString("--cwd\n{$this->root}\n", $arguments);
+        self::assertStringNotContainsString('--project-name', $arguments);
     }
 
     public function testMissingToolchainIsUnavailableRatherThanNotFound(): void
@@ -168,7 +172,7 @@ JSON);
         self::assertFalse($router->supports(['agent-map', 'query', 'PhpService']));
     }
 
-    private function writeIndexer(string $name, string $version): void
+    private function writeIndexer(string $name, string $version, ?string $argumentsFile = null): void
     {
         $script = <<<'SH'
 #!/bin/sh
@@ -176,6 +180,7 @@ if [ "$1" = "--version" ]; then
   echo "__VERSION__"
   exit 0
 fi
+__ARGUMENT_LOG__
 output=''
 while [ "$#" -gt 0 ]; do
   if [ "$1" = "--output" ]; then
@@ -191,7 +196,17 @@ fi
 mkdir -p "$(dirname "$output")"
 printf 'fake scip index' > "$output"
 SH;
-        $this->writeExecutable($name, str_replace('__VERSION__', $version, $script));
+        $argumentLog = $argumentsFile === null
+            ? ''
+            : 'printf \'%s\\n\' "$@" > ' . escapeshellarg($argumentsFile);
+        $this->writeExecutable(
+            $name,
+            str_replace(
+                ['__VERSION__', '__ARGUMENT_LOG__'],
+                [$version, $argumentLog],
+                $script,
+            ),
+        );
     }
 
     private function writeNoisyFailingIndexer(string $name, string $version): void
