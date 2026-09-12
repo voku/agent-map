@@ -81,6 +81,15 @@ final class TemplateScanner
 
     private function isExcluded(string $relPath): bool
     {
+        $parts = explode('/', $relPath);
+        // Exclude hidden directories (e.g. .git, .agent-loop-runner, .agent-map), but not the filename if it starts with dot
+        $dirCount = count($parts) - 1;
+        for ($i = 0; $i < $dirCount; ++$i) {
+            if ($parts[$i] !== '' && $parts[$i] !== '.' && str_starts_with($parts[$i], '.')) {
+                return true;
+            }
+        }
+
         foreach (self::EXCLUDED_DIRS as $excluded) {
             if ($relPath === $excluded || str_starts_with($relPath, $excluded . '/')) {
                 return true;

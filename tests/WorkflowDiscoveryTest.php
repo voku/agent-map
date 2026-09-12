@@ -137,6 +137,17 @@ final class WorkflowDiscoveryTest extends TestCase
         self::assertSame('Demo\OrderView', $report->phpSymbols[0]['symbol']);
     }
 
+    public function testTemplateScannerExcludesHiddenDirectories(): void
+    {
+        mkdir($this->tempDir . '/.hidden_dir', 0o775, true);
+        file_put_contents($this->tempDir . '/.hidden_dir/secret.tpl', '<div>hidden</div>');
+
+        $scanner = new TemplateScanner();
+        $templates = $scanner->scan($this->tempDir);
+
+        self::assertArrayNotHasKey('.hidden_dir/secret.tpl', $templates);
+    }
+
     private function deleteDirectory(string $path): void
     {
         if (!is_dir($path)) {
