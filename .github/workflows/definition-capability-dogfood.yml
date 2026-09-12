@@ -10,6 +10,7 @@ on:
       - src/Evidence/DefinitionCapability.php
       - src/Evidence/DefinitionCapabilityProbe.php
       - src/Evidence/DefinitionCapabilityReport.php
+      - src/Evidence/DefinitionEvidence.php
       - src/Evidence/ScipDefinitionProvider.php
       - tests/DefinitionCapabilityProbeTest.php
 
@@ -119,7 +120,7 @@ jobs:
           jq -e '.status == "answered" and .provider == "scip" and ([.definitions[].file] | index("src/graph/call-graph.js")) != null' "$root/results/js-query.json"
           jq -e '.status == "answered" and .provider == "scip" and ([.definitions[].file] | index("src/flask/app.py")) != null' "$root/results/python-query.json"
 
-      - name: Prove missing indexer remains explicit owner unavailability
+      - name: Prove missing indexer has owner-backed safe recovery
         shell: bash
         run: |
           set -euo pipefail
@@ -133,8 +134,23 @@ jobs:
 
           PATH="$probe_bin" "$php_bin" bin/agent-map definition-capabilities --root="$py_repo" --format=json > "$root/results/python-missing-indexer.json"
 
-          jq -e '.route == "python" and .capabilities.python.status == "unavailable" and (.capabilities.python.reason | contains("scip-python"))' \
-            "$root/results/python-missing-indexer.json"
+          set +e
+          PATH="$probe_bin" "$php_bin" bin/agent-map query Flask --root="$py_repo" --format=json > "$root/results/python-missing-query.json"
+          query_status=$?
+          set -e
+          test "$query_status" -ne 0
+
+          jq -e '
+            .route == "python"
+            and .capabilities.python.status == "unavailable"
+            and .capabilities.python.missing_executables == ["scip-python"]
+            and .capabilities.python.next_action == "manual_setup_required"
+          ' "$root/results/python-missing-indexer.json"
+          jq -e '
+            .status == "unavailable"
+            and .missing_executables == ["scip-python"]
+            and .next_action == "manual_setup_required"
+          ' "$root/results/python-missing-query.json"
 
       - name: Prove PHP and mixed-project fail-closed routes
         shell: bash
@@ -169,7 +185,7 @@ jobs:
             echo '- typed PHP owner report: verified'
             echo '- JS/TS operational report -> real SCIP query: verified'
             echo '- Python operational report -> real SCIP query: verified'
-            echo '- missing Python indexer -> explicit unavailable: verified'
+            echo '- missing Python indexer -> structured missing executable + manual setup action on report and query: verified'
             echo '- existing PHP map -> PHP owner route: verified'
             echo '- mixed JS/Python markers -> explicit mixed/unavailable route: verified'
           } >> "$GITHUB_STEP_SUMMARY"
