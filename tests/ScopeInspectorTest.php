@@ -91,6 +91,23 @@ final class ScopeInspectorTest extends TestCase
         self::assertContains('user/saved.html.twig', $paths);
         self::assertContains('user/edit.tpl', $paths);
         self::assertContains('user.edit', $paths);
+        self::assertContains('user/form.tpl', $paths);
+        self::assertContains('user/const.tpl', $paths);
+        self::assertContains('user/local.tpl', $paths);
+        self::assertContains('user/config.tpl', $paths);
+    }
+
+    public function testInlineTemplateReturnedByMethodIsDetected(): void
+    {
+        $index = $this->buildScopeIndex();
+        $selection = (new ScopeSelector())->select($index, 'Demo\Service\UserService::getTemplateInline');
+        self::assertNotNull($selection->target);
+
+        $inspection = (new ScopeInspector())->inspect($index, $selection->target, 10);
+
+        $paths = array_map(static fn (TemplateHint $template): string => $template->path, $inspection->templates);
+        self::assertCount(1, $paths);
+        self::assertStringStartsWith('inline: string:<fieldset>', $paths[0]);
     }
 
     public function testLimitCapsEachSectionAndReportsOmittedCounts(): void

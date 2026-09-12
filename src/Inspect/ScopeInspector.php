@@ -17,7 +17,19 @@ use voku\SimplePhpParser\Parsers\PhpCodeParser;
  */
 final readonly class ScopeInspector
 {
-    public const DEFAULT_TEMPLATE_NAMES = ['render', 'display', 'fetch', 'load', 'view'];
+    public const DEFAULT_TEMPLATE_NAMES = [
+        'render',
+        'display',
+        'fetch',
+        'load',
+        'view',
+        'render_with_data',
+        'render_only_data',
+        'display_string',
+        'fetch_string',
+        'render_template',
+        'renderTemplate',
+    ];
 
     /**
      * @param list<string> $templateNames

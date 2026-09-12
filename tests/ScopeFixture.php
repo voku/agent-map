@@ -95,6 +95,23 @@ trait ScopeFixture
                 $this->twig->render('user/saved.html.twig');
                 $this->smarty->display('user/edit.tpl');
                 view('user.edit');
+                $this->smarty->render_with_data($this->getTemplateForm(), []);
+                $this->smarty->render_only_data(self::CONST_TPL, []);
+                $localTpl = 'user/local.tpl';
+                $this->smarty->display($localTpl);
+                new Config(templatePathWithFilename: 'user/config.tpl');
+            }
+
+            private const CONST_TPL = 'user/const.tpl';
+
+            private function getTemplateForm(): string
+            {
+                return 'user/form.tpl';
+            }
+
+            public function getTemplateInline(): string
+            {
+                return "string:<fieldset><legend>User</legend></fieldset>";
             }
 
             private function validate($user): void
