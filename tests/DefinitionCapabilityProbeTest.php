@@ -64,7 +64,7 @@ final class DefinitionCapabilityProbeTest extends TestCase
         self::assertSame('operational', $payload['capabilities']['javascript_typescript']['status'] ?? null);
     }
 
-    public function testMissingIndexerIsUnavailableButJavaScriptStillOwnsTheRoute(): void
+    public function testMissingIndexerIsUnavailableAndProjectsSafeManualRecovery(): void
     {
         file_put_contents($this->root . '/package.json', "{}\n");
         $this->writeExecutable('scip');
@@ -77,7 +77,22 @@ final class DefinitionCapabilityProbeTest extends TestCase
         self::assertSame('javascript_typescript', $report->route);
         self::assertSame('unavailable', $report->javascriptTypescript->status);
         self::assertSame('Missing executable(s): scip-typescript.', $report->javascriptTypescript->reason);
+        self::assertSame(['scip-typescript'], $report->javascriptTypescript->missingExecutables);
+        self::assertSame('manual_setup_required', $report->javascriptTypescript->nextAction);
         self::assertTrue($report->routesToPolyglotDefinition());
+
+        ob_start();
+        $exit = (new CliApplication())->run([
+            'agent-map',
+            'definition-capabilities',
+            '--root=' . $this->root,
+            '--format=json',
+        ]);
+        $payload = json_decode((string) ob_get_clean(), true, 512, JSON_THROW_ON_ERROR);
+
+        self::assertSame(0, $exit);
+        self::assertSame(['scip-typescript'], $payload['capabilities']['javascript_typescript']['missing_executables'] ?? null);
+        self::assertSame('manual_setup_required', $payload['capabilities']['javascript_typescript']['next_action'] ?? null);
     }
 
     public function testMixedProjectIsExplicitAndNeverGuessedOperational(): void

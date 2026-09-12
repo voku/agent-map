@@ -27,9 +27,9 @@ final readonly class DefinitionCapabilityReport
      *   type: 'definition_capabilities',
      *   route: string,
      *   capabilities: array{
-     *     php: array{language: string, provider: string, status: string, reason: ?string},
-     *     javascript_typescript: array{language: string, provider: string, status: string, reason: ?string},
-     *     python: array{language: string, provider: string, status: string, reason: ?string}
+     *     php: array{language: string, provider: string, status: string, reason: ?string, missing_executables: list<string>, next_action: ?string},
+     *     javascript_typescript: array{language: string, provider: string, status: string, reason: ?string, missing_executables: list<string>, next_action: ?string},
+     *     python: array{language: string, provider: string, status: string, reason: ?string, missing_executables: list<string>, next_action: ?string}
      *   }
      * }
      */
