@@ -25,6 +25,14 @@ final readonly class CliApplication
             ? null
             : MapArtifactPaths::forProject($this->projectRoot ?? (getcwd() ?: '.'), $this->mapRoot);
 
+        $definitionCapabilities = new DefinitionCapabilitiesCliApplication(
+            artifacts: $artifacts,
+            defaultRoot: $this->projectRoot,
+        );
+        if ($definitionCapabilities->supports($argv)) {
+            return $definitionCapabilities->run($argv);
+        }
+
         $planApplications = $this->planApplications($artifacts);
         if (($argv[1] ?? null) === 'plan-capabilities'
             || (($argv[1] ?? null) === 'help' && ($argv[2] ?? null) === 'plan-capabilities')) {
@@ -61,6 +69,7 @@ final readonly class CliApplication
             || in_array('-h', $rest, true);
         if ($generalHelp) {
             echo "\nArtifact paths:\n  --out, --index, and --database are relative to --root unless an absolute path is given.\n\n";
+            echo "Definition capability discovery:\n  definition-capabilities Report the owner route and operational definition capabilities\n\n";
             echo "Plan capability discovery:\n  plan-capabilities List every governed rename, removal, move, copy, and scaffold contract\n\n";
         }
         if ($temporal->shouldAppendToGeneralHelp($argv)) {
