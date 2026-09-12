@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.12.0 - 2026-09-12
+
+### Added
+
+- `workflow` command discovers full web workflows across PHP controllers, Smarty/Twig/Blade templates, form actions, and AJAX handlers. Traces bidirectional workflow chains between PHP views and templates with text, json, markdown, and toon output formatting.
+- `ScopeAstVisitor` detects and resolves templates across `render_with_data`, `render_only_data`, `display_string`, `fetch_string`, method returns (`$this->getTemplate*()`), class constants, local variables, named arguments, and inline Smarty templates.
+- Native SCIP polyglot definition routing for repositories without a PHP map, enabling exact queries across JavaScript, TypeScript, Python, and Go (#90).
+- Definition capability probe and `definition-capabilities` command reporting operational routing readiness (#92).
+
 ## 0.11.6 - 2026-09-09
 
 ### Changed
