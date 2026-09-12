@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   repeatability:
-    name: Repeat exact definition queries
+    name: Repeat and relocate exact definition queries
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -42,12 +42,18 @@ jobs:
           set -euo pipefail
           root="$RUNNER_TEMP/agent-map-definition-determinism"
           rm -rf "$root"
-          mkdir -p "$root/repos" "$root/results"
+          mkdir -p "$root/repos" "$root/results" "$root/relocated"
 
           php tools/polyglot-evidence/prepare-repositories.php \
             --corpus=tools/polyglot-evidence/corpus.json \
             --workdir="$root/repos" \
             --manifest="$root/repositories.json"
+
+          js_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["sigmap"]["path"];' "$root/repositories.json")"
+          py_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["flask"]["path"];' "$root/repositories.json")"
+
+          cp -a "$js_repo" "$root/relocated/javascript-project-at-a-deliberately-different-absolute-root"
+          cp -a "$py_repo" "$root/relocated/python-project-at-a-deliberately-different-absolute-root"
 
       - name: Install exact semantic toolchain
         shell: bash
@@ -72,7 +78,7 @@ jobs:
           chmod +x "$scip_bin"
           echo "$(dirname "$scip_bin")" >> "$GITHUB_PATH"
 
-      - name: Repeat fresh JS and Python definition queries
+      - name: Repeat at one root and relocate the same sources
         shell: bash
         run: |
           set -euo pipefail
@@ -80,18 +86,24 @@ jobs:
           manifest="$root/repositories.json"
           js_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["sigmap"]["path"];' "$manifest")"
           py_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["flask"]["path"];' "$manifest")"
+          js_relocated="$root/relocated/javascript-project-at-a-deliberately-different-absolute-root"
+          py_relocated="$root/relocated/python-project-at-a-deliberately-different-absolute-root"
 
           run_case() {
             local case_name="$1"
-            local repo="$2"
-            local symbol="$3"
-            local expected_file="$4"
+            local primary_repo="$2"
+            local relocated_repo="$3"
+            local symbol="$4"
+            local expected_file="$5"
             local rows="$root/results/${case_name}.jsonl"
             : > "$rows"
 
-            for run in 1 2 3; do
-              result="$root/results/${case_name}-${run}.json"
-              canonical="$root/results/${case_name}-${run}.semantic.json"
+            run_once() {
+              local location="$1"
+              local run="$2"
+              local repo="$3"
+              local result="$root/results/${case_name}-${location}-${run}.json"
+              local canonical="$root/results/${case_name}-${location}-${run}.semantic.json"
 
               php bin/agent-map query "$symbol" --root="$repo" --format=json > "$result"
               jq -e --arg file "$expected_file" \
@@ -109,32 +121,44 @@ jobs:
               test "$index_bytes" = "$reported_index_bytes"
 
               if find "$repo" -maxdepth 1 -type f -name '.agent-map-scip-*.json' -print -quit | grep -q .; then
-                echo "transient JavaScript SCIP config leaked after ${case_name} run ${run}" >&2
+                echo "transient JavaScript SCIP config leaked after ${case_name} ${location} run ${run}" >&2
                 exit 1
               fi
 
               jq -n \
                 --arg case "$case_name" \
+                --arg location "$location" \
                 --argjson run "$run" \
+                --arg root "$repo" \
                 --arg semantic_sha256 "$semantic_sha" \
                 --arg index_sha256 "$index_sha" \
                 --argjson index_bytes "$index_bytes" \
                 --argjson build_ms "$(jq -r '.metrics.build_ms' "$result")" \
                 --argjson materialize_ms "$(jq -r '.metrics.materialize_ms' "$result")" \
-                '{case:$case,run:$run,semantic_sha256:$semantic_sha256,index_sha256:$index_sha256,index_bytes:$index_bytes,build_ms:$build_ms,materialize_ms:$materialize_ms}' \
+                '{case:$case,location:$location,run:$run,root:$root,semantic_sha256:$semantic_sha256,index_sha256:$index_sha256,index_bytes:$index_bytes,build_ms:$build_ms,materialize_ms:$materialize_ms}' \
                 >> "$rows"
-            done
+            }
+
+            run_once primary 1 "$primary_repo"
+            run_once primary 2 "$primary_repo"
+            run_once relocated 1 "$relocated_repo"
 
             jq -s '.' "$rows" > "$root/results/${case_name}-runs.json"
 
             semantic_variants="$(jq -r '.[].semantic_sha256' "$root/results/${case_name}-runs.json" | sort -u | wc -l | tr -d ' ')"
+            primary_raw_variants="$(jq -r '.[] | select(.location == "primary") | .index_sha256' "$root/results/${case_name}-runs.json" | sort -u | wc -l | tr -d ' ')"
+            primary_raw_sha="$(jq -r '.[] | select(.location == "primary") | .index_sha256' "$root/results/${case_name}-runs.json" | head -n 1)"
+            relocated_raw_sha="$(jq -r '.[] | select(.location == "relocated") | .index_sha256' "$root/results/${case_name}-runs.json")"
+
             test "$semantic_variants" = '1'
+            test "$primary_raw_variants" = '1'
+            test "$primary_raw_sha" != "$relocated_raw_sha"
           }
 
-          run_case javascript "$js_repo" buildCallGraph src/graph/call-graph.js
-          run_case python "$py_repo" Flask src/flask/app.py
+          run_case javascript "$js_repo" "$js_relocated" buildCallGraph src/graph/call-graph.js
+          run_case python "$py_repo" "$py_relocated" Flask src/flask/app.py
 
-      - name: Classify deterministic and variable evidence
+      - name: Classify semantic and provider-native determinism
         shell: bash
         run: |
           set -euo pipefail
@@ -145,10 +169,15 @@ jobs:
             --slurpfile py "$root/python-runs.json" '
               def summary($runs):
                 ($runs[0]) as $r |
+                ($r | map(select(.location == "primary"))) as $primary |
+                ($r | map(select(.location == "relocated"))) as $relocated |
                 {
                   semantic_hashes: ([$r[].semantic_sha256] | unique),
-                  raw_index_hashes: ([$r[].index_sha256] | unique),
-                  index_sizes: ([$r[].index_bytes] | unique),
+                  primary_raw_index_hashes: ([$primary[].index_sha256] | unique),
+                  relocated_raw_index_hashes: ([$relocated[].index_sha256] | unique),
+                  raw_hash_changes_after_relocation: (($primary[0].index_sha256) != ($relocated[0].index_sha256)),
+                  primary_index_sizes: ([$primary[].index_bytes] | unique),
+                  relocated_index_sizes: ([$relocated[].index_bytes] | unique),
                   build_ms: {min: ([$r[].build_ms] | min), max: ([$r[].build_ms] | max), avg: (([$r[].build_ms] | add) / ($r | length))},
                   materialize_ms: {min: ([$r[].materialize_ms] | min), max: ([$r[].materialize_ms] | max), avg: (([$r[].materialize_ms] | add) / ($r | length))}
                 };
@@ -160,6 +189,10 @@ jobs:
 
           jq -e '.javascript.semantic_hashes | length == 1' "$root/determinism-summary.json"
           jq -e '.python.semantic_hashes | length == 1' "$root/determinism-summary.json"
+          jq -e '.javascript.primary_raw_index_hashes | length == 1' "$root/determinism-summary.json"
+          jq -e '.python.primary_raw_index_hashes | length == 1' "$root/determinism-summary.json"
+          jq -e '.javascript.raw_hash_changes_after_relocation == true' "$root/determinism-summary.json"
+          jq -e '.python.raw_hash_changes_after_relocation == true' "$root/determinism-summary.json"
 
           cat "$root/determinism-summary.json"
 
@@ -173,27 +206,29 @@ jobs:
           emit_case() {
             local label="$1"
             local key="$2"
-            local semantic_count index_hash_count index_size_count build_min build_max materialize_min materialize_max
+            local semantic_count primary_hash_count relocated_changes primary_sizes relocated_sizes build_min build_max materialize_min materialize_max
             semantic_count="$(jq -r ".${key}.semantic_hashes | length" "$summary")"
-            index_hash_count="$(jq -r ".${key}.raw_index_hashes | length" "$summary")"
-            index_size_count="$(jq -r ".${key}.index_sizes | length" "$summary")"
+            primary_hash_count="$(jq -r ".${key}.primary_raw_index_hashes | length" "$summary")"
+            relocated_changes="$(jq -r ".${key}.raw_hash_changes_after_relocation" "$summary")"
+            primary_sizes="$(jq -c ".${key}.primary_index_sizes" "$summary")"
+            relocated_sizes="$(jq -c ".${key}.relocated_index_sizes" "$summary")"
             build_min="$(jq -r ".${key}.build_ms.min" "$summary")"
             build_max="$(jq -r ".${key}.build_ms.max" "$summary")"
             materialize_min="$(jq -r ".${key}.materialize_ms.min" "$summary")"
             materialize_max="$(jq -r ".${key}.materialize_ms.max" "$summary")"
 
-            echo "- ${label}: semantic variants=${semantic_count}; raw index hash variants=${index_hash_count}; index-size variants=${index_size_count}; build=${build_min}-${build_max} ms; materialize=${materialize_min}-${materialize_max} ms"
+            echo "- ${label}: semantic variants=${semantic_count}; same-root raw variants=${primary_hash_count}; raw hash changes after relocation=${relocated_changes}; primary bytes=${primary_sizes}; relocated bytes=${relocated_sizes}; build=${build_min}-${build_max} ms; materialize=${materialize_min}-${materialize_max} ms"
           }
 
           {
             echo '## Polyglot definition determinism'
             echo
-            echo 'Three fresh CLI processes per language, same repository commit and exact toolchain.'
+            echo 'Two fresh builds at one absolute project root plus one build of the same pinned sources at a deliberately different absolute root.'
             echo
             emit_case 'JavaScript / SigMap / buildCallGraph' javascript
             emit_case 'Python / Flask / Flask' python
             echo
-            echo 'Semantic hashes intentionally exclude runtime metrics. Raw native-index hashes and timings are observations, not merge gates.'
+            echo 'Contract: normalized definition evidence is invariant under repeat builds and relocation. The provider-native SCIP blob is reproducible at one root but intentionally changes after relocation because SCIP metadata carries the absolute project root. Runtime metrics remain observations, not identity.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
