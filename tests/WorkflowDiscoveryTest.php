@@ -137,6 +137,24 @@ final class WorkflowDiscoveryTest extends TestCase
         self::assertSame('Demo\OrderView', $report->phpSymbols[0]['symbol']);
     }
 
+    public function testWorkflowDiscoveryReverseLookupFromAjaxHandler(): void
+    {
+        $builder = new AgentMapBuilder();
+        $map = $builder->build($this->tempDir, ['src'], []);
+
+        $discovery = new WorkflowDiscovery();
+        $report = $discovery->discover($map, 'Demo\OrderSaveAjax');
+
+        self::assertSame('symbol', $report->targetKind);
+        self::assertCount(1, $report->templates);
+        self::assertSame('order_form.tpl', $report->templates[0]->name);
+
+        // Found both the Ajax handler itself and the View that renders the template
+        $symbols = array_column($report->phpSymbols, 'symbol');
+        self::assertContains('Demo\OrderSaveAjax', $symbols);
+        self::assertContains('Demo\OrderView', $symbols);
+    }
+
     public function testTemplateScannerExcludesHiddenDirectories(): void
     {
         mkdir($this->tempDir . '/.hidden_dir', 0o775, true);

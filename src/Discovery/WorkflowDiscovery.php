@@ -48,6 +48,10 @@ final class WorkflowDiscovery
         } elseif ($targetKind === 'symbol' && $exactSymbol !== null) {
             $matchedPhpSymbols[] = $this->describeSymbol($map, $exactSymbol['file'], $exactSymbol['symbol']);
             $matchedTemplates = $this->findTemplatesForSymbols($map, $matchedPhpSymbols, $allTemplates, $byName, $byBasename);
+            $extraPhp = $this->findPhpSymbolsRenderingTemplates($map, $matchedTemplates);
+            foreach ($extraPhp as $ep) {
+                $matchedPhpSymbols[] = $ep;
+            }
         } else {
             // Keyword search: search both PHP symbols and templates
             $symbolResult = $map->query($query);
@@ -293,6 +297,22 @@ final class WorkflowDiscovery
                 } elseif (isset($byBasename[basename($tPath)])) {
                     foreach ($byBasename[basename($tPath)] as $bm) {
                         $matched[$bm->path] = $bm;
+                    }
+                }
+            }
+            // Also match templates that invoke this symbol via AJAX or form actions
+            $symFqn = $sym['symbol'];
+            $symBase = basename(str_replace('\\', '/', $symFqn));
+            foreach ($allTemplates as $tPath => $tpl) {
+                foreach ($tpl->xajax as $handler) {
+                    $clean = preg_replace('/^xajax_/', '', $handler);
+                    if ($clean === $symBase || $handler === $symBase || str_contains($handler, $symBase)) {
+                        $matched[$tPath] = $tpl;
+                    }
+                }
+                foreach ($tpl->forms as $form) {
+                    if (isset($form['action']) && str_contains($form['action'], $symBase)) {
+                        $matched[$tPath] = $tpl;
                     }
                 }
             }
