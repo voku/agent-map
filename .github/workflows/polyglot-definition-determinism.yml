@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   repeatability:
-    name: Repeat and relocate exact definition queries
+    name: Repeat, relocate, mutate and restore definitions
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -158,6 +158,90 @@ jobs:
           run_case javascript "$js_repo" "$js_relocated" buildCallGraph src/graph/call-graph.js
           run_case python "$py_repo" "$py_relocated" Flask src/flask/app.py
 
+      - name: Prove irrelevant changes, relevant mutations and exact restoration
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-determinism"
+          manifest="$root/repositories.json"
+          js_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["sigmap"]["path"];' "$manifest")"
+          py_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["flask"]["path"];' "$manifest")"
+
+          mutation_case() {
+            local case_name="$1"
+            local repo="$2"
+            local symbol="$3"
+            local target_rel="$4"
+            local baseline_result="$root/results/${case_name}-primary-2.json"
+            local baseline_semantic="$root/results/${case_name}-primary-2.semantic.json"
+            local baseline_semantic_sha baseline_raw_sha baseline_line
+
+            baseline_semantic_sha="$(sha256sum "$baseline_semantic" | awk '{print $1}')"
+            baseline_raw_sha="$(jq -r '.[] | select(.location == "primary" and .run == 2) | .index_sha256' "$root/results/${case_name}-runs.json")"
+            baseline_line="$(jq -r --arg file "$target_rel" '.definitions[] | select(.file == $file) | .line_start' "$baseline_result" | head -n 1)"
+            test -n "$baseline_line"
+
+            note="$repo/agent-map-determinism-note.txt"
+            printf 'This file is intentionally outside the indexed language surface.\n' > "$note"
+            irrelevant="$root/results/${case_name}-irrelevant.json"
+            irrelevant_semantic="$root/results/${case_name}-irrelevant.semantic.json"
+            php bin/agent-map query "$symbol" --root="$repo" --format=json > "$irrelevant"
+            jq -S 'del(.metrics)' "$irrelevant" > "$irrelevant_semantic"
+            irrelevant_semantic_sha="$(sha256sum "$irrelevant_semantic" | awk '{print $1}')"
+            irrelevant_raw_sha="$(sha256sum "$repo/.agent-map/scip-index.scip" | awk '{print $1}')"
+            test "$irrelevant_semantic_sha" = "$baseline_semantic_sha"
+            rm "$note"
+
+            target="$repo/$target_rel"
+            temporary="$target.agent-map-determinism"
+            { printf '\n'; cat "$target"; } > "$temporary"
+            mv "$temporary" "$target"
+
+            mutated="$root/results/${case_name}-mutated.json"
+            mutated_semantic="$root/results/${case_name}-mutated.semantic.json"
+            php bin/agent-map query "$symbol" --root="$repo" --format=json > "$mutated"
+            jq -S 'del(.metrics)' "$mutated" > "$mutated_semantic"
+            mutated_semantic_sha="$(sha256sum "$mutated_semantic" | awk '{print $1}')"
+            mutated_raw_sha="$(sha256sum "$repo/.agent-map/scip-index.scip" | awk '{print $1}')"
+            mutated_line="$(jq -r --arg file "$target_rel" '.definitions[] | select(.file == $file) | .line_start' "$mutated" | head -n 1)"
+            test "$mutated_semantic_sha" != "$baseline_semantic_sha"
+            test "$mutated_raw_sha" != "$baseline_raw_sha"
+            test "$mutated_line" = "$((baseline_line + 1))"
+
+            git -C "$repo" checkout -- "$target_rel"
+            restored="$root/results/${case_name}-restored.json"
+            restored_semantic="$root/results/${case_name}-restored.semantic.json"
+            php bin/agent-map query "$symbol" --root="$repo" --format=json > "$restored"
+            jq -S 'del(.metrics)' "$restored" > "$restored_semantic"
+            restored_semantic_sha="$(sha256sum "$restored_semantic" | awk '{print $1}')"
+            restored_raw_sha="$(sha256sum "$repo/.agent-map/scip-index.scip" | awk '{print $1}')"
+            test "$restored_semantic_sha" = "$baseline_semantic_sha"
+            test "$restored_raw_sha" = "$baseline_raw_sha"
+
+            jq -n \
+              --arg case "$case_name" \
+              --arg baseline_semantic_sha256 "$baseline_semantic_sha" \
+              --arg irrelevant_semantic_sha256 "$irrelevant_semantic_sha" \
+              --arg mutated_semantic_sha256 "$mutated_semantic_sha" \
+              --arg restored_semantic_sha256 "$restored_semantic_sha" \
+              --arg baseline_raw_sha256 "$baseline_raw_sha" \
+              --arg irrelevant_raw_sha256 "$irrelevant_raw_sha" \
+              --arg mutated_raw_sha256 "$mutated_raw_sha" \
+              --arg restored_raw_sha256 "$restored_raw_sha" \
+              --argjson baseline_line "$baseline_line" \
+              --argjson mutated_line "$mutated_line" \
+              '{
+                case:$case,
+                semantic:{baseline:$baseline_semantic_sha256,irrelevant:$irrelevant_semantic_sha256,mutated:$mutated_semantic_sha256,restored:$restored_semantic_sha256},
+                raw_index:{baseline:$baseline_raw_sha256,irrelevant:$irrelevant_raw_sha256,mutated:$mutated_raw_sha256,restored:$restored_raw_sha256},
+                line:{baseline:$baseline_line,mutated:$mutated_line},
+                irrelevant_raw_changed:($baseline_raw_sha256 != $irrelevant_raw_sha256)
+              }' > "$root/results/${case_name}-mutation-summary.json"
+          }
+
+          mutation_case javascript "$js_repo" buildCallGraph src/graph/call-graph.js
+          mutation_case python "$py_repo" Flask src/flask/app.py
+
       - name: Classify semantic and provider-native determinism
         shell: bash
         run: |
@@ -195,6 +279,8 @@ jobs:
           jq -e '.python.raw_hash_changes_after_relocation == true' "$root/determinism-summary.json"
 
           cat "$root/determinism-summary.json"
+          cat "$root/javascript-mutation-summary.json"
+          cat "$root/python-mutation-summary.json"
 
       - name: Publish determinism evidence
         shell: bash
@@ -206,7 +292,7 @@ jobs:
           emit_case() {
             local label="$1"
             local key="$2"
-            local semantic_count primary_hash_count relocated_changes primary_sizes relocated_sizes build_min build_max materialize_min materialize_max
+            local semantic_count primary_hash_count relocated_changes primary_sizes relocated_sizes build_min build_max materialize_min materialize_max irrelevant_raw_changed
             semantic_count="$(jq -r ".${key}.semantic_hashes | length" "$summary")"
             primary_hash_count="$(jq -r ".${key}.primary_raw_index_hashes | length" "$summary")"
             relocated_changes="$(jq -r ".${key}.raw_hash_changes_after_relocation" "$summary")"
@@ -216,19 +302,20 @@ jobs:
             build_max="$(jq -r ".${key}.build_ms.max" "$summary")"
             materialize_min="$(jq -r ".${key}.materialize_ms.min" "$summary")"
             materialize_max="$(jq -r ".${key}.materialize_ms.max" "$summary")"
+            irrelevant_raw_changed="$(jq -r '.irrelevant_raw_changed' "$root/${key}-mutation-summary.json")"
 
-            echo "- ${label}: semantic variants=${semantic_count}; same-root raw variants=${primary_hash_count}; raw hash changes after relocation=${relocated_changes}; primary bytes=${primary_sizes}; relocated bytes=${relocated_sizes}; build=${build_min}-${build_max} ms; materialize=${materialize_min}-${materialize_max} ms"
+            echo "- ${label}: semantic variants=${semantic_count}; same-root raw variants=${primary_hash_count}; raw hash changes after relocation=${relocated_changes}; irrelevant-file raw change=${irrelevant_raw_changed}; primary bytes=${primary_sizes}; relocated bytes=${relocated_sizes}; build=${build_min}-${build_max} ms; materialize=${materialize_min}-${materialize_max} ms"
           }
 
           {
             echo '## Polyglot definition determinism'
             echo
-            echo 'Two fresh builds at one absolute project root plus one build of the same pinned sources at a deliberately different absolute root.'
+            echo 'Evidence dimensions: repeat builds, relocation, an irrelevant non-code file, a relevant source-line mutation, and exact source restoration.'
             echo
             emit_case 'JavaScript / SigMap / buildCallGraph' javascript
             emit_case 'Python / Flask / Flask' python
             echo
-            echo 'Contract: normalized definition evidence is invariant under repeat builds and relocation. The provider-native SCIP blob is reproducible at one root but intentionally changes after relocation because SCIP metadata carries the absolute project root. Runtime metrics remain observations, not identity.'
+            echo 'Hard contract: normalized definition evidence is invariant under repeat builds, runner changes, relocation, irrelevant non-code files, and exact restoration. A relevant line mutation must change the semantic evidence and native index, and restoration must reproduce both baseline identities. The provider-native SCIP blob remains root-local because SCIP metadata carries the absolute project root. Runtime metrics remain observations, not identity.'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
