@@ -88,7 +88,10 @@ final readonly class PolyglotQueryCliApplication
         ];
 
         if ($format === 'json') {
-            return json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+            return json_encode(
+                $payload,
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR,
+            ) . "\n";
         }
         if ($format === 'toon') {
             return Toon::encode($payload) . "\n";
