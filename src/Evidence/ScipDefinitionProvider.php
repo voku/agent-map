@@ -37,7 +37,12 @@ final readonly class ScipDefinitionProvider
                 $missing[] = $indexerName;
             }
 
-            return DefinitionEvidence::unavailable('Missing executable(s): ' . implode(', ', $missing) . '.');
+            return DefinitionEvidence::unavailable(
+                'Missing executable(s): ' . implode(', ', $missing) . '.',
+                [],
+                $missing,
+                'manual_setup_required',
+            );
         }
 
         $toolchain = [
