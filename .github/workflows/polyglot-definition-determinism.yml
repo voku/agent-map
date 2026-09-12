@@ -1,0 +1,206 @@
+name: Polyglot definition determinism
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/polyglot-definition-determinism.yml
+      - src/Cli/PolyglotQueryCliApplication.php
+      - src/Evidence/ScipDefinitionProvider.php
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polyglot-definition-determinism-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repeatability:
+    name: Repeat exact definition queries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          package-manager-cache: false
+
+      - name: Install agent-map dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Materialize pinned repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-determinism"
+          rm -rf "$root"
+          mkdir -p "$root/repos" "$root/results"
+
+          php tools/polyglot-evidence/prepare-repositories.php \
+            --corpus=tools/polyglot-evidence/corpus.json \
+            --workdir="$root/repos" \
+            --manifest="$root/repositories.json"
+
+      - name: Install exact semantic toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global \
+            @sourcegraph/scip-typescript@0.4.0 \
+            @sourcegraph/scip-python@0.6.6
+
+          version='0.9.0'
+          archive='scip-linux-amd64.tar.gz'
+          expected='fc2e7273e110be9f35924da1066000183791e8bfdb0391355de6eaaa070fec75'
+          dir="$RUNNER_TEMP/scip-${version}"
+          mkdir -p "$dir"
+          curl --fail --location --silent --show-error \
+            "https://github.com/scip-code/scip/releases/download/v${version}/${archive}" \
+            --output "$RUNNER_TEMP/$archive"
+          printf '%s  %s\n' "$expected" "$RUNNER_TEMP/$archive" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$dir"
+          scip_bin="$(find "$dir" -type f -name scip -print -quit)"
+          test -n "$scip_bin"
+          chmod +x "$scip_bin"
+          echo "$(dirname "$scip_bin")" >> "$GITHUB_PATH"
+
+      - name: Repeat fresh JS and Python definition queries
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-determinism"
+          manifest="$root/repositories.json"
+          js_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["sigmap"]["path"];' "$manifest")"
+          py_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["flask"]["path"];' "$manifest")"
+
+          run_case() {
+            local case_name="$1"
+            local repo="$2"
+            local symbol="$3"
+            local expected_file="$4"
+            local rows="$root/results/${case_name}.jsonl"
+            : > "$rows"
+
+            for run in 1 2 3; do
+              result="$root/results/${case_name}-${run}.json"
+              canonical="$root/results/${case_name}-${run}.semantic.json"
+
+              php bin/agent-map query "$symbol" --root="$repo" --format=json > "$result"
+              jq -e --arg file "$expected_file" \
+                '.status == "answered" and .provider == "scip" and ([.definitions[].file] | index($file)) != null' \
+                "$result"
+
+              jq -S 'del(.metrics)' "$result" > "$canonical"
+              semantic_sha="$(sha256sum "$canonical" | awk '{print $1}')"
+
+              index="$repo/.agent-map/scip-index.scip"
+              test -f "$index"
+              index_sha="$(sha256sum "$index" | awk '{print $1}')"
+              index_bytes="$(wc -c < "$index" | tr -d ' ')"
+              reported_index_bytes="$(jq -r '.metrics.index_bytes' "$result")"
+              test "$index_bytes" = "$reported_index_bytes"
+
+              if find "$repo" -maxdepth 1 -type f -name '.agent-map-scip-*.json' -print -quit | grep -q .; then
+                echo "transient JavaScript SCIP config leaked after ${case_name} run ${run}" >&2
+                exit 1
+              fi
+
+              jq -n \
+                --arg case "$case_name" \
+                --argjson run "$run" \
+                --arg semantic_sha256 "$semantic_sha" \
+                --arg index_sha256 "$index_sha" \
+                --argjson index_bytes "$index_bytes" \
+                --argjson build_ms "$(jq -r '.metrics.build_ms' "$result")" \
+                --argjson materialize_ms "$(jq -r '.metrics.materialize_ms' "$result")" \
+                '{case:$case,run:$run,semantic_sha256:$semantic_sha256,index_sha256:$index_sha256,index_bytes:$index_bytes,build_ms:$build_ms,materialize_ms:$materialize_ms}' \
+                >> "$rows"
+            done
+
+            jq -s '.' "$rows" > "$root/results/${case_name}-runs.json"
+
+            semantic_variants="$(jq -r '.[].semantic_sha256' "$root/results/${case_name}-runs.json" | sort -u | wc -l | tr -d ' ')"
+            test "$semantic_variants" = '1'
+          }
+
+          run_case javascript "$js_repo" buildCallGraph src/graph/call-graph.js
+          run_case python "$py_repo" Flask src/flask/app.py
+
+      - name: Classify deterministic and variable evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-determinism/results"
+
+          jq -n \
+            --slurpfile js "$root/javascript-runs.json" \
+            --slurpfile py "$root/python-runs.json" '
+              def summary($runs):
+                ($runs[0]) as $r |
+                {
+                  semantic_hashes: ([$r[].semantic_sha256] | unique),
+                  raw_index_hashes: ([$r[].index_sha256] | unique),
+                  index_sizes: ([$r[].index_bytes] | unique),
+                  build_ms: {min: ([$r[].build_ms] | min), max: ([$r[].build_ms] | max), avg: (([$r[].build_ms] | add) / ($r | length))},
+                  materialize_ms: {min: ([$r[].materialize_ms] | min), max: ([$r[].materialize_ms] | max), avg: (([$r[].materialize_ms] | add) / ($r | length))}
+                };
+              {
+                javascript: summary($js),
+                python: summary($py)
+              }
+            ' > "$root/determinism-summary.json"
+
+          jq -e '.javascript.semantic_hashes | length == 1' "$root/determinism-summary.json"
+          jq -e '.python.semantic_hashes | length == 1' "$root/determinism-summary.json"
+
+          cat "$root/determinism-summary.json"
+
+      - name: Publish determinism evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-determinism/results"
+          summary="$root/determinism-summary.json"
+
+          emit_case() {
+            local label="$1"
+            local key="$2"
+            local semantic_count index_hash_count index_size_count build_min build_max materialize_min materialize_max
+            semantic_count="$(jq -r ".${key}.semantic_hashes | length" "$summary")"
+            index_hash_count="$(jq -r ".${key}.raw_index_hashes | length" "$summary")"
+            index_size_count="$(jq -r ".${key}.index_sizes | length" "$summary")"
+            build_min="$(jq -r ".${key}.build_ms.min" "$summary")"
+            build_max="$(jq -r ".${key}.build_ms.max" "$summary")"
+            materialize_min="$(jq -r ".${key}.materialize_ms.min" "$summary")"
+            materialize_max="$(jq -r ".${key}.materialize_ms.max" "$summary")"
+
+            echo "- ${label}: semantic variants=${semantic_count}; raw index hash variants=${index_hash_count}; index-size variants=${index_size_count}; build=${build_min}-${build_max} ms; materialize=${materialize_min}-${materialize_max} ms"
+          }
+
+          {
+            echo '## Polyglot definition determinism'
+            echo
+            echo 'Three fresh CLI processes per language, same repository commit and exact toolchain.'
+            echo
+            emit_case 'JavaScript / SigMap / buildCallGraph' javascript
+            emit_case 'Python / Flask / Flask' python
+            echo
+            echo 'Semantic hashes intentionally exclude runtime metrics. Raw native-index hashes and timings are observations, not merge gates.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: polyglot-definition-determinism-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/agent-map-definition-determinism/results/*.json
+            ${{ runner.temp }}/agent-map-definition-determinism/results/*.jsonl
+          if-no-files-found: error
