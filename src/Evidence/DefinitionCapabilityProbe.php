@@ -67,6 +67,8 @@ final readonly class DefinitionCapabilityProbe
                     'scip',
                     'unavailable',
                     'Missing executable(s): ' . implode(', ', $missing) . '.',
+                    $missing,
+                    'manual_setup_required',
                 );
 
             return new DefinitionCapabilityReport(
@@ -86,6 +88,8 @@ final readonly class DefinitionCapabilityProbe
                     'scip',
                     'unavailable',
                     'Missing executable(s): ' . implode(', ', $missing) . '.',
+                    $missing,
+                    'manual_setup_required',
                 );
 
             return new DefinitionCapabilityReport(
