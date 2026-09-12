@@ -127,6 +127,17 @@ TEXT;
             $out .= "\n";
         }
 
+        if ($report->testSymbols !== []) {
+            $out .= "Tests Covering This Workflow:\n";
+            foreach ($report->testSymbols as $sym) {
+                $out .= "  {$sym['symbol']} ({$sym['file']}:{$sym['line']})\n";
+                if ($sym['templates'] !== []) {
+                    $out .= "    Templates: " . implode(', ', $sym['templates']) . "\n";
+                }
+            }
+            $out .= "\n";
+        }
+
         if ($report->templates !== []) {
             $out .= "Primary Templates:\n";
             foreach ($report->templates as $tpl) {
@@ -199,6 +210,17 @@ TEXT;
         if ($report->phpSymbols !== []) {
             $out .= "## PHP Views & Controllers\n\n";
             foreach ($report->phpSymbols as $sym) {
+                $out .= "- **`{$sym['symbol']}`** (`{$sym['file']}:{$sym['line']}`)\n";
+                if ($sym['templates'] !== []) {
+                    $out .= "  - Templates: `" . implode('`, `', $sym['templates']) . "`\n";
+                }
+            }
+            $out .= "\n";
+        }
+
+        if ($report->testSymbols !== []) {
+            $out .= "## Tests Covering This Workflow\n\n";
+            foreach ($report->testSymbols as $sym) {
                 $out .= "- **`{$sym['symbol']}`** (`{$sym['file']}:{$sym['line']}`)\n";
                 if ($sym['templates'] !== []) {
                     $out .= "  - Templates: `" . implode('`, `', $sym['templates']) . "`\n";

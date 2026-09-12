@@ -166,6 +166,39 @@ final class WorkflowDiscoveryTest extends TestCase
         self::assertArrayNotHasKey('.hidden_dir/secret.tpl', $templates);
     }
 
+    public function testWorkflowDiscoverySeparatesTestsFromProductionPhpSymbols(): void
+    {
+        mkdir($this->tempDir . '/tests', 0o775, true);
+        file_put_contents($this->tempDir . '/tests/OrderWorkflowTest.php', <<<'PHP'
+        <?php
+
+        declare(strict_types=1);
+
+        namespace Demo\Tests;
+
+        final class OrderWorkflowTest
+        {
+            public function testRendersOrderForm(): void
+            {
+                $tpl = 'order_form.tpl';
+            }
+        }
+        PHP);
+
+        $builder = new AgentMapBuilder();
+        $map = $builder->build($this->tempDir, ['src', 'tests'], []);
+
+        $discovery = new WorkflowDiscovery();
+        $report = $discovery->discover($map, 'order_form.tpl');
+
+        $prodSymbols = array_column($report->phpSymbols, 'symbol');
+        self::assertContains('Demo\OrderView', $prodSymbols);
+        self::assertNotContains('Demo\Tests\OrderWorkflowTest', $prodSymbols);
+
+        $testSymbols = array_column($report->testSymbols, 'symbol');
+        self::assertContains('Demo\Tests\OrderWorkflowTest', $testSymbols);
+    }
+
     private function deleteDirectory(string $path): void
     {
         if (!is_dir($path)) {

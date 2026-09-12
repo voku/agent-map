@@ -71,4 +71,28 @@ final class ScopeSelectorTest extends TestCase
         self::assertSame('not_found', $selection->status);
         self::assertNull($selection->target);
     }
+
+    public function testUnknownMethodOnExistingClassSuggestsCandidates(): void
+    {
+        $index = $this->buildScopeIndex();
+
+        $selection = (new ScopeSelector())->select($index, 'Demo\Service\UserService::saving');
+
+        self::assertSame('not_found', $selection->status);
+        self::assertNull($selection->target);
+        self::assertNotEmpty($selection->candidates);
+        self::assertStringContainsString('Demo\Service\UserService::save', implode(' ', $selection->candidates));
+    }
+
+    public function testMisspelledClassSuggestsCandidates(): void
+    {
+        $index = $this->buildScopeIndex();
+
+        $selection = (new ScopeSelector())->select($index, 'Demo\Service\UserServic::save');
+
+        self::assertSame('not_found', $selection->status);
+        self::assertNull($selection->target);
+        self::assertNotEmpty($selection->candidates);
+        self::assertStringContainsString('Demo\Service\UserService', implode(' ', $selection->candidates));
+    }
 }

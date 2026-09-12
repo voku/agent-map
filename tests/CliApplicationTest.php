@@ -41,6 +41,10 @@ final class CliApplicationTest extends TestCase
         self::assertSame(1, substr_count($output, 'Method removal evidence:'));
         self::assertSame(1, substr_count($output, 'Property removal evidence:'));
         self::assertSame(1, substr_count($output, 'Class-constant removal evidence:'));
+        self::assertSame(1, substr_count($output, 'Test discovery:'));
+        self::assertSame(1, substr_count($output, 'tests      Discover tests covering a PHP class, method, or file with direct callers and companions'));
+        self::assertSame(1, substr_count($output, 'Workflow discovery:'));
+        self::assertSame(1, substr_count($output, 'workflow   Discover web workflows linking PHP controllers, templates, forms, and AJAX handlers'));
         self::assertSame(1, substr_count($output, 'class-constant-removal-plan Build an exact unused-private-class-constant deletion plan'));
     }
 

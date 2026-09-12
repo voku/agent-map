@@ -757,8 +757,7 @@ final readonly class AgentMapApplication
 
     private function related(CliOptions $options): int
     {
-        $index = (new IndexReader())->read($options->index);
-        $this->warnIfStale($index->staleEntries());
+        $index = $this->currentIndexForRead($options);
         $result = $index->query((string) $options->argument);
         $sourceMatches = array_values(array_filter($result->files, fn (FileEntry $file): bool => !$this->looksLikeTestPath($file->path)));
         if ($sourceMatches === []) {
@@ -973,7 +972,20 @@ final readonly class AgentMapApplication
 
         $selection = (new ScopeSelector())->select($index, (string) $options->argument);
         if ($selection->status === 'not_found') {
-            fwrite(STDERR, 'No indexed class, method, or function matches: ' . $options->argument . "\n");
+            if ($options->format !== 'text') {
+                echo $this->formatter->render([
+                    'type' => 'scope_not_found',
+                    'title' => 'Not found: ' . (string) $options->argument,
+                    'query' => (string) $options->argument,
+                    'candidates' => $selection->candidates,
+                ], $options->format);
+            } else {
+                $msg = 'No indexed class, method, or function matches: ' . $options->argument . "\n";
+                if ($selection->candidates !== []) {
+                    $msg .= "Did you mean:\n- " . implode("\n- ", $selection->candidates) . "\n";
+                }
+                fwrite(STDERR, $msg);
+            }
 
             return 1;
         }
@@ -1006,8 +1018,7 @@ final readonly class AgentMapApplication
 
     private function relations(CliOptions $options, bool $incoming): int
     {
-        $index = (new IndexReader())->read($options->index);
-        $this->warnIfStale($index->staleEntries());
+        $index = $this->currentIndexForRead($options);
         $method = $index->resolveMethod((string) $options->argument);
         if ($incoming) {
             $targetIds = [$method->id => true];

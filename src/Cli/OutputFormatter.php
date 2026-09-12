@@ -116,6 +116,7 @@ final readonly class OutputFormatter
             'changed' => $this->changedText($payload),
             'scope' => $this->scopeText($payload),
             'scope_ambiguous' => $this->scopeAmbiguousText($payload),
+            'scope_not_found' => $this->scopeNotFoundText($payload),
             'query' => $this->matchTypeNote($payload) . $this->filesText(is_array($payload['files'] ?? null) ? $payload['files'] : [], (bool) ($payload['include_namespace'] ?? false)),
             'relations' => $this->relationsText($payload),
             'edit_context' => $this->contextText($payload),
@@ -439,6 +440,23 @@ final readonly class OutputFormatter
         $out = 'Ambiguous: ' . (string) ($payload['query'] ?? '') . "\n\nCandidates:\n";
         foreach (is_array($payload['candidates'] ?? null) ? $payload['candidates'] : [] as $candidate) {
             $out .= '  ' . (string) $candidate . "\n";
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function scopeNotFoundText(array $payload): string
+    {
+        $out = 'No indexed class, method, or function matches: ' . (string) ($payload['query'] ?? '') . "\n";
+        $candidates = is_array($payload['candidates'] ?? null) ? $payload['candidates'] : [];
+        if ($candidates !== []) {
+            $out .= "\nDid you mean:\n";
+            foreach ($candidates as $candidate) {
+                $out .= '  - ' . (string) $candidate . "\n";
+            }
         }
 
         return $out;

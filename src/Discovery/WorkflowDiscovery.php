@@ -75,13 +75,23 @@ final class WorkflowDiscovery
             }
         }
 
-        // Deduplicate PHP symbols
+        // Deduplicate PHP symbols and separate production from tests
         $uniquePhp = [];
         foreach ($matchedPhpSymbols as $ps) {
             $key = $ps['symbol'] . '@' . $ps['file'];
             $uniquePhp[$key] = $ps;
         }
-        $phpSymbols = array_values($uniquePhp);
+
+        $prodSymbols = [];
+        $testSymbols = [];
+        foreach ($uniquePhp as $ps) {
+            if ($map->looksLikeTestPath($ps['file'])) {
+                $testSymbols[] = $ps;
+            } else {
+                $prodSymbols[] = $ps;
+            }
+        }
+        $phpSymbols = $prodSymbols;
 
         // Find included sub-templates
         $includedTemplates = [];
@@ -174,6 +184,7 @@ final class WorkflowDiscovery
             query: $query,
             targetKind: $targetKind,
             phpSymbols: $phpSymbols,
+            testSymbols: $testSymbols,
             templates: array_values($matchedTemplates),
             includedTemplates: array_values($includedTemplates),
             parentTemplates: array_values($parentTemplates),
@@ -262,10 +273,17 @@ final class WorkflowDiscovery
                         $relevantTemplates[] = $t;
                     }
                 }
+                if ($relevantTemplates === [] && $map->looksLikeTestPath($file->path)) {
+                    foreach (array_keys($templateNames) as $tName) {
+                        if (str_contains($source, $tName)) {
+                            $relevantTemplates[] = $tName;
+                        }
+                    }
+                }
                 if ($relevantTemplates !== []) {
                     $results[] = [
                         ...$described,
-                        'templates' => $relevantTemplates,
+                        'templates' => array_values(array_unique($relevantTemplates)),
                     ];
                 }
             }

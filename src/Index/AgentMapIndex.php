@@ -118,6 +118,49 @@ final readonly class AgentMapIndex
         }
 
         if ($matches === []) {
+            $classMatches = [];
+            foreach ($this->files as $file) {
+                foreach ($file->symbols as $symbol) {
+                    if (in_array($symbol->kind, ['class', 'interface', 'trait', 'enum'], true)) {
+                        if ($qualified ? $symbol->fqn === $className : $symbol->name === $className) {
+                            $classMatches[] = $symbol;
+                        }
+                    }
+                }
+            }
+
+            if ($classMatches !== []) {
+                $availableMethods = [];
+                foreach ($classMatches as $sym) {
+                    foreach ($sym->methods as $m) {
+                        $availableMethods[] = $m->name;
+                    }
+                }
+                $availableMethods = array_values(array_unique($availableMethods));
+                sort($availableMethods, SORT_STRING);
+
+                $similar = [];
+                $methodLower = strtolower($methodName);
+                foreach ($availableMethods as $mName) {
+                    $mLower = strtolower($mName);
+                    if (levenshtein($methodLower, $mLower) <= 3 || str_contains($mLower, $methodLower) || str_contains($methodLower, $mLower)) {
+                        $similar[] = $mName;
+                    }
+                }
+
+                $msg = 'Method target not found: ' . $target;
+                if ($similar !== []) {
+                    $msg .= "\nDid you mean:\n- " . implode("\n- ", array_slice($similar, 0, 5));
+                }
+                if ($availableMethods !== []) {
+                    $msg .= "\nAvailable methods in {$className} (" . count($availableMethods) . "):\n- " . implode("\n- ", array_slice($availableMethods, 0, 15));
+                    if (count($availableMethods) > 15) {
+                        $msg .= "\n  (... " . (count($availableMethods) - 15) . ' more)';
+                    }
+                }
+                throw new RuntimeException($msg);
+            }
+
             $suggestions = [];
             foreach ($this->files as $file) {
                 foreach ($file->symbols as $symbol) {
@@ -322,13 +365,13 @@ final readonly class AgentMapIndex
     /** @return list<FileEntry> */
     public function likelyTestFiles(FileEntry $file, int $limit = 10): array
     {
-        $base = (string) preg_replace('/(?:Test|Cest)$/i', '', pathinfo($file->path, PATHINFO_FILENAME));
+        $base = (string) preg_replace('/(?:_?(?:Unit|Api|Acceptance|Integration|Functional)?(?:Test|Cest))$/i', '', pathinfo($file->path, PATHINFO_FILENAME));
         $matches = [];
         foreach ($this->files as $candidate) {
             if ($candidate->path === $file->path || !$this->looksLikeTestPath($candidate->path)) {
                 continue;
             }
-            $candidateBase = (string) preg_replace('/(?:Test|Cest)$/i', '', pathinfo($candidate->path, PATHINFO_FILENAME));
+            $candidateBase = (string) preg_replace('/(?:_?(?:Unit|Api|Acceptance|Integration|Functional)?(?:Test|Cest))$/i', '', pathinfo($candidate->path, PATHINFO_FILENAME));
             if ($candidateBase === $base || str_contains($candidateBase, (string) $base) || str_contains((string) $base, $candidateBase)) {
                 $matches[] = $candidate;
             }
@@ -627,7 +670,7 @@ final readonly class AgentMapIndex
         return (string) preg_replace('~[^a-z0-9]+~', '', strtolower($value));
     }
 
-    private function looksLikeTestPath(string $path): bool
+    public function looksLikeTestPath(string $path): bool
     {
         $normalized = strtolower(str_replace('\\', '/', $path));
         $segments = explode('/', $normalized);

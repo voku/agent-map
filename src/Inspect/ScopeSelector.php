@@ -42,7 +42,21 @@ final readonly class ScopeSelector
         }
 
         if ($classes === []) {
-            return new ScopeSelection(null, 'not_found');
+            $similarClasses = [];
+            $classLower = strtolower($classPart);
+            foreach ($index->files as $f) {
+                foreach ($f->symbols as $s) {
+                    if (in_array($s->kind, ['class', 'interface', 'trait', 'enum'], true)) {
+                        $sName = str_contains($classPart, '\\') ? $s->fqn : $s->name;
+                        $sLower = strtolower($sName);
+                        if (levenshtein($classLower, $sLower) <= 3 || str_contains($sLower, $classLower) || str_contains($classLower, $sLower)) {
+                            $similarClasses[] = $s->fqn . '::' . $methodName . ' (' . $f->path . ')';
+                        }
+                    }
+                }
+            }
+
+            return new ScopeSelection(null, 'not_found', array_slice($similarClasses, 0, 5));
         }
 
         [$file, $symbol] = $classes[0];
@@ -59,7 +73,25 @@ final readonly class ScopeSelector
         }
 
         if ($methods === []) {
-            return new ScopeSelection(null, 'not_found');
+            $available = array_map(static fn (MethodEntry $m): string => $m->name, $symbol->methods);
+            sort($available, SORT_STRING);
+            $similar = [];
+            $methodLower = strtolower($methodName);
+            foreach ($available as $mName) {
+                $mLower = strtolower($mName);
+                if (levenshtein($methodLower, $mLower) <= 3 || str_contains($mLower, $methodLower) || str_contains($methodLower, $mLower)) {
+                    $similar[] = $symbol->fqn . '::' . $mName . ' (' . $file->path . ')';
+                }
+            }
+
+            $candidates = $similar !== []
+                ? $similar
+                : array_map(
+                    static fn (string $m): string => $symbol->fqn . '::' . $m . ' (' . $file->path . ')',
+                    array_slice($available, 0, 15),
+                );
+
+            return new ScopeSelection(null, 'not_found', $candidates);
         }
 
         $method = $methods[0];

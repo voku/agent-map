@@ -60,6 +60,11 @@ final readonly class CliApplication
             return $workflow->run($argv);
         }
 
+        $testCli = new TestCliApplication(artifacts: $artifacts, defaultRoot: $this->projectRoot);
+        if ($testCli->supports($argv)) {
+            return $testCli->run($argv);
+        }
+
         // Keep the existing PHP query path completely untouched when its map exists.
         // Only a repository without that artifact reaches the first polyglot slice.
         $polyglot = new PolyglotQueryCliApplication(artifacts: $artifacts, defaultRoot: $this->projectRoot);
@@ -90,6 +95,9 @@ final readonly class CliApplication
         }
         if ($workflow->shouldAppendToGeneralHelp($argv)) {
             echo $workflow->helpOverview();
+        }
+        if ($testCli->shouldAppendToGeneralHelp($argv)) {
+            echo $testCli->helpOverview();
         }
 
         return $status;

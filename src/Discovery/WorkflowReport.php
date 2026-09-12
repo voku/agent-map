@@ -8,6 +8,7 @@ final readonly class WorkflowReport
 {
     /**
      * @param list<array{symbol: string, file: string, line: int, kind: string, templates: list<string>}> $phpSymbols
+     * @param list<array{symbol: string, file: string, line: int, kind: string, templates: list<string>}> $testSymbols
      * @param list<TemplateInfo> $templates
      * @param list<TemplateInfo> $includedTemplates
      * @param list<TemplateInfo> $parentTemplates
@@ -19,6 +20,7 @@ final readonly class WorkflowReport
         public string $query,
         public string $targetKind,
         public array $phpSymbols = [],
+        public array $testSymbols = [],
         public array $templates = [],
         public array $includedTemplates = [],
         public array $parentTemplates = [],
@@ -29,7 +31,7 @@ final readonly class WorkflowReport
     }
 
     /**
-     * @return array{query: string, target_kind: string, php_symbols: list<array{symbol: string, file: string, line: int, kind: string, templates: list<string>}>, templates: list<array<string, mixed>>, included_templates: list<array<string, mixed>>, parent_templates: list<array<string, mixed>>, form_actions: list<array{action: ?string, method: ?string, target_symbol: ?string, target_file: ?string, params: array<string, string>}>, xajax_handlers: list<array{call: string, target_symbol: ?string, target_file: ?string}>, flow_steps: list<string>}
+     * @return array{query: string, target_kind: string, php_symbols: list<array{symbol: string, file: string, line: int, kind: string, templates: list<string>}>, test_symbols: list<array{symbol: string, file: string, line: int, kind: string, templates: list<string>}>, templates: list<array<string, mixed>>, included_templates: list<array<string, mixed>>, parent_templates: list<array<string, mixed>>, form_actions: list<array{action: ?string, method: ?string, target_symbol: ?string, target_file: ?string, params: array<string, string>}>, xajax_handlers: list<array{call: string, target_symbol: ?string, target_file: ?string}>, flow_steps: list<string>}
      */
     public function toArray(): array
     {
@@ -37,6 +39,7 @@ final readonly class WorkflowReport
             'query' => $this->query,
             'target_kind' => $this->targetKind,
             'php_symbols' => $this->phpSymbols,
+            'test_symbols' => $this->testSymbols,
             'templates' => array_map(static fn (TemplateInfo $t): array => $t->toArray(), $this->templates),
             'included_templates' => array_map(static fn (TemplateInfo $t): array => $t->toArray(), $this->includedTemplates),
             'parent_templates' => array_map(static fn (TemplateInfo $t): array => $t->toArray(), $this->parentTemplates),

@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.13.0 - 2026-09-12
+
+### Added
+
+- `tests` command (`agent-map tests <target>`) discovers direct test callers (via incoming `calls` and `instantiates` relations), companion test files, and synthesized runner commands across PHPUnit and Codeception. Supports methods, classes, source files, and keywords with text, json, markdown, and toon output formats.
+- Intelligent symbol resolution suggestions: when a method or class is not found on `scope` or `resolveMethod`, `agent-map` suggests similar symbol names ("Did you mean: ...") and lists available methods on the matched class to enable fast self-correction for coding agents.
+- Clean separation of production controllers/views vs. test classes in `WorkflowReport`: tests referencing templates are now partitioned into a dedicated `testSymbols` section instead of cluttering production controllers and views.
+- `likelyTestFiles()` recognizes Codeception conventions (`_UnitCest`, `_ApiCest`, `_AcceptanceCest`) in addition to PHPUnit `*Test` classes.
+- Stale-index read repair unified across read commands (`callers`, `callees`, `related`) via `currentIndexForRead`.
+
 ## 0.12.2 - 2026-09-12
 
 ### Added
