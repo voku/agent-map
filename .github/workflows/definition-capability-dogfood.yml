@@ -1,0 +1,175 @@
+name: Definition capability dogfood
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/definition-capability-dogfood.yml
+      - src/Cli/CliApplication.php
+      - src/Cli/DefinitionCapabilitiesCliApplication.php
+      - src/Cli/PolyglotQueryCliApplication.php
+      - src/Evidence/DefinitionCapability.php
+      - src/Evidence/DefinitionCapabilityProbe.php
+      - src/Evidence/DefinitionCapabilityReport.php
+      - src/Evidence/ScipDefinitionProvider.php
+      - tests/DefinitionCapabilityProbeTest.php
+
+permissions:
+  contents: read
+
+concurrency:
+  group: definition-capability-dogfood-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owner-report:
+    name: Owner report matches real definition routing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          package-manager-cache: false
+
+      - name: Install agent-map dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Materialize pinned repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-capability"
+          rm -rf "$root"
+          mkdir -p "$root/repos" "$root/results"
+
+          php tools/polyglot-evidence/prepare-repositories.php \
+            --corpus=tools/polyglot-evidence/corpus.json \
+            --workdir="$root/repos" \
+            --manifest="$root/repositories.json"
+
+      - name: Install the already-proven SCIP toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global \
+            @sourcegraph/scip-typescript@0.4.0 \
+            @sourcegraph/scip-python@0.6.6
+
+          version='0.9.0'
+          archive='scip-linux-amd64.tar.gz'
+          expected='fc2e7273e110be9f35924da1066000183791e8bfdb0391355de6eaaa070fec75'
+          dir="$RUNNER_TEMP/scip-${version}"
+          mkdir -p "$dir"
+          curl --fail --location --silent --show-error \
+            "https://github.com/scip-code/scip/releases/download/v${version}/${archive}" \
+            --output "$RUNNER_TEMP/$archive"
+          printf '%s  %s\n' "$expected" "$RUNNER_TEMP/$archive" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$dir"
+          scip_bin="$(find "$dir" -type f -name scip -print -quit)"
+          test -n "$scip_bin"
+          chmod +x "$scip_bin"
+          echo "$(dirname "$scip_bin")" >> "$GITHUB_PATH"
+
+      - name: Prove typed owner report before semantic queries
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-capability"
+          manifest="$root/repositories.json"
+          js_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["sigmap"]["path"];' "$manifest")"
+          py_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["flask"]["path"];' "$manifest")"
+
+          php bin/agent-map definition-capabilities --root="$js_repo" --format=json > "$root/results/js-capabilities.json"
+          php bin/agent-map definition-capabilities --root="$py_repo" --format=json > "$root/results/python-capabilities.json"
+
+          jq -e '.type == "definition_capabilities" and .route == "javascript_typescript" and .capabilities.javascript_typescript.status == "operational" and .capabilities.javascript_typescript.provider == "scip"' \
+            "$root/results/js-capabilities.json"
+          jq -e '.type == "definition_capabilities" and .route == "python" and .capabilities.python.status == "operational" and .capabilities.python.provider == "scip"' \
+            "$root/results/python-capabilities.json"
+
+          php -r '
+            require $argv[1] . "/vendor/autoload.php";
+            $report=(new voku\AgentMap\Evidence\DefinitionCapabilityProbe())->probe($argv[2], $argv[2] . "/.agent-map/php-symbols.json");
+            if ($report->route !== "javascript_typescript" || $report->javascriptTypescript->status !== "operational") {
+                fwrite(STDERR, "Typed definition capability API disagrees with expected JavaScript owner route.\n");
+                exit(1);
+            }
+          ' "$GITHUB_WORKSPACE" "$js_repo"
+
+      - name: Prove operational means the public query really answers
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-capability"
+          manifest="$root/repositories.json"
+          js_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["sigmap"]["path"];' "$manifest")"
+          py_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["flask"]["path"];' "$manifest")"
+
+          php bin/agent-map query buildCallGraph --root="$js_repo" --format=json > "$root/results/js-query.json"
+          php bin/agent-map query Flask --root="$py_repo" --format=json > "$root/results/python-query.json"
+
+          jq -e '.status == "answered" and .provider == "scip" and ([.definitions[].file] | index("src/graph/call-graph.js")) != null' "$root/results/js-query.json"
+          jq -e '.status == "answered" and .provider == "scip" and ([.definitions[].file] | index("src/flask/app.py")) != null' "$root/results/python-query.json"
+
+      - name: Prove missing indexer remains explicit owner unavailability
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-capability"
+          manifest="$root/repositories.json"
+          py_repo="$(php -r '$m=json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR); echo $m["repositories"]["flask"]["path"];' "$manifest")"
+          probe_bin="$root/probe-bin"
+          mkdir -p "$probe_bin"
+          ln -s "$(command -v scip)" "$probe_bin/scip"
+          php_bin="$(command -v php)"
+
+          PATH="$probe_bin" "$php_bin" bin/agent-map definition-capabilities --root="$py_repo" --format=json > "$root/results/python-missing-indexer.json"
+
+          jq -e '.route == "python" and .capabilities.python.status == "unavailable" and (.capabilities.python.reason | contains("scip-python"))' \
+            "$root/results/python-missing-indexer.json"
+
+      - name: Prove PHP and mixed-project fail-closed routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-capability"
+
+          php_root="$root/php-owner"
+          mkdir -p "$php_root/.agent-map"
+          printf '{}\n' > "$php_root/package.json"
+          printf '{}\n' > "$php_root/.agent-map/php-symbols.json"
+          php bin/agent-map definition-capabilities --root="$php_root" --format=json > "$root/results/php-owner.json"
+          jq -e '.route == "php" and .capabilities.php.status == "operational" and .capabilities.javascript_typescript.status == "unavailable"' \
+            "$root/results/php-owner.json"
+
+          mixed_root="$root/mixed-owner"
+          mkdir -p "$mixed_root"
+          printf '{}\n' > "$mixed_root/package.json"
+          printf '[project]\nname = "mixed"\n' > "$mixed_root/pyproject.toml"
+          php bin/agent-map definition-capabilities --root="$mixed_root" --format=json > "$root/results/mixed-owner.json"
+          jq -e '.route == "mixed" and .capabilities.javascript_typescript.status == "unavailable" and .capabilities.python.status == "unavailable"' \
+            "$root/results/mixed-owner.json"
+
+      - name: Publish dogfood summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-map-definition-capability"
+          {
+            echo '## Definition capability owner dogfood'
+            echo
+            echo '- typed PHP owner report: verified'
+            echo '- JS/TS operational report -> real SCIP query: verified'
+            echo '- Python operational report -> real SCIP query: verified'
+            echo '- missing Python indexer -> explicit unavailable: verified'
+            echo '- existing PHP map -> PHP owner route: verified'
+            echo '- mixed JS/Python markers -> explicit mixed/unavailable route: verified'
+          } >> "$GITHUB_STEP_SUMMARY"
