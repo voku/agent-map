@@ -57,7 +57,7 @@ final readonly class ScipDefinitionProvider
             $config = null;
             try {
                 $command = $project === 'python'
-                    ? [$indexer, 'index', '--cwd', $root, '--project-name', basename($root), '--output', $indexFile, '--quiet']
+                    ? [$indexer, 'index', '--cwd', $root, '--output', $indexFile, '--quiet']
                     : [$indexer, 'index', '--output', $indexFile, $config = $this->javascriptConfig($root)];
                 $buildStarted = microtime(true);
                 $built = $this->run($command, $root);
@@ -278,29 +278,43 @@ final readonly class ScipDefinitionProvider
                 continue;
             }
             $file = $document['relative_path'] ?? $document['relativePath'] ?? null;
-            $occurrences = $document['occurrences'] ?? null;
-            if (!is_string($file) || !is_array($occurrences)) {
+            if (!is_string($file) || $file === '') {
                 continue;
             }
 
+            $occurrences = $document['occurrences'] ?? [];
+            if (!is_array($occurrences)) {
+                continue;
+            }
             foreach ($occurrences as $occurrence) {
                 if (!is_array($occurrence)) {
                     continue;
                 }
-                $symbol = $occurrence['symbol'] ?? null;
                 $roles = $occurrence['symbol_roles'] ?? $occurrence['symbolRoles'] ?? 0;
-                if (!is_string($symbol) || !is_numeric($roles) || (((int) $roles) & 1) !== 1 || !$this->matchesName($symbol, $name)) {
+                if (!is_int($roles) || ($roles & 1) !== 1) {
+                    continue;
+                }
+                $providerSymbol = $occurrence['symbol'] ?? null;
+                if (!is_string($providerSymbol) || !$this->matchesDefinitionSymbol($providerSymbol, $name)) {
+                    continue;
+                }
+                $range = $occurrence['range'] ?? null;
+                if (!is_array($range) || count($range) < 3) {
+                    continue;
+                }
+                $lineStart = $range[0] ?? null;
+                $lineEnd = count($range) >= 4 ? ($range[2] ?? null) : $lineStart;
+                if (!is_int($lineStart) || !is_int($lineEnd)) {
                     continue;
                 }
 
-                [$lineStart, $lineEnd] = $this->lineRange($occurrence['range'] ?? null);
-                $key = $symbol . "\0" . $file . "\0" . $lineStart . "\0" . $lineEnd;
-                $definitions[$key] = new DefinitionLocation(
-                    symbolId: $symbol,
-                    file: str_replace('\\', '/', $file),
-                    lineStart: $lineStart,
-                    lineEnd: $lineEnd,
+                $location = new DefinitionLocation(
+                    symbolId: $providerSymbol,
+                    file: $file,
+                    lineStart: $lineStart + 1,
+                    lineEnd: $lineEnd + 1,
                 );
+                $definitions[$providerSymbol . "\0" . $file . "\0" . $lineStart . "\0" . $lineEnd] = $location;
             }
         }
 
@@ -309,29 +323,10 @@ final readonly class ScipDefinitionProvider
         return array_values($definitions);
     }
 
-    private function matchesName(string $symbol, string $name): bool
+    private function matchesDefinitionSymbol(string $providerSymbol, string $name): bool
     {
-        $escaped = preg_quote($name, '/');
+        $quoted = preg_quote($name, '/');
 
-        // A SCIP child symbol contains every owner descriptor. Matching any
-        // descriptor therefore turns `function().(parameter)` into another
-        // definition of `function`. The queried descriptor must be terminal.
-        return preg_match('/(?:^|[\/ #.])' . $escaped . '(?:#|\(\)\.|\.)\z/', $symbol) === 1;
-    }
-
-    /** @return array{0: int, 1: int} */
-    private function lineRange(mixed $range): array
-    {
-        if (!is_array($range) || !array_is_list($range)) {
-            throw new RuntimeException('Invalid SCIP definition occurrence: missing range.');
-        }
-        if (count($range) === 3 && is_int($range[0])) {
-            return [$range[0] + 1, $range[0] + 1];
-        }
-        if (count($range) === 4 && is_int($range[0]) && is_int($range[2])) {
-            return [$range[0] + 1, $range[2] + 1];
-        }
-
-        throw new RuntimeException('Invalid SCIP definition occurrence range.');
+        return preg_match('/(?:^|[\/ #.])' . $quoted . '(?:#|\(\)\.|\.)\z/', $providerSymbol) === 1;
     }
 }
