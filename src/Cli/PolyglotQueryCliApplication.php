@@ -5,11 +5,8 @@ declare(strict_types=1);
 namespace voku\AgentMap\Cli;
 
 use HelgeSverre\Toon\Toon;
-use RecursiveCallbackFilterIterator;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use SplFileInfo;
 use Throwable;
+use voku\AgentMap\Evidence\DefinitionCapabilityProbe;
 use voku\AgentMap\Evidence\DefinitionEvidence;
 use voku\AgentMap\Evidence\ScipDefinitionProvider;
 use voku\AgentMap\MapArtifactPaths;
@@ -35,34 +32,14 @@ final readonly class PolyglotQueryCliApplication
             return false;
         }
 
-        if (is_file($options->index)) {
-            return false;
-        }
-
         $query = (string) $options->argument;
         if (preg_match('/\A[A-Za-z_][A-Za-z0-9_]*\z/', $query) !== 1) {
             return false;
         }
 
-        $root = rtrim($options->root, '/\\');
-        $supportedProject = is_file($root . '/package.json')
-            || is_file($root . '/tsconfig.json')
-            || is_file($root . '/jsconfig.json')
-            || is_file($root . '/pyproject.toml')
-            || is_file($root . '/setup.py')
-            || is_file($root . '/setup.cfg');
-        if (!$supportedProject) {
-            return false;
-        }
-
-        // A missing PHP map is not evidence that PHP is absent. Keep obvious PHP
-        // owner source on the existing path, but do not let fixtures such as
-        // test/fixtures/php.php claim ownership of an otherwise JavaScript project.
-        if (is_file($root . '/composer.json') || $this->containsPhpOwnerSource($root)) {
-            return false;
-        }
-
-        return true;
+        return (new DefinitionCapabilityProbe())
+            ->probe($options->root, $options->index)
+            ->routesToPolyglotDefinition();
     }
 
     /** @param list<string> $argv */
@@ -99,48 +76,6 @@ final readonly class PolyglotQueryCliApplication
         array_shift($argv);
 
         return CliOptions::parse($argv, $this->artifacts, $this->defaultRoot);
-    }
-
-    private function containsPhpOwnerSource(string $root): bool
-    {
-        if ((glob($root . '/*.php') ?: []) !== []) {
-            return true;
-        }
-
-        $skipDirectories = [
-            '.agent-map' => true,
-            '.git' => true,
-            'build' => true,
-            'coverage' => true,
-            'dist' => true,
-            'node_modules' => true,
-            'vendor' => true,
-        ];
-
-        foreach (['src', 'app', 'lib', 'packages', 'modules'] as $sourceDirectory) {
-            $path = $root . '/' . $sourceDirectory;
-            if (!is_dir($path)) {
-                continue;
-            }
-
-            $directory = new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS);
-            $filter = new RecursiveCallbackFilterIterator(
-                $directory,
-                static fn (SplFileInfo $item): bool => !$item->isDir() || !isset($skipDirectories[$item->getFilename()]),
-            );
-            $iterator = new RecursiveIteratorIterator(
-                $filter,
-                RecursiveIteratorIterator::LEAVES_ONLY,
-                RecursiveIteratorIterator::CATCH_GET_CHILD,
-            );
-            foreach ($iterator as $item) {
-                if ($item->isFile() && str_ends_with($item->getFilename(), '.php')) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     private function render(string $query, DefinitionEvidence $evidence, string $format): string
