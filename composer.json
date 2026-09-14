@@ -62,6 +62,9 @@
   "suggest": {
     "phpstan/phpstan": "Enables PHPStan-backed semantic relation analysis; without it agent-map builds structural-only maps."
   },
+  "config": {
+    "process-timeout": 900
+  },
   "scripts": {
     "post-install-cmd": "@php scripts/install-bin-proxy.php",
     "post-update-cmd": "@php scripts/install-bin-proxy.php",

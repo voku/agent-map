@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- Make missing polyglot definition providers actionable: `DefinitionEvidence` and `DefinitionCapabilityReport` project `missing_executables` (list of missing binary names) and `next_action` (`manual_setup_required`) so coding agents and callers can self-diagnose and resolve missing toolchains without string scraping (#95).
+
+### Changed
+
+- Set Composer `process-timeout` to 900 seconds so full test suites with static analysis dogfood pass without hitting the default 300s process timeout in `composer ci`.
+
 ## 0.13.0 - 2026-09-12
 
 ### Added
