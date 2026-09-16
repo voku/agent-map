@@ -111,6 +111,38 @@ final class IndexSectionReadTest extends TestCase
         self::assertEquals($first, $second);
     }
 
+    public function testCacheSizeIsBoundedByMaxCacheEntries(): void
+    {
+        $writer = new IndexWriter();
+        $files = [];
+        for ($i = 0; $i < IndexReader::MAX_CACHE_ENTRIES + 2; $i++) {
+            $f = sys_get_temp_dir() . '/agent-map-cache-test-' . $i . '-' . bin2hex(random_bytes(4)) . '.json';
+            $writer->write($this->index(), $f, 'json');
+            $files[] = $f;
+        }
+
+        IndexReader::clearCache();
+        $reader = new IndexReader();
+        foreach ($files as $file) {
+            $reader->read($file);
+        }
+
+        try {
+            self::assertSame(IndexReader::MAX_CACHE_ENTRIES, IndexReader::cacheCount());
+        } finally {
+            IndexReader::clearCache();
+            foreach ($files as $f) {
+                if (is_file($f)) {
+                    unlink($f);
+                }
+                $rel = MapArtifactPaths::relationsFileFor($f);
+                if (is_file($rel)) {
+                    unlink($rel);
+                }
+            }
+        }
+    }
+
     private function index(): AgentMapIndex
     {
         $symbol = new SymbolEntry(kind: 'class', name: 'Alpha', fqn: 'Alpha', lineStart: 3, lineEnd: 9);

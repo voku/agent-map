@@ -15,12 +15,42 @@ final class IndexReader
     /** Read size for the section scan; the largest section is read in pieces of this size. */
     private const CHUNK_BYTES = 65536;
 
+    /** Maximum number of decoded index instances to keep in memory. */
+    public const MAX_CACHE_ENTRIES = 4;
+
     /** @var array<string, AgentMapIndex> */
     private static array $indexCache = [];
 
     public static function clearCache(): void
     {
         self::$indexCache = [];
+    }
+
+    public static function cacheCount(): int
+    {
+        return count(self::$indexCache);
+    }
+
+    private static function getFromCache(string $key): ?AgentMapIndex
+    {
+        if (!isset(self::$indexCache[$key])) {
+            return null;
+        }
+
+        $index = self::$indexCache[$key];
+        unset(self::$indexCache[$key]);
+        self::$indexCache[$key] = $index;
+
+        return $index;
+    }
+
+    private static function cacheIndex(string $key, AgentMapIndex $index): void
+    {
+        if (count(self::$indexCache) >= self::MAX_CACHE_ENTRIES) {
+            $oldestKey = array_key_first(self::$indexCache);
+            unset(self::$indexCache[$oldestKey]);
+        }
+        self::$indexCache[$key] = $index;
     }
 
     /**
@@ -67,8 +97,9 @@ final class IndexReader
         $sectionsKey = $sections !== null ? implode(',', $sections) : 'all';
         $cacheKey = $file . '#' . $mtime . '#' . $size . '#' . ($loadRelations ? '1' : '0') . '#' . $relationsMtime . '#' . $relationsSize . '#' . $sectionsKey;
 
-        if (isset(self::$indexCache[$cacheKey])) {
-            return self::$indexCache[$cacheKey];
+        $cached = self::getFromCache($cacheKey);
+        if ($cached !== null) {
+            return $cached;
         }
         $content = file_get_contents($file);
         if (!is_string($content)) {
@@ -144,7 +175,7 @@ final class IndexReader
         }
 
         $index = AgentMapIndex::fromArray($data);
-        self::$indexCache[$cacheKey] = $index;
+        self::cacheIndex($cacheKey, $index);
 
         return $index;
     }
@@ -205,8 +236,9 @@ final class IndexReader
         $sectionsKey = implode(',', $sections);
         $cacheKey = $file . '#' . $mtime . '#' . $size . '#sections#' . $sectionsKey;
 
-        if (isset(self::$indexCache[$cacheKey])) {
-            return self::$indexCache[$cacheKey];
+        $cached = self::getFromCache($cacheKey);
+        if ($cached !== null) {
+            return $cached;
         }
 
         if (str_ends_with(strtolower($file), '.toon')) {
@@ -267,7 +299,7 @@ final class IndexReader
         }
 
         $index = AgentMapIndex::fromArray($data);
-        self::$indexCache[$cacheKey] = $index;
+        self::cacheIndex($cacheKey, $index);
 
         return $index;
     }
