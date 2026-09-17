@@ -4,7 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.14.0 - 2026-09-17
+
+### Added
+
+- Parallel symbol extraction in `SimplePhpParserSymbolExtractor` and `AgentMapBuilder`: uncached files are extracted concurrently across available CPU cores via `pcntl_fork` (when available) or `proc_open` child workers, dramatically reducing indexing wall-clock time.
+- `extract-worker` subcommand in `AgentMapApplication` to support multi-process batch extraction across process boundaries and environments without `pcntl`.
+
+### Changed
+
+- Use `ParserOptions::astOnly()` from upstream `voku/simple-php-code-parser` 0.22.4, restricting symbol extraction strictly to source file declarations and eliminating vendor reflection, parent class autoloading, and inherited member explosion (18x-280x extraction speedup).
 
 ### Fixed
 
