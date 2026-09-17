@@ -64,7 +64,7 @@ final readonly class CliOptions
         if (in_array($command, ['-h', '--help'], true)) {
             $command = 'help';
         }
-        $commands = ['help', 'build', 'refresh', 'query', 'file', 'stale', 'summary', 'changed', 'related', 'stats', 'scope', 'callers', 'callees', 'context', 'search-index', 'search'];
+        $commands = ['help', 'build', 'refresh', 'query', 'file', 'stale', 'summary', 'changed', 'related', 'stats', 'scope', 'callers', 'callees', 'context', 'search-index', 'search', 'extract-worker'];
         if (!in_array($command, $commands, true)) {
             throw new InvalidArgumentException('Unknown command: ' . $command);
         }

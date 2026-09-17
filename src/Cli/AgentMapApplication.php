@@ -66,6 +66,7 @@ final readonly class AgentMapApplication
                 'callers' => $this->relations($options, true),
                 'callees' => $this->relations($options, false),
                 'context' => $this->context($options),
+                'extract-worker' => $this->extractWorker(),
                 default => 1,
             };
         } catch (Throwable $throwable) {
@@ -1299,5 +1300,31 @@ final readonly class AgentMapApplication
           --max-type-definitions=10
 
         TXT;
+    }
+
+    private function extractWorker(): int
+    {
+        $raw = file_get_contents('php://stdin');
+        if (!is_string($raw) || $raw === '') {
+            return 0;
+        }
+
+        try {
+            /** @var list<string> $files */
+            $files = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+            $extractor = new \voku\AgentMap\Extract\SimplePhpParserSymbolExtractor();
+            $results = [];
+            foreach ($files as $file) {
+                $results[$file] = $extractor->extract($file);
+            }
+
+            echo serialize($results);
+
+            return 0;
+        } catch (Throwable $throwable) {
+            fwrite(STDERR, $throwable->getMessage() . "\n");
+
+            return 1;
+        }
     }
 }

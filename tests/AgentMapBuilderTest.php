@@ -254,6 +254,16 @@ final class RecordingExtractor implements SymbolExtractor
 
         return new ExtractResult($file, true);
     }
+
+    public function extractMany(array $files): array
+    {
+        $results = [];
+        foreach ($files as $file) {
+            $results[$file] = $this->extract($file);
+        }
+
+        return $results;
+    }
 }
 
 final class FailingExtractor implements SymbolExtractor
@@ -271,6 +281,16 @@ final class FailingExtractor implements SymbolExtractor
         }
 
         return new ExtractResult($file, true);
+    }
+
+    public function extractMany(array $files): array
+    {
+        $results = [];
+        foreach ($files as $file) {
+            $results[$file] = $this->extract($file);
+        }
+
+        return $results;
     }
 }
 

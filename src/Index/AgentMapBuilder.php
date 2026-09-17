@@ -98,8 +98,11 @@ final readonly class AgentMapBuilder
         // and a wide scope should not force a full re-parse each time.
         $nextCache = $cache;
 
-        $structuralFiles = [];
         $sourceHashes = [];
+        $cachedSymbols = [];
+        $uncachedRelatives = [];
+        $uncachedAbsolutes = [];
+
         foreach ($relatives as $relative) {
             $absolute = $realRoot . '/' . $relative;
             $sha256 = hash_file('sha256', $absolute);
@@ -107,24 +110,38 @@ final readonly class AgentMapBuilder
                 throw new RuntimeException('Unable to hash PHP file: ' . $relative);
             }
 
-            // Parsing dominates the non-PHPStan build time, so unchanged files come from the
-            // structural cache. Only the raw extractor output is cached; reconciled entries would
-            // carry semantic data forward that the current analysis may no longer confirm.
+            $sourceHashes[$relative] = $sha256;
             $symbols = $this->cachedSymbols($cache, $relative, $sha256);
             if ($symbols === null) {
-                $result = $this->extractor->extract($absolute);
-                if (!$result->ok) {
-                    throw new RuntimeException('Parsing failed for ' . $relative . '.' . ($result->error === null ? '' : ' ' . $result->error));
-                }
-                $symbols = $result->symbols;
+                $uncachedRelatives[] = $relative;
+                $uncachedAbsolutes[] = $absolute;
+            } else {
+                $cachedSymbols[$relative] = $symbols;
             }
+        }
+
+        if ($uncachedRelatives !== []) {
+            $extracted = $this->extractor->extractMany($uncachedAbsolutes);
+            foreach ($uncachedRelatives as $index => $relative) {
+                $absolute = $uncachedAbsolutes[$index];
+                $result = $extracted[$absolute] ?? null;
+                if ($result === null || !$result->ok) {
+                    throw new RuntimeException('Parsing failed for ' . $relative . '.' . ($result?->error === null ? '' : ' ' . $result->error));
+                }
+                $cachedSymbols[$relative] = $result->symbols;
+            }
+        }
+
+        $structuralFiles = [];
+        foreach ($relatives as $relative) {
+            $sha256 = $sourceHashes[$relative];
+            $symbols = $cachedSymbols[$relative];
 
             $nextCache[$relative] = [
                 'sha256' => $sha256,
                 'symbols' => array_map(static fn (SymbolEntry $symbol): array => $symbol->toArray(), $symbols),
             ];
 
-            $sourceHashes[$relative] = $sha256;
             $structuralFiles[] = new FileEntry(
                 path: $relative,
                 sha256: 'sha256:' . $sha256,

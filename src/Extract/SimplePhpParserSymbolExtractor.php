@@ -18,6 +18,7 @@ use voku\SimplePhpParser\Model\PHPInterface;
 use voku\SimplePhpParser\Model\PHPMethod;
 use voku\SimplePhpParser\Model\PHPParameter;
 use voku\SimplePhpParser\Parsers\Helper\ParserContainer;
+use voku\SimplePhpParser\Parsers\Helper\ParserOptions;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 /**
@@ -37,7 +38,13 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
         try {
             // Pass the already-read $code rather than $file: getPhpFiles()
             // would otherwise re-read the file itself, doubling disk I/O.
-            $container = $this->withoutApplicationAutoloaders(static fn (): ParserContainer => PhpCodeParser::getPhpFiles($code));
+            // astOnly() restricts parsing strictly to the source file text, avoiding
+            // reflection-enrichment, parent autoloading, and inherited member explosion.
+            $options = class_exists(ParserOptions::class) ? ParserOptions::astOnly() : null;
+            $container = $this->withoutApplicationAutoloaders(static fn (): ParserContainer => PhpCodeParser::getPhpFiles(
+                $code,
+                options: $options,
+            ));
         } catch (Throwable $e) {
             return new ExtractResult($file, false, [], $e->getMessage());
         }
@@ -284,5 +291,351 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
         }
 
         return $entries;
+    }
+
+    /**
+     * Threshold below which process spawning overhead outweighs concurrency benefits.
+     */
+    private const int PARALLEL_THRESHOLD = 5;
+
+    /**
+     * Maximum worker processes spawned regardless of detected CPU count.
+     */
+    private const int MAX_WORKERS = 16;
+
+    /**
+     * @param list<string> $files
+     *
+     * @return array<string, ExtractResult>
+     */
+    public function extractMany(array $files): array
+    {
+        if ($files === []) {
+            return [];
+        }
+
+        if (count($files) < self::PARALLEL_THRESHOLD) {
+            return $this->extractSequential($files);
+        }
+
+        if ($this->isPcntlParallelAvailable()) {
+            $results = $this->runPcntlParallel($files);
+            if ($results !== null) {
+                return $results;
+            }
+        } elseif ($this->isProcOpenParallelAvailable()) {
+            $results = $this->runProcOpenParallel($files);
+            if ($results !== null) {
+                return $results;
+            }
+        }
+
+        return $this->extractSequential($files);
+    }
+
+    /**
+     * @param list<string> $files
+     *
+     * @return array<string, ExtractResult>
+     */
+    private function extractSequential(array $files): array
+    {
+        $results = [];
+        foreach ($files as $file) {
+            $results[$file] = $this->extract($file);
+        }
+
+        return $results;
+    }
+
+    private function isPcntlParallelAvailable(): bool
+    {
+        return function_exists('pcntl_fork')
+            && function_exists('pcntl_waitpid')
+            && function_exists('stream_socket_pair')
+            && defined('STREAM_PF_UNIX');
+    }
+
+    /**
+     * @param list<string> $files
+     *
+     * @return array<string, ExtractResult>|null
+     */
+    private function runPcntlParallel(array $files): ?array
+    {
+        $workerCount = max(1, min(self::MAX_WORKERS, $this->detectCpuCount(), count($files)));
+        $partitions = $this->partitionFiles($files, $workerCount);
+
+        /** @var list<array{pid: int, socket: resource}> $spawned */
+        $spawned = [];
+
+        foreach ($partitions as $partition) {
+            $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+            if ($pair === false) {
+                foreach ($spawned as $w) {
+                    fclose($w['socket']);
+                }
+                $this->reapAll($spawned);
+
+                return null;
+            }
+            [$childSocket, $parentSocket] = $pair;
+
+            $pid = pcntl_fork();
+            if ($pid === -1) {
+                fclose($childSocket);
+                fclose($parentSocket);
+                foreach ($spawned as $w) {
+                    fclose($w['socket']);
+                }
+                $this->reapAll($spawned);
+
+                return null;
+            }
+
+            if ($pid === 0) {
+                fclose($parentSocket);
+                $partitionResults = [];
+                foreach ($partition as $file) {
+                    $partitionResults[$file] = $this->extract($file);
+                }
+                $payload = serialize($partitionResults);
+                fwrite($childSocket, $payload);
+                fclose($childSocket);
+                exit(0);
+            }
+
+            fclose($childSocket);
+            $spawned[] = ['pid' => $pid, 'socket' => $parentSocket];
+        }
+
+        $allResults = [];
+        foreach ($spawned as $worker) {
+            $raw = '';
+            while (!feof($worker['socket'])) {
+                $block = fread($worker['socket'], 65_536);
+                if ($block === false || $block === '') {
+                    break;
+                }
+                $raw .= $block;
+            }
+            fclose($worker['socket']);
+
+            if ($raw === '') {
+                $this->reapAll($spawned);
+
+                return null;
+            }
+
+            try {
+                /** @var array<string, ExtractResult>|false $unserialized */
+                $unserialized = unserialize($raw, ['allowed_classes' => [
+                    ExtractResult::class,
+                    SymbolEntry::class,
+                    MethodEntry::class,
+                    ParameterEntry::class,
+                ]]);
+                if (!is_array($unserialized)) {
+                    $this->reapAll($spawned);
+
+                    return null;
+                }
+                foreach ($unserialized as $file => $res) {
+                    $allResults[$file] = $res;
+                }
+            } catch (Throwable) {
+                $this->reapAll($spawned);
+
+                return null;
+            }
+        }
+
+        $this->reapAll($spawned);
+
+        return $allResults;
+    }
+
+    /**
+     * @param list<array{pid: int, socket: resource}> $spawned
+     */
+    private function reapAll(array $spawned): void
+    {
+        foreach ($spawned as $worker) {
+            $status = 0;
+            pcntl_waitpid($worker['pid'], $status);
+        }
+    }
+
+    private function isProcOpenParallelAvailable(): bool
+    {
+        return function_exists('proc_open')
+            && function_exists('proc_close')
+            && $this->resolveAgentMapBin() !== null;
+    }
+
+    private function resolveAgentMapBin(): ?string
+    {
+        $script = $_SERVER['SCRIPT_FILENAME'] ?? null;
+        $candidates = [
+            (is_string($script) && str_ends_with($script, 'agent-map')) ? $script : null,
+            realpath(__DIR__ . '/../../bin/agent-map'),
+            realpath(getcwd() . '/vendor/bin/agent-map'),
+            realpath(getcwd() . '/bin/agent-map'),
+        ];
+
+        foreach ($candidates as $candidate) {
+            if (is_string($candidate) && is_file($candidate) && is_executable($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<string> $files
+     *
+     * @return array<string, ExtractResult>|null
+     */
+    private function runProcOpenParallel(array $files): ?array
+    {
+        $bin = $this->resolveAgentMapBin();
+        if ($bin === null) {
+            return null;
+        }
+
+        $workerCount = max(1, min(self::MAX_WORKERS, $this->detectCpuCount(), count($files)));
+        $partitions = $this->partitionFiles($files, $workerCount);
+
+        /** @var list<array{proc: resource, pipes: array<int, resource>}> $processes */
+        $processes = [];
+
+        foreach ($partitions as $partition) {
+            $cmd = [PHP_BINARY, $bin, 'extract-worker'];
+            $descriptors = [
+                0 => ['pipe', 'r'],
+                1 => ['pipe', 'w'],
+                2 => ['pipe', 'w'],
+            ];
+            $proc = proc_open($cmd, $descriptors, $pipes);
+            if (!is_resource($proc)) {
+                foreach ($processes as $p) {
+                    fclose($p['pipes'][1]);
+                    fclose($p['pipes'][2]);
+                    proc_close($p['proc']);
+                }
+
+                return null;
+            }
+
+            try {
+                fwrite($pipes[0], json_encode($partition, JSON_THROW_ON_ERROR));
+            } catch (Throwable) {
+                fclose($pipes[0]);
+                fclose($pipes[1]);
+                fclose($pipes[2]);
+                proc_close($proc);
+
+                return null;
+            }
+            fclose($pipes[0]);
+
+            $processes[] = [
+                'proc' => $proc,
+                'pipes' => $pipes,
+            ];
+        }
+
+        $allResults = [];
+        foreach ($processes as $p) {
+            $stdout = stream_get_contents($p['pipes'][1]);
+            fclose($p['pipes'][1]);
+            fclose($p['pipes'][2]);
+            $status = proc_close($p['proc']);
+
+            if ($status !== 0 || !is_string($stdout) || $stdout === '') {
+                return null;
+            }
+
+            try {
+                /** @var array<string, ExtractResult>|false $unserialized */
+                $unserialized = unserialize($stdout, ['allowed_classes' => [
+                    ExtractResult::class,
+                    SymbolEntry::class,
+                    MethodEntry::class,
+                    ParameterEntry::class,
+                ]]);
+                if (!is_array($unserialized)) {
+                    return null;
+                }
+                foreach ($unserialized as $file => $res) {
+                    $allResults[$file] = $res;
+                }
+            } catch (Throwable) {
+                return null;
+            }
+        }
+
+        return $allResults;
+    }
+
+    /**
+     * @param list<string> $files
+     *
+     * @return list<list<string>>
+     */
+    private function partitionFiles(array $files, int $workers): array
+    {
+        $total = count($files);
+        if ($total === 0) {
+            return [];
+        }
+
+        $workers = max(1, min($workers, $total));
+        $baseSize = intdiv($total, $workers);
+        $remainder = $total % $workers;
+        $partitions = [];
+        $offset = 0;
+
+        for ($i = 0; $i < $workers; ++$i) {
+            $size = $baseSize + ($i < $remainder ? 1 : 0);
+            if ($size > 0) {
+                $partitions[] = array_slice($files, $offset, $size);
+            }
+            $offset += $size;
+        }
+
+        return $partitions;
+    }
+
+    private function detectCpuCount(): int
+    {
+        if (is_readable('/proc/cpuinfo')) {
+            $info = @file_get_contents('/proc/cpuinfo');
+            if (is_string($info)) {
+                $count = substr_count($info, "\nprocessor\t:");
+                if ($count > 0) {
+                    return $count;
+                }
+            }
+        }
+
+        $nproc = @shell_exec('nproc 2>/dev/null');
+        if (is_string($nproc)) {
+            $count = (int) trim($nproc);
+            if ($count > 0) {
+                return $count;
+            }
+        }
+
+        $sysctl = @shell_exec('sysctl -n hw.logicalcpu 2>/dev/null');
+        if (is_string($sysctl)) {
+            $count = (int) trim($sysctl);
+            if ($count > 0) {
+                return $count;
+            }
+        }
+
+        return 1;
     }
 }
