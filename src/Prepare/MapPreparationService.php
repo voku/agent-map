@@ -320,7 +320,7 @@ final readonly class MapPreparationService
             $command .= ' --scan=' . self::shellArgument(implode(',', $request->scanPaths));
         }
 
-        $command .= ' --format=' . $request->format;
+        $command .= ' --format=' . self::shellArgument($request->format);
 
         $backend ??= $request->backend;
         if ($backend !== 'auto') {
