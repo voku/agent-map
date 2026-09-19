@@ -75,7 +75,7 @@ implying absence.
 
 ## Requirements
 
-- PHP 8.2 or newer
+- PHP 8.3 or newer
 - Composer
 - PHPStan 2.2 only when PHPStan-backed semantic enrichment is required
 
