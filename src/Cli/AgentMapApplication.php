@@ -127,24 +127,6 @@ final readonly class AgentMapApplication
         return 0;
     }
 
-    private function semanticScope(AgentMapIndex $index, CliOptions $options): SemanticScope
-    {
-        $stored = $index->fingerprint?->semanticScope;
-        if ($stored === null) {
-            return new SemanticScope(
-                paths: $options->pathsProvided ? $options->paths : $this->indexedDirectories($index->files),
-                excludes: $options->excludes,
-                scanDirectories: $options->scanPaths,
-            );
-        }
-
-        return new SemanticScope(
-            paths: $options->pathsProvided ? $options->paths : $stored->paths,
-            excludes: $options->excludesProvided ? $options->excludes : $stored->excludes,
-            scanDirectories: $options->scanPathsProvided ? $options->scanPaths : $stored->scanDirectories,
-        );
-    }
-
     private function semanticInputsChanged(AgentMapIndex $index, CliOptions $options, SemanticScope $scope): bool
     {
         $fingerprint = $index->fingerprint;
