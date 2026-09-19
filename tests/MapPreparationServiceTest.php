@@ -13,6 +13,7 @@ use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Prepare\MapPreparationRequest;
+use voku\AgentMap\Prepare\MapPreparationException;
 use voku\AgentMap\Prepare\MapPreparationService;
 
 final class MapPreparationServiceTest extends TestCase
@@ -95,7 +96,78 @@ final class MapPreparationServiceTest extends TestCase
         self::assertNotNull($index->file('src/Bar.php'));
     }
 
+    public function testPrepareBuildsMissingMapWithinRequestedScope(): void
+    {
+        unlink($this->index);
+
+        $result = (new MapPreparationService())->prepare($this->request());
+
+        self::assertTrue($result->mutated);
+        self::assertSame(1, $result->changedFiles);
+        self::assertFileExists($this->index);
+        self::assertNotNull((new IndexReader())->read($this->index)->file('src/Foo.php'));
+    }
+
+    public function testPrepareReusesRecordedBackendWhenAutoIsRequested(): void
+    {
+        file_put_contents($this->root . '/src/Foo.php', $this->source('Foo', 'changed'));
+        $request = $this->requestWith(backend: 'auto');
+
+        $result = (new MapPreparationService())->prepare($request);
+
+        self::assertTrue($result->mutated);
+        self::assertSame('simple-php-code-parser+structural-only', $result->index->backend);
+        self::assertNotNull($result->index->file('src/Foo.php'));
+    }
+
+    public function testPrepareReportsUnreproducibleBackendWithoutReplacingTheIndex(): void
+    {
+        $index = (new IndexReader())->read($this->index);
+        (new IndexWriter())->write(new \voku\AgentMap\Index\AgentMapIndex(
+            schemaVersion: $index->schemaVersion,
+            root: $index->root,
+            backend: 'external-provider',
+            files: $index->files,
+            relations: $index->relations,
+            diagnostics: $index->diagnostics,
+            fingerprint: $index->fingerprint,
+        ), $this->index);
+        $before = (string) file_get_contents($this->index);
+
+        try {
+            (new MapPreparationService())->prepare($this->requestWith(backend: 'auto'));
+            self::fail('Expected an unreproducible backend refusal.');
+        } catch (MapPreparationException $exception) {
+            self::assertSame('backend_unavailable', $exception->reason);
+            self::assertStringContainsString('agent-map build', $exception->recoveryCommand);
+        }
+
+        self::assertSame($before, (string) file_get_contents($this->index));
+    }
+
+    public function testPrepareReportsAnInvalidMapWithoutReplacingIt(): void
+    {
+        file_put_contents($this->index, '{not a map');
+        $before = (string) file_get_contents($this->index);
+
+        try {
+            (new MapPreparationService())->prepare($this->requestWith(backend: 'auto'));
+            self::fail('Expected an invalid map refusal.');
+        } catch (MapPreparationException $exception) {
+            self::assertSame('invalid_index', $exception->reason);
+            self::assertStringContainsString('agent-map build', $exception->recoveryCommand);
+        }
+
+        self::assertSame($before, (string) file_get_contents($this->index));
+    }
+
     private function request(): MapPreparationRequest
+    {
+        return $this->requestWith();
+    }
+
+    /** @param 'auto'|'phpstan'|'structural' $backend */
+    private function requestWith(string $backend = 'structural'): MapPreparationRequest
     {
         return new MapPreparationRequest(
             root: $this->root,
@@ -108,7 +180,7 @@ final class MapPreparationServiceTest extends TestCase
             scanPathsProvided: false,
             excludes: [],
             excludesProvided: false,
-            backend: 'structural',
+            backend: $backend,
             phpStanConfig: null,
             phpStanMemoryLimit: null,
             artifacts: $this->artifacts,

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Prepare;
 
 use RuntimeException;
+use Throwable;
 use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
 use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
 use voku\AgentMap\Index\AgentMapBuilder;
@@ -22,6 +23,46 @@ final readonly class MapPreparationService
         private IndexWriter $writer = new IndexWriter(),
         private PhpFileFinder $finder = new PhpFileFinder(),
     ) {
+    }
+
+    /**
+     * Prepare the bounded map requested by a consumer.
+     *
+     * Missing maps are built from the request scope. Existing maps are refreshed
+     * with the backend they already carry when the caller leaves backend choice
+     * at `auto`. A refusal never replaces the existing artifact.
+     */
+    public function prepare(MapPreparationRequest $request): MapPreparationResult
+    {
+        if (!is_file($request->indexPath)) {
+            return $this->buildMissing($request);
+        }
+
+        try {
+            $index = $this->reader->read($request->indexPath);
+        } catch (Throwable $exception) {
+            throw new MapPreparationException(
+                reason: 'invalid_index',
+                recoveryCommand: $this->fullBuildCommand($request),
+                message: 'Cannot prepare ' . $request->indexPath . ': the existing map is unreadable. '
+                    . $exception->getMessage(),
+                previous: $exception,
+            );
+        }
+
+        $normalized = $this->requestForExistingBackend($request, $index);
+        try {
+            return $this->refresh($normalized);
+        } catch (MapPreparationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            throw new MapPreparationException(
+                reason: 'refresh_failed',
+                recoveryCommand: $this->fullBuildCommand($normalized),
+                message: 'Cannot prepare ' . $request->indexPath . ': ' . $exception->getMessage(),
+                previous: $exception,
+            );
+        }
     }
 
     /**
@@ -152,6 +193,131 @@ final readonly class MapPreparationService
             message: 'Refreshed ' . count($changed) . ' changed and dropped ' . $removed . ' removed file(s); '
                 . count($rebuilt->files) . ' file(s) indexed in ' . $request->outputPath,
         );
+    }
+
+    private function buildMissing(MapPreparationRequest $request): MapPreparationResult
+    {
+        try {
+            $structural = $request->backend === 'structural';
+            $builder = $this->builder($request);
+            $index = $builder->build(
+                $request->root,
+                $request->paths,
+                $request->excludes,
+                $structural ? null : $request->phpStanConfig,
+                $structural ? null : $request->phpStanMemoryLimit,
+                null,
+                $structural ? [] : $request->scanPaths,
+            );
+            $this->writer->write($index, $request->outputPath, $request->format);
+        } catch (Throwable $exception) {
+            throw new MapPreparationException(
+                reason: 'build_failed',
+                recoveryCommand: $this->fullBuildCommand($request),
+                message: 'Cannot prepare missing map ' . $request->outputPath . ': ' . $exception->getMessage(),
+                previous: $exception,
+            );
+        }
+
+        return new MapPreparationResult(
+            index: $index,
+            mutated: true,
+            changedFiles: count($index->files),
+            removedFiles: 0,
+            message: 'Built ' . count($index->files) . ' file(s) in ' . $request->outputPath,
+        );
+    }
+
+    private function requestForExistingBackend(
+        MapPreparationRequest $request,
+        AgentMapIndex $index,
+    ): MapPreparationRequest {
+        $backend = $request->backend;
+        if ($backend === 'auto') {
+            if (str_ends_with($index->backend, '+structural-only')) {
+                $backend = 'structural';
+            } elseif (str_ends_with($index->backend, '+phpstan')) {
+                if (!PhpStanSemanticAnalyzer::isAvailable()) {
+                    throw new MapPreparationException(
+                        reason: 'backend_unavailable',
+                        recoveryCommand: $this->fullBuildCommand($request, 'phpstan'),
+                        message: 'Cannot prepare ' . $request->indexPath . ': the recorded PHPStan backend is unavailable.',
+                    );
+                }
+                $backend = 'phpstan';
+            } else {
+                throw new MapPreparationException(
+                    reason: 'backend_unavailable',
+                    recoveryCommand: $this->fullBuildCommand($request),
+                    message: 'Cannot prepare ' . $request->indexPath . ': its backend "' . $index->backend
+                        . '" cannot be reproduced automatically.',
+                );
+            }
+        }
+
+        if ($backend === 'phpstan' && !PhpStanSemanticAnalyzer::isAvailable()) {
+            throw new MapPreparationException(
+                reason: 'backend_unavailable',
+                recoveryCommand: $this->fullBuildCommand($request),
+                message: 'Cannot prepare ' . $request->indexPath . ': PHPStan semantic capability is unavailable.',
+            );
+        }
+
+        $builder = $this->builderForBackend($backend, $request);
+        if ($builder->backend() !== $index->backend) {
+            throw new MapPreparationException(
+                reason: 'backend_mismatch',
+                recoveryCommand: $this->fullBuildCommand($request),
+                message: 'Cannot refresh ' . $request->indexPath . ': it carries backend "' . $index->backend
+                    . '" and the requested run resolves "' . $builder->backend() . '".',
+            );
+        }
+
+        return new MapPreparationRequest(
+            root: $request->root,
+            indexPath: $request->indexPath,
+            outputPath: $request->outputPath,
+            format: $request->format,
+            paths: $request->paths,
+            pathsProvided: $request->pathsProvided,
+            scanPaths: $request->scanPaths,
+            scanPathsProvided: $request->scanPathsProvided,
+            excludes: $request->excludes,
+            excludesProvided: $request->excludesProvided,
+            backend: $backend,
+            phpStanConfig: $request->phpStanConfig,
+            phpStanMemoryLimit: $request->phpStanMemoryLimit,
+            artifacts: $request->artifacts,
+        );
+    }
+
+    private function builderForBackend(string $backend, MapPreparationRequest $request): AgentMapBuilder
+    {
+        return match ($backend) {
+            'structural' => new AgentMapBuilder(
+                semanticAnalyzer: new StructuralOnlySemanticAnalyzer(),
+                artifacts: $request->artifacts,
+            ),
+            'phpstan' => new AgentMapBuilder(
+                semanticAnalyzer: new PhpStanSemanticAnalyzer($request->artifacts),
+                artifacts: $request->artifacts,
+            ),
+            default => $this->builder($request),
+        };
+    }
+
+    private function fullBuildCommand(MapPreparationRequest $request, ?string $backend = null): string
+    {
+        $command = 'agent-map build'
+            . ' --root=' . self::shellArgument($request->root)
+            . ' --paths=' . self::shellArgument(implode(',', $request->paths))
+            . ' --out=' . self::shellArgument($request->outputPath);
+        $backend ??= $request->backend;
+        if ($backend !== 'auto') {
+            $command .= ' --backend=' . $backend;
+        }
+
+        return $command;
     }
 
     private function semanticScope(AgentMapIndex $index, MapPreparationRequest $request): SemanticScope
