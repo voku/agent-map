@@ -18,6 +18,8 @@ use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Index\SemanticScope;
 use voku\AgentMap\IO\PhpFileFinder;
 use voku\AgentMap\MapArtifactPaths;
+use voku\AgentMap\Prepare\MapPreparationRequest;
+use voku\AgentMap\Prepare\MapPreparationService;
 use voku\AgentMap\Search\ChunkExtractor;
 use voku\AgentMap\Search\HybridSearch;
 use voku\AgentMap\Search\Embedding\CorpusEmbeddingProvider;
@@ -99,158 +101,36 @@ final readonly class AgentMapApplication
     }
 
     /**
-     * Rebuilds what the index no longer matches.
-     *
-     * Structural-only refresh can safely patch changed files because its facts are source-local.
-     * PHPStan-backed refresh instead rebuilds the complete current indexed scope through the
-     * structural cache and lets PHPStan's result cache decide which changed files and transitive
-     * dependents require semantic re-analysis. Carrying untouched semantic relations would make a
-     * declaration change leave stale facts in otherwise unchanged callers.
+     * Rebuilds what the index no longer matches through the typed Map owner boundary.
      */
     private function refresh(CliOptions $options): int
     {
-        $index = (new IndexReader())->read($options->index);
+        $format = match ($options->format) {
+            'json' => 'json',
+            'toon' => 'toon',
+            default => throw new RuntimeException('Map refresh requires json or toon output.'),
+        };
 
-        $structural = $options->backend === 'structural';
-        $phpStanRefresh = !$structural
-            && PhpStanSemanticAnalyzer::isAvailable()
-            && str_ends_with($index->backend, '+phpstan');
-        $semanticScope = $this->semanticScope($index, $options);
+        $result = (new MapPreparationService())->refresh(new MapPreparationRequest(
+            root: $options->root,
+            indexPath: $options->index,
+            outputPath: $options->out,
+            format: $format,
+            paths: $options->paths,
+            pathsProvided: $options->pathsProvided,
+            scanPaths: $options->scanPaths,
+            scanPathsProvided: $options->scanPathsProvided,
+            excludes: $options->excludes,
+            excludesProvided: $options->excludesProvided,
+            backend: $options->backend,
+            phpStanConfig: $options->phpStanConfig,
+            phpStanMemoryLimit: $options->phpStanMemoryLimit,
+            artifacts: $options->artifacts,
+        ));
 
-        $indexed = [];
-        foreach ($index->files as $file) {
-            $indexed[$file->path] = true;
-        }
-
-        $changed = [];
-        $removed = 0;
-        foreach ($index->staleEntries() as $entry) {
-            if ($entry['reason'] === 'missing') {
-                ++$removed;
-                continue;
-            }
-
-            $changed[$entry['path']] = true;
-        }
-
-        // Without an explicit scope, look for new files exactly where the index already reaches:
-        // walking the whole root would drag vendor directories into every refresh, and widening to
-        // the top-level directory would pull in siblings the original build deliberately left out.
-        $searchPaths = $phpStanRefresh
-            ? $semanticScope->paths
-            : ($options->paths === ['.'] ? $this->indexedDirectories($index->files) : $options->paths);
-        $searchExcludes = $phpStanRefresh ? $semanticScope->excludes : $options->excludes;
-        foreach ((new PhpFileFinder())->find($options->root, $searchPaths, $searchExcludes) as $relative) {
-            if (!isset($indexed[$relative])) {
-                $changed[$relative] = true;
-            }
-        }
-
-        $semanticInputsChanged = $phpStanRefresh && $this->semanticInputsChanged($index, $options, $semanticScope);
-        if ($changed === [] && $removed === 0 && !$semanticInputsChanged) {
-            echo 'Index is up to date: ' . $options->index . "\n";
-
-            return 0;
-        }
-
-        if ($changed === [] && !$phpStanRefresh) {
-            // Only removals, and no semantic facts to invalidate. Passing an empty
-            // path list to build() makes the file finder fall back to walking the
-            // root and re-analysing everything, so deleting one file cost a full
-            // rebuild. Structural facts are source-local, so dropping the missing
-            // entries is the whole job.
-            //
-            // A PHPStan-backed index deliberately does not take this shortcut: a
-            // deleted declaration also invalidates its dependents, and those live
-            // in files whose own hash never moved.
-            $missing = [];
-            foreach ($index->staleEntries() as $entry) {
-                if ($entry['reason'] === 'missing') {
-                    $missing[$entry['path']] = true;
-                }
-            }
-            $pruned = new AgentMapIndex(
-                schemaVersion: $index->schemaVersion,
-                root: $index->root,
-                backend: $index->backend,
-                files: array_values(array_filter(
-                    $index->files,
-                    static fn ($file): bool => !isset($missing[$file->path]),
-                )),
-                relations: array_values(array_filter(
-                    $index->relations,
-                    static fn ($relation): bool => !isset($missing[$relation->file]),
-                )),
-                diagnostics: array_values(array_filter(
-                    $index->diagnostics,
-                    static fn ($diagnostic): bool => $diagnostic->file === null || !isset($missing[$diagnostic->file]),
-                )),
-                fingerprint: $index->fingerprint,
-            );
-            (new IndexWriter())->write($pruned, $options->out, $options->format);
-            echo 'Refreshed 0 changed and dropped ' . $removed . ' removed file(s); ' . count($pruned->files) . ' file(s) indexed in ' . $options->out . "\n";
-
-            return 0;
-        }
-
-        $builder = $this->builder($options);
-        if (!$phpStanRefresh && $index->backend !== $builder->backend()) {
-            // The merge below would refuse, and its message names the remedy in
-            // prose while this method holds every argument the remedy needs.
-            // A host that follows the prescribed command literally otherwise
-            // loops: refresh -> refusal -> refresh.
-            // The command has to rebuild *this* index, not something adjacent to
-            // it. The refresh search scope widens a nested coverage such as
-            // `src/Feature` to its first segment, so the repair takes the scope
-            // the index recorded; and a build with no --backend resolves `auto`,
-            // which would quietly move a structural-only index onto PHPStan.
-            $structuralOnly = str_ends_with($index->backend, '+structural-only');
-            throw new RuntimeException(
-                'Cannot refresh ' . $options->index . ': it carries backend "' . $index->backend
-                . '" and this run resolves "' . $builder->backend()
-                . '". An incremental refresh cannot merge two semantic backends. Run a full build:'
-                . "\n  agent-map build"
-                . ' --root=' . self::shellArgument($options->root)
-                . ' --paths=' . self::shellArgument(implode(',', $semanticScope->paths))
-                . ' --out=' . self::shellArgument($options->out)
-                . ($structuralOnly ? ' --backend=structural' : '')
-                . ($structuralOnly
-                    ? ''
-                    : "\nThe rebuilt index will carry \"" . $builder->backend() . '", not "' . $index->backend . '".'),
-            );
-        }
-
-        $rebuilt = $builder->build(
-            $options->root,
-            $phpStanRefresh ? $semanticScope->paths : array_keys($changed),
-            $phpStanRefresh ? $semanticScope->excludes : $options->excludes,
-            $structural ? null : $options->phpStanConfig,
-            $structural ? null : $options->phpStanMemoryLimit,
-            $phpStanRefresh ? null : $index,
-            $structural ? [] : ($phpStanRefresh ? $semanticScope->scanDirectories : $options->scanPaths),
-        );
-        (new IndexWriter())->write($rebuilt, $options->out, $options->format);
-        echo 'Refreshed ' . count($changed) . ' changed and dropped ' . $removed . ' removed file(s); ' . count($rebuilt->files) . ' file(s) indexed in ' . $options->out . "\n";
+        echo $result->message . "\n";
 
         return 0;
-    }
-
-    private function semanticScope(AgentMapIndex $index, CliOptions $options): SemanticScope
-    {
-        $stored = $index->fingerprint?->semanticScope;
-        if ($stored === null) {
-            return new SemanticScope(
-                paths: $options->pathsProvided ? $options->paths : $this->indexedDirectories($index->files),
-                excludes: $options->excludes,
-                scanDirectories: $options->scanPaths,
-            );
-        }
-
-        return new SemanticScope(
-            paths: $options->pathsProvided ? $options->paths : $stored->paths,
-            excludes: $options->excludesProvided ? $options->excludes : $stored->excludes,
-            scanDirectories: $options->scanPathsProvided ? $options->scanPaths : $stored->scanDirectories,
-        );
     }
 
     private function semanticInputsChanged(AgentMapIndex $index, CliOptions $options, SemanticScope $scope): bool
