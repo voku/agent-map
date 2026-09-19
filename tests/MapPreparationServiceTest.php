@@ -161,6 +161,48 @@ final class MapPreparationServiceTest extends TestCase
         self::assertSame($before, (string) file_get_contents($this->index));
     }
 
+    public function testRecoveryCommandReproducesBoundedRequestScope(): void
+    {
+        file_put_contents($this->index, '{not a map');
+
+        $request = new MapPreparationRequest(
+            root: $this->root,
+            indexPath: $this->index,
+            outputPath: $this->index,
+            format: 'toon',
+            paths: ['src', 'packages/one'],
+            pathsProvided: true,
+            scanPaths: ['bootstrap', 'generated code'],
+            scanPathsProvided: true,
+            excludes: ['vendor', 'tests/fixtures with space'],
+            excludesProvided: true,
+            backend: 'phpstan',
+            phpStanConfig: $this->root . '/phpstan.neon',
+            phpStanMemoryLimit: '3G',
+            artifacts: $this->artifacts,
+        );
+
+        try {
+            (new MapPreparationService())->prepare($request);
+            self::fail('Expected an invalid map refusal.');
+        } catch (MapPreparationException $exception) {
+            self::assertSame(
+                'agent-map build'
+                . ' --root=' . $this->root
+                . ' --paths=src,packages/one'
+                . ' --out=' . $this->index
+                . ' --exclude=vendor'
+                . " --exclude='tests/fixtures with space'"
+                . " --scan='bootstrap,generated code'"
+                . ' --format=toon'
+                . ' --backend=phpstan'
+                . ' --phpstan-config=' . $this->root . '/phpstan.neon'
+                . ' --phpstan-memory-limit=3G',
+                $exception->recoveryCommand,
+            );
+        }
+    }
+
     private function request(): MapPreparationRequest
     {
         return $this->requestWith();
