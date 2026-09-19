@@ -52,7 +52,7 @@
     "helgesverre/toon": "^3.1",
     "nikic/php-parser": "^5.0",
     "voku/agent-graph": "^0.2.0",
-    "voku/simple-php-code-parser": "^0.22",
+    "voku/simple-php-code-parser": "^0.22.4",
     "voku/stop-words": "^2.0"
   },
   "require-dev": {
