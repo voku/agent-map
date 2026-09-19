@@ -296,12 +296,12 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
     /**
      * Threshold below which process spawning overhead outweighs concurrency benefits.
      */
-    private const int PARALLEL_THRESHOLD = 5;
+    private const PARALLEL_THRESHOLD = 5;
 
     /**
      * Maximum worker processes spawned regardless of detected CPU count.
      */
-    private const int MAX_WORKERS = 16;
+    private const MAX_WORKERS = 16;
 
     /**
      * @param list<string> $files
