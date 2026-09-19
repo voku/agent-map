@@ -312,9 +312,25 @@ final readonly class MapPreparationService
             . ' --root=' . self::shellArgument($request->root)
             . ' --paths=' . self::shellArgument(implode(',', $request->paths))
             . ' --out=' . self::shellArgument($request->outputPath);
+
+        foreach ($request->excludes as $exclude) {
+            $command .= ' --exclude=' . self::shellArgument($exclude);
+        }
+        if ($request->scanPaths !== []) {
+            $command .= ' --scan=' . self::shellArgument(implode(',', $request->scanPaths));
+        }
+
+        $command .= ' --format=' . self::shellArgument($request->format);
+
         $backend ??= $request->backend;
         if ($backend !== 'auto') {
             $command .= ' --backend=' . $backend;
+        }
+        if ($request->phpStanConfig !== null) {
+            $command .= ' --phpstan-config=' . self::shellArgument($request->phpStanConfig);
+        }
+        if ($request->phpStanMemoryLimit !== null) {
+            $command .= ' --phpstan-memory-limit=' . self::shellArgument($request->phpStanMemoryLimit);
         }
 
         return $command;
