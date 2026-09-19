@@ -240,7 +240,7 @@ final class ScopeAstVisitor extends NodeVisitorAbstract
     }
 
     /**
-     * @param array<Node\Arg|Node\VariadicPlaceholder> $args
+     * @param array<Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args
      */
     private function maybeTemplate(string $calledName, array $args, int $line): void
     {
@@ -281,7 +281,7 @@ final class ScopeAstVisitor extends NodeVisitorAbstract
     }
 
     /**
-     * @param array<Node\Arg|Node\VariadicPlaceholder> $args
+     * @param array<Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder> $args
      */
     private function maybeTemplateFromArgs(array $args, int $line, ?string $caller = null): void
     {
