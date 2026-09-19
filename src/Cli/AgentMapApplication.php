@@ -105,11 +105,17 @@ final readonly class AgentMapApplication
      */
     private function refresh(CliOptions $options): int
     {
+        $format = match ($options->format) {
+            'json' => 'json',
+            'toon' => 'toon',
+            default => throw new RuntimeException('Map refresh requires json or toon output.'),
+        };
+
         $result = (new MapPreparationService())->refresh(new MapPreparationRequest(
             root: $options->root,
             indexPath: $options->index,
             outputPath: $options->out,
-            format: $options->format,
+            format: $format,
             paths: $options->paths,
             pathsProvided: $options->pathsProvided,
             scanPaths: $options->scanPaths,
