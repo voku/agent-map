@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Changed
+
+- Raise the runtime floor from PHP 8.2 to PHP 8.3. The first-party agent-* consumers already require PHP ^8.3, so the pre-1.0 Map line now uses the same baseline instead of carrying a compatibility-only syntax restriction.
+- Require `voku/simple-php-code-parser ^0.22.4`, the first release that provides the `ParserOptions::astOnly()` API used by Map's structural extractor.
+
 ## 0.14.0 - 2026-09-17
 
 ### Added
