@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.16.1 - 2026-09-19
+
+### Fixed
+
+- Preserve the bounded preparation request in owner-produced recovery commands, including excludes, scan paths, output format, backend, and PHPStan configuration, so a fail-closed full rebuild cannot silently widen or otherwise change the requested observation scope.
+
 ## 0.16.0 - 2026-09-19
 
 ### Added
