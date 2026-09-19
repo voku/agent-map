@@ -47,7 +47,7 @@
     }
   },
   "require": {
-    "php": ">=8.2",
+    "php": "^8.3",
     "composer-runtime-api": "^2.2",
     "helgesverre/toon": "^3.1",
     "nikic/php-parser": "^5.0",
