@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.16.0 - 2026-09-19
+
+### Added
+
+- Add `MapPreparationService::prepare()` for bounded consumer preparation: it builds a missing map, refreshes an existing map with its recorded reproducible backend, and returns a typed `MapPreparationException` with an executable recovery command when the state cannot be prepared safely.
+
 ## 0.15.0 - 2026-09-19
 
 ### Added
