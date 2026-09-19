@@ -63,7 +63,7 @@ Three consequences follow directly:
 
 ## Version boundary
 
-`agent-map` requires PHP `>=8.2`. `Pdo\Sqlite::loadExtension()` exists only from 8.4, so the
+`agent-map` requires PHP `^8.3`. `Pdo\Sqlite::loadExtension()` exists only from 8.4, so the
 adapter targets `SQLite3::loadExtension()` across all supported versions and may use the PDO variant
 only as an 8.4+ detail. `PDO::loadExtension()` does not exist and must not appear in the code.
 
