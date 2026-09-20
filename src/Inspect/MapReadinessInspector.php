@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace voku\AgentMap\Inspect;
 
 use Throwable;
-use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Search\SearchReadinessInspector;
@@ -49,7 +48,7 @@ final readonly class MapReadinessInspector
         $searchState = 'unavailable';
         $searchSnapshot = null;
         $searchFailure = null;
-        if ($mapState === 'ready' && $map instanceof AgentMapIndex) {
+        if ($mapState === 'ready') {
             $search = (new SearchReadinessInspector())->inspect($map, $mapPath, $searchPath);
             $searchState = $search->state;
             $searchSnapshot = $search->searchSnapshot;
