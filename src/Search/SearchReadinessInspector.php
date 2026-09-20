@@ -95,6 +95,7 @@ final readonly class SearchReadinessInspector
                 searchSnapshot: null,
                 reason: 'search_snapshot_missing',
                 message: 'Search index does not record the Map snapshot it was built from.',
+                recoveryCommand: $this->recoveryCommand('refresh', $index, $indexPath, $databasePath),
             );
         }
 
