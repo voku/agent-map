@@ -141,7 +141,7 @@ final class SearchReadinessInspectorTest extends TestCase
 
         self::assertSame('invalid', $readiness->state);
         self::assertSame('search_index_unreadable', $readiness->reason);
-        self::assertStringStartsWith('agent-map search-index build ', (string) $readiness->recoveryCommand);
+        self::assertNull($readiness->recoveryCommand);
         self::assertSame($before, hash_file('sha256', $this->searchPath));
     }
 
@@ -168,8 +168,9 @@ final class SearchReadinessInspectorTest extends TestCase
         return $map;
     }
 
-    private function writeSearchDatabase(string $snapshot, string $chunkPolicy = (string) ChunkPolicy::VERSION): void
+    private function writeSearchDatabase(string $snapshot, ?string $chunkPolicy = null): void
     {
+        $chunkPolicy ??= (string) ChunkPolicy::VERSION;
         $directory = dirname($this->searchPath);
         if (!is_dir($directory)) {
             mkdir($directory, 0o775, true);

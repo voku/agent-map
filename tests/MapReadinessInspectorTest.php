@@ -193,8 +193,9 @@ final class MapReadinessInspectorTest extends TestCase
         file_put_contents($this->artifacts->indexJson(), $contents);
     }
 
-    private function writeSearchDatabase(?string $snapshot, string $chunkPolicy = (string) ChunkPolicy::VERSION): void
+    private function writeSearchDatabase(?string $snapshot, ?string $chunkPolicy = null): void
     {
+        $chunkPolicy ??= (string) ChunkPolicy::VERSION;
         $directory = dirname($this->artifacts->searchDatabase());
         if (!is_dir($directory)) {
             mkdir($directory, 0o775, true);
