@@ -193,7 +193,7 @@ final class MapReadinessInspectorTest extends TestCase
         file_put_contents($this->artifacts->indexJson(), $contents);
     }
 
-    private function writeSearchDatabase(?string $snapshot, ?string $chunkPolicy = null): void
+    private function writeSearchDatabase(?string $snapshot, ?string $chunkPolicy = null, int $chunkCount = 1): void
     {
         $chunkPolicy ??= (string) ChunkPolicy::VERSION;
         $directory = dirname($this->artifacts->searchDatabase());
@@ -207,6 +207,10 @@ final class MapReadinessInspectorTest extends TestCase
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
         );
         $pdo->exec('CREATE TABLE search_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+        $pdo->exec('CREATE TABLE code_chunks (rowid INTEGER PRIMARY KEY)');
+        for ($i = 0; $i < $chunkCount; ++$i) {
+            $pdo->exec('INSERT INTO code_chunks DEFAULT VALUES');
+        }
         $statement = $pdo->prepare('INSERT INTO search_meta (key, value) VALUES (:key, :value)');
         $statement->execute(['key' => 'chunk_policy_version', 'value' => $chunkPolicy]);
         if ($snapshot !== null) {

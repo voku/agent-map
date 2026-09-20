@@ -74,7 +74,7 @@ final readonly class SearchReadinessInspector
         }
 
         try {
-            $metadata = $this->readMetadata($databasePath);
+            $searchState = $this->readState($databasePath);
         } catch (RuntimeException $exception) {
             return new SearchReadiness(
                 state: 'invalid',
@@ -86,6 +86,8 @@ final readonly class SearchReadinessInspector
             );
         }
 
+        $metadata = $searchState['metadata'];
+        $chunkCount = $searchState['chunk_count'];
         $searchSnapshot = $metadata['map_snapshot'] ?? null;
         if ($searchSnapshot === null || $searchSnapshot === '') {
             return new SearchReadiness(
@@ -123,6 +125,18 @@ final readonly class SearchReadinessInspector
             );
         }
 
+        if ($chunkCount === 0 && $index->files !== []) {
+            return new SearchReadiness(
+                state: 'stale',
+                databasePath: $databasePath,
+                mapSnapshot: $mapSnapshot,
+                searchSnapshot: $searchSnapshot,
+                reason: 'search_index_empty',
+                message: 'Search index contains no chunks for a non-empty Map.',
+                recoveryCommand: $this->recoveryCommand('refresh', $index, $indexPath, $databasePath),
+            );
+        }
+
         return new SearchReadiness(
             state: 'ready',
             databasePath: $databasePath,
@@ -131,8 +145,8 @@ final readonly class SearchReadinessInspector
         );
     }
 
-    /** @return array<string, string> */
-    private function readMetadata(string $databasePath): array
+    /** @return array{metadata: array<string, string>, chunk_count: int} */
+    private function readState(string $databasePath): array
     {
         try {
             $pdo = $this->openReadOnly($databasePath);
@@ -140,7 +154,7 @@ final readonly class SearchReadinessInspector
                 "SELECT key, value FROM search_meta WHERE key IN ('map_snapshot', 'chunk_policy_version')",
             );
             if ($statement === false) {
-                return [];
+                return ['metadata' => [], 'chunk_count' => 0];
             }
             $metadata = [];
             foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -150,7 +164,10 @@ final readonly class SearchReadinessInspector
                 $metadata[$row['key']] = $row['value'];
             }
 
-            return $metadata;
+            $countStatement = $pdo->query('SELECT COUNT(*) FROM code_chunks');
+            $chunkCount = $countStatement === false ? 0 : (int) $countStatement->fetchColumn();
+
+            return ['metadata' => $metadata, 'chunk_count' => $chunkCount];
         } catch (PDOException $exception) {
             throw new RuntimeException(
                 'Unable to inspect Search index: ' . $databasePath . ' (' . $exception->getMessage() . ')',

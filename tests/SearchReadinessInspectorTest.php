@@ -100,6 +100,18 @@ final class SearchReadinessInspectorTest extends TestCase
         self::assertStringStartsWith('agent-map search-index refresh ', (string) $readiness->recoveryCommand);
     }
 
+    public function testEmptySearchForNonEmptyMapIsStaleEvenWhenMetadataMatches(): void
+    {
+        $map = $this->writeMap('sha256:current');
+        $this->writeSearchDatabase('sha256:current', chunkCount: 0);
+
+        $readiness = (new SearchReadinessInspector())->inspect($map, $this->mapPath, $this->searchPath);
+
+        self::assertSame('stale', $readiness->state);
+        self::assertSame('search_index_empty', $readiness->reason);
+        self::assertStringStartsWith('agent-map search-index refresh ', (string) $readiness->recoveryCommand);
+    }
+
     public function testFingerprintlessMapNeverTreatsSha256NoneAsCurrentnessProof(): void
     {
         $map = $this->writeMap(null);
@@ -168,7 +180,7 @@ final class SearchReadinessInspectorTest extends TestCase
         return $map;
     }
 
-    private function writeSearchDatabase(string $snapshot, ?string $chunkPolicy = null): void
+    private function writeSearchDatabase(string $snapshot, ?string $chunkPolicy = null, int $chunkCount = 1): void
     {
         $chunkPolicy ??= (string) ChunkPolicy::VERSION;
         $directory = dirname($this->searchPath);
@@ -182,6 +194,10 @@ final class SearchReadinessInspectorTest extends TestCase
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
         );
         $pdo->exec('CREATE TABLE search_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+        $pdo->exec('CREATE TABLE code_chunks (rowid INTEGER PRIMARY KEY)');
+        for ($i = 0; $i < $chunkCount; ++$i) {
+            $pdo->exec('INSERT INTO code_chunks DEFAULT VALUES');
+        }
         $statement = $pdo->prepare('INSERT INTO search_meta (key, value) VALUES (:key, :value)');
         $statement->execute(['key' => 'map_snapshot', 'value' => $snapshot]);
         $statement->execute(['key' => 'chunk_policy_version', 'value' => $chunkPolicy]);
