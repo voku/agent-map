@@ -9,6 +9,7 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
 use voku\AgentMap\Index\AgentMapBuilder;
+use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\MapArtifactPaths;
@@ -137,6 +138,64 @@ final class SearchMaintenanceServiceTest extends TestCase
 
         self::assertSame('refreshed', $result->state);
         self::assertSame((string) ChunkPolicy::VERSION, $store->meta('chunk_policy_version'));
+    }
+
+    public function testRemovedDuplicateClaimantIsPrunedBeforeChangedReplacement(): void
+    {
+        file_put_contents($this->root . '/src/A.php', $this->source('Duplicate', 'old'));
+        file_put_contents($this->root . '/src/B.php', $this->source('Duplicate', 'old'));
+
+        $builder = new AgentMapBuilder(
+            semanticAnalyzer: new StructuralOnlySemanticAnalyzer(),
+            artifacts: $this->artifacts,
+        );
+        (new IndexWriter())->write($builder->build($this->root, ['src'], []), $this->index);
+        $this->seedSearch((new IndexReader())->read($this->index));
+
+        unlink($this->root . '/src/A.php');
+        file_put_contents($this->root . '/src/B.php', $this->source('Duplicate', 'changed'));
+
+        $prepared = (new MapPreparationService())->refresh($this->request());
+        $result = (new SearchMaintenanceService())->refreshIfPresent(
+            new SearchMaintenanceRequest($prepared->index, $this->artifacts),
+        );
+
+        self::assertSame('refreshed', $result->state);
+        self::assertSame(1, $result->prunedFiles);
+
+        $matches = (new SearchIndexStore($this->artifacts->searchDatabase()))->searchLexical('changed', 10);
+        self::assertNotSame([], $matches);
+        self::assertSame('src/B.php', $matches[0]['file_path']);
+    }
+
+    public function testFingerprintlessMapNeverUsesSnapshotShortcut(): void
+    {
+        $before = (new IndexReader())->read($this->index);
+        $this->seedSearch($before);
+        file_put_contents($this->root . '/src/Foo.php', $this->source('Foo', 'changed'));
+
+        $prepared = (new MapPreparationService())->refresh($this->request());
+        $withoutFingerprint = new AgentMapIndex(
+            schemaVersion: $prepared->index->schemaVersion,
+            root: $prepared->index->root,
+            backend: $prepared->index->backend,
+            files: $prepared->index->files,
+            relations: $prepared->index->relations,
+            diagnostics: $prepared->index->diagnostics,
+            fingerprint: null,
+            localBindings: $prepared->index->localBindings,
+            localExits: $prepared->index->localExits,
+        );
+
+        $store = new SearchIndexStore($this->artifacts->searchDatabase());
+        $store->setMeta('map_snapshot', 'sha256:none');
+
+        $result = (new SearchMaintenanceService())->refreshIfPresent(
+            new SearchMaintenanceRequest($withoutFingerprint, $this->artifacts),
+        );
+
+        self::assertSame('refreshed', $result->state);
+        self::assertNotSame([], $store->searchLexical('changed', 10));
     }
 
     private function request(): MapPreparationRequest
