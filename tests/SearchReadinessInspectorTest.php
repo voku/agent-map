@@ -138,6 +138,21 @@ final class SearchReadinessInspectorTest extends TestCase
         self::assertNull($readiness->recoveryCommand);
     }
 
+    public function testMissingSnapshotMetadataIsInvalidButRefreshableWithoutMutation(): void
+    {
+        $map = $this->writeMap('sha256:current');
+        $this->writeSearchDatabase(null);
+        $before = hash_file('sha256', $this->searchPath);
+        self::assertIsString($before);
+
+        $readiness = (new SearchReadinessInspector())->inspect($map, $this->mapPath, $this->searchPath);
+
+        self::assertSame('invalid', $readiness->state);
+        self::assertSame('search_snapshot_missing', $readiness->reason);
+        self::assertStringStartsWith('agent-map search-index refresh ', (string) $readiness->recoveryCommand);
+        self::assertSame($before, hash_file('sha256', $this->searchPath));
+    }
+
     public function testCorruptDatabaseIsInvalidAndDoesNotGetMigrated(): void
     {
         $map = $this->writeMap('sha256:current');
@@ -180,7 +195,7 @@ final class SearchReadinessInspectorTest extends TestCase
         return $map;
     }
 
-    private function writeSearchDatabase(string $snapshot, ?string $chunkPolicy = null, int $chunkCount = 1): void
+    private function writeSearchDatabase(?string $snapshot, ?string $chunkPolicy = null, int $chunkCount = 1): void
     {
         $chunkPolicy ??= (string) ChunkPolicy::VERSION;
         $directory = dirname($this->searchPath);
@@ -199,7 +214,9 @@ final class SearchReadinessInspectorTest extends TestCase
             $pdo->exec('INSERT INTO code_chunks DEFAULT VALUES');
         }
         $statement = $pdo->prepare('INSERT INTO search_meta (key, value) VALUES (:key, :value)');
-        $statement->execute(['key' => 'map_snapshot', 'value' => $snapshot]);
+        if ($snapshot !== null) {
+            $statement->execute(['key' => 'map_snapshot', 'value' => $snapshot]);
+        }
         $statement->execute(['key' => 'chunk_policy_version', 'value' => $chunkPolicy]);
     }
 
