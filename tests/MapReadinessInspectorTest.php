@@ -14,6 +14,7 @@ use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Inspect\MapReadinessInspector;
 use voku\AgentMap\MapArtifactPaths;
+use voku\AgentMap\Search\ChunkPolicy;
 
 final class MapReadinessInspectorTest extends TestCase
 {
@@ -88,7 +89,7 @@ final class MapReadinessInspectorTest extends TestCase
     public function testFreshMapWithoutFingerprintKeepsStructuralUseButNotRankedSearch(): void
     {
         $this->writeMap(null);
-        $this->writeSearchDatabase('sha256:anything');
+        $this->writeSearchDatabase('sha256:none');
 
         $readiness = (new MapReadinessInspector())->inspect($this->artifacts);
 
@@ -120,6 +121,18 @@ final class MapReadinessInspectorTest extends TestCase
 
         self::assertSame('stale', $readiness->searchState);
         self::assertSame('sha256:older', $readiness->searchSnapshot);
+        self::assertFalse($readiness->rankedSearchReady());
+    }
+
+    public function testSearchWithOldChunkPolicyIsStaleEvenWhenSnapshotMatches(): void
+    {
+        $this->writeMap('sha256:current');
+        $this->writeSearchDatabase('sha256:current', '0');
+
+        $readiness = (new MapReadinessInspector())->inspect($this->artifacts);
+
+        self::assertSame('stale', $readiness->searchState);
+        self::assertSame('sha256:current', $readiness->searchSnapshot);
         self::assertFalse($readiness->rankedSearchReady());
     }
 
@@ -180,8 +193,9 @@ final class MapReadinessInspectorTest extends TestCase
         file_put_contents($this->artifacts->indexJson(), $contents);
     }
 
-    private function writeSearchDatabase(?string $snapshot): void
+    private function writeSearchDatabase(?string $snapshot, ?string $chunkPolicy = null, int $chunkCount = 1): void
     {
+        $chunkPolicy ??= (string) ChunkPolicy::VERSION;
         $directory = dirname($this->artifacts->searchDatabase());
         if (!is_dir($directory)) {
             mkdir($directory, 0o775, true);
@@ -193,8 +207,13 @@ final class MapReadinessInspectorTest extends TestCase
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
         );
         $pdo->exec('CREATE TABLE search_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+        $pdo->exec('CREATE TABLE code_chunks (rowid INTEGER PRIMARY KEY)');
+        for ($i = 0; $i < $chunkCount; ++$i) {
+            $pdo->exec('INSERT INTO code_chunks DEFAULT VALUES');
+        }
+        $statement = $pdo->prepare('INSERT INTO search_meta (key, value) VALUES (:key, :value)');
+        $statement->execute(['key' => 'chunk_policy_version', 'value' => $chunkPolicy]);
         if ($snapshot !== null) {
-            $statement = $pdo->prepare('INSERT INTO search_meta (key, value) VALUES (:key, :value)');
             $statement->execute(['key' => 'map_snapshot', 'value' => $snapshot]);
         }
     }
