@@ -124,6 +124,21 @@ final class SearchMaintenanceServiceTest extends TestCase
         self::assertSame([], (new SearchIndexStore($this->artifacts->searchDatabase()))->searchLexical('Dropped', 10));
     }
 
+    public function testChangedChunkPolicyForcesReconciliationEvenWhenSnapshotMatches(): void
+    {
+        $index = (new IndexReader())->read($this->index);
+        $this->seedSearch($index);
+        $store = new SearchIndexStore($this->artifacts->searchDatabase());
+        $store->setMeta('chunk_policy_version', '0');
+
+        $result = (new SearchMaintenanceService())->refreshIfPresent(
+            new SearchMaintenanceRequest($index, $this->artifacts),
+        );
+
+        self::assertSame('refreshed', $result->state);
+        self::assertSame((string) ChunkPolicy::VERSION, $store->meta('chunk_policy_version'));
+    }
+
     private function request(): MapPreparationRequest
     {
         return new MapPreparationRequest(

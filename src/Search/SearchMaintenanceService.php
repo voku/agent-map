@@ -61,21 +61,25 @@ final readonly class SearchMaintenanceService
             $changedPaths = $this->changedPaths($request->index, $store, $mapSnapshot);
             $skippedPaths = [];
             $skippedChunks = 0;
+            $mapPaths = array_map(
+                static fn ($file): string => $file->path,
+                $request->index->files,
+            );
 
             if ($changedPaths !== []) {
                 $extractor = new ChunkExtractor();
                 $chunks = $extractor->extract($request->index, $changedPaths);
                 $skippedPaths = $extractor->skippedPaths();
-                $skippedChunks = $store->replaceChunks($chunks, $changedPaths);
+            } else {
+                $chunks = [];
             }
 
             // A removed Map file is not present in changedPaths. The current Map
-            // remains the authority on which Search paths are still valid.
-            $mapPaths = array_map(
-                static fn ($file): string => $file->path,
-                $request->index->files,
-            );
-            $prunedFiles = $store->pruneMissingPaths($mapPaths);
+            // remains the authority on which Search paths are still valid. Both
+            // operations commit together; the snapshot is advanced only below.
+            $reconciliation = $store->reconcileChunks($chunks, $changedPaths, $mapPaths);
+            $prunedFiles = $reconciliation['prunedFiles'];
+            $skippedChunks = $reconciliation['skippedChunks'];
 
             // Do not claim currentness when source material changed between Map
             // preparation and extraction. The next owner retry can reconcile it.
@@ -128,8 +132,20 @@ final readonly class SearchMaintenanceService
      */
     private function changedPaths(AgentMapIndex $index, SearchIndexStore $store, string $mapSnapshot): array
     {
-        if ($store->meta('map_snapshot') === $mapSnapshot && $store->chunkCount() > 0) {
+        $chunkPolicyCurrent = $store->meta('chunk_policy_version') === (string) ChunkPolicy::VERSION;
+        if ($index->fingerprint !== null
+            && $chunkPolicyCurrent
+            && $store->meta('map_snapshot') === $mapSnapshot
+            && $store->chunkCount() > 0
+        ) {
             return [];
+        }
+
+        if ($index->fingerprint === null || !$chunkPolicyCurrent) {
+            return array_map(
+                static fn ($file): string => $file->path,
+                $index->files,
+            );
         }
 
         $indexedHashes = $store->sourceHashesByPath();

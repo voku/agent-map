@@ -339,77 +339,7 @@ final class SearchIndexStore
         $this->pdo->beginTransaction();
 
         try {
-            if ($replacedPaths === null) {
-                $this->deleteWhere('1 = 1', []);
-            } else {
-                foreach ($replacedPaths as $path) {
-                    $this->deleteWhere('file_path = :path', ['path' => $path]);
-                }
-            }
-
-            $insert = $this->pdo->prepare(
-                'INSERT INTO code_chunks
-                    (chunk_id, symbol_id, file_path, symbol_name, chunk_kind, start_line, end_line,
-                     source_sha256, content_sha256, signature, content)
-                 VALUES
-                    (:chunk_id, :symbol_id, :file_path, :symbol_name, :chunk_kind, :start_line, :end_line,
-                     :source_sha256, :content_sha256, :signature, :content)',
-            );
-            $insertFts = $this->pdo->prepare(
-                'INSERT INTO code_chunks_fts (rowid, symbol_name, signature, content)
-                 VALUES (:rowid, :symbol_name, :signature, :content)',
-            );
-
-            // Full builds consume the map's path-ordered chunks and keep the first
-            // claimant of a canonical chunk id. A partial refresh must compare an
-            // incoming claimant with the retained claimant it did not delete; merely
-            // preferring the retained row makes the winner depend on which path changed.
-            $retainedPaths = $replacedPaths === null ? [] : $this->existingChunkPaths($chunks);
-            $seen = [];
-            $skipped = 0;
-            foreach ($chunks as $chunk) {
-                if (isset($seen[$chunk->chunkId])) {
-                    ++$skipped;
-                    continue;
-                }
-
-                $retainedPath = $retainedPaths[$chunk->chunkId] ?? null;
-                if ($retainedPath !== null) {
-                    if (strcmp($retainedPath, $chunk->filePath) <= 0) {
-                        $seen[$chunk->chunkId] = true;
-                        ++$skipped;
-                        continue;
-                    }
-
-                    // The incoming path would have appeared first in a clean build.
-                    // Remove the later retained claimant, including its external FTS
-                    // row, inside this same transaction before inserting the winner.
-                    $this->deleteWhere('chunk_id = :chunk_id', ['chunk_id' => $chunk->chunkId]);
-                    unset($retainedPaths[$chunk->chunkId]);
-                }
-
-                $seen[$chunk->chunkId] = true;
-
-                $insert->execute([
-                    'chunk_id'      => $chunk->chunkId,
-                    'symbol_id'     => $chunk->symbolId,
-                    'file_path'     => $chunk->filePath,
-                    'symbol_name'   => $chunk->symbolName,
-                    'chunk_kind'    => $chunk->kind,
-                    'start_line'    => $chunk->startLine,
-                    'end_line'      => $chunk->endLine,
-                    'source_sha256' => $chunk->sourceSha256,
-                    'content_sha256' => $chunk->contentSha256,
-                    'signature'     => $chunk->signature,
-                    'content'       => $chunk->content,
-                ]);
-                $insertFts->execute([
-                    'rowid'       => (int)$this->pdo->lastInsertId(),
-                    'symbol_name' => $chunk->symbolName,
-                    'signature'   => $chunk->signature,
-                    'content'     => $chunk->content,
-                ]);
-            }
+            $skipped = $this->replaceChunksWithinTransaction($chunks, $replacedPaths);
 
             $this->pdo->commit();
 
@@ -419,6 +349,119 @@ final class SearchIndexStore
 
             throw $exception;
         }
+    }
+
+    /**
+     * Reconciles removed paths and replacement chunks in one derived-index transaction.
+     *
+     * The Map snapshot is written by the caller only after this operation succeeds, so a failed
+     * reconciliation remains retryable and cannot advertise a partial Search projection as current.
+     *
+     * @param list<CodeChunk> $chunks
+     * @param list<string>|null $replacedPaths
+     * @param list<string> $keepPaths
+     *
+     * @return array{prunedFiles: int, skippedChunks: int}
+     */
+    public function reconcileChunks(array $chunks, ?array $replacedPaths, array $keepPaths): array
+    {
+        $this->pdo->beginTransaction();
+
+        try {
+            $prunedFiles = $this->pruneMissingPathsWithinTransaction($keepPaths);
+            $skippedChunks = $this->replaceChunksWithinTransaction($chunks, $replacedPaths);
+            $this->pdo->commit();
+
+            return [
+                'prunedFiles' => $prunedFiles,
+                'skippedChunks' => $skippedChunks,
+            ];
+        } catch (\Throwable $exception) {
+            $this->pdo->rollBack();
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * @param list<CodeChunk> $chunks
+     * @param list<string>|null $replacedPaths
+     */
+    private function replaceChunksWithinTransaction(array $chunks, ?array $replacedPaths): int
+    {
+        if ($replacedPaths === null) {
+            $this->deleteWhere('1 = 1', []);
+        } else {
+            foreach ($replacedPaths as $path) {
+                $this->deleteWhere('file_path = :path', ['path' => $path]);
+            }
+        }
+
+        $insert = $this->pdo->prepare(
+            'INSERT INTO code_chunks
+                (chunk_id, symbol_id, file_path, symbol_name, chunk_kind, start_line, end_line,
+                 source_sha256, content_sha256, signature, content)
+             VALUES
+                (:chunk_id, :symbol_id, :file_path, :symbol_name, :chunk_kind, :start_line, :end_line,
+                 :source_sha256, :content_sha256, :signature, :content)',
+        );
+        $insertFts = $this->pdo->prepare(
+            'INSERT INTO code_chunks_fts (rowid, symbol_name, signature, content)
+             VALUES (:rowid, :symbol_name, :signature, :content)',
+        );
+
+        // Full builds consume the map's path-ordered chunks and keep the first
+        // claimant of a canonical chunk id. A partial refresh must compare an
+        // incoming claimant with the retained claimant it did not delete; merely
+        // preferring the retained row makes the winner depend on which path changed.
+        $retainedPaths = $replacedPaths === null ? [] : $this->existingChunkPaths($chunks);
+        $seen = [];
+        $skipped = 0;
+        foreach ($chunks as $chunk) {
+            if (isset($seen[$chunk->chunkId])) {
+                ++$skipped;
+                continue;
+            }
+
+            $retainedPath = $retainedPaths[$chunk->chunkId] ?? null;
+            if ($retainedPath !== null) {
+                if (strcmp($retainedPath, $chunk->filePath) <= 0) {
+                    $seen[$chunk->chunkId] = true;
+                    ++$skipped;
+                    continue;
+                }
+
+                // The incoming path would have appeared first in a clean build.
+                // Remove the later retained claimant, including its external FTS
+                // row, inside this same transaction before inserting the winner.
+                $this->deleteWhere('chunk_id = :chunk_id', ['chunk_id' => $chunk->chunkId]);
+                unset($retainedPaths[$chunk->chunkId]);
+            }
+
+            $seen[$chunk->chunkId] = true;
+
+            $insert->execute([
+                'chunk_id'      => $chunk->chunkId,
+                'symbol_id'     => $chunk->symbolId,
+                'file_path'     => $chunk->filePath,
+                'symbol_name'   => $chunk->symbolName,
+                'chunk_kind'    => $chunk->kind,
+                'start_line'    => $chunk->startLine,
+                'end_line'      => $chunk->endLine,
+                'source_sha256' => $chunk->sourceSha256,
+                'content_sha256' => $chunk->contentSha256,
+                'signature'     => $chunk->signature,
+                'content'       => $chunk->content,
+            ]);
+            $insertFts->execute([
+                'rowid'       => (int)$this->pdo->lastInsertId(),
+                'symbol_name' => $chunk->symbolName,
+                'signature'   => $chunk->signature,
+                'content'     => $chunk->content,
+            ]);
+        }
+
+        return $skipped;
     }
 
     /**
@@ -615,31 +658,37 @@ final class SearchIndexStore
      */
     public function pruneMissingPaths(array $keepPaths): int
     {
-        $keep = array_fill_keys($keepPaths, true);
+        $this->pdo->beginTransaction();
 
+        try {
+            $removed = $this->pruneMissingPathsWithinTransaction($keepPaths);
+            $this->pdo->commit();
+        } catch (\Throwable $exception) {
+            $this->pdo->rollBack();
+
+            throw $exception;
+        }
+
+        return $removed;
+    }
+
+    /** @param list<string> $keepPaths */
+    private function pruneMissingPathsWithinTransaction(array $keepPaths): int
+    {
+        $keep = array_fill_keys($keepPaths, true);
         $statement = $this->pdo->query('SELECT DISTINCT file_path FROM code_chunks');
         if ($statement === false) {
             return 0;
         }
 
         $removed = 0;
-        $this->pdo->beginTransaction();
-
-        try {
-            foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $path) {
-                if (!is_string($path) || isset($keep[$path])) {
-                    continue;
-                }
-
-                $this->deleteWhere('file_path = :path', ['path' => $path]);
-                ++$removed;
+        foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $path) {
+            if (!is_string($path) || isset($keep[$path])) {
+                continue;
             }
 
-            $this->pdo->commit();
-        } catch (\Throwable $exception) {
-            $this->pdo->rollBack();
-
-            throw $exception;
+            $this->deleteWhere('file_path = :path', ['path' => $path]);
+            ++$removed;
         }
 
         return $removed;

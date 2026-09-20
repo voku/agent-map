@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Add the typed `SearchMaintenanceRequest -> SearchMaintenanceService::refreshIfPresent() -> SearchMaintenanceResult` owner boundary for optional Search reconciliation. Consumers can observe absent, unavailable, refused, stale, failed, refreshed, and current states without reconstructing Search storage, chunk, snapshot, or pruning semantics.
+- Reconcile removed paths and replacement chunks transactionally, and force reconciliation when the stored chunk policy no longer matches the owner policy.
 
 ## 0.16.1 - 2026-09-19
 
