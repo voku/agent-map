@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.18.0 - 2026-09-20
+
+### Added
+
+- Add the typed `SearchReadinessInspector` owner projection for fail-closed Search capability, currentness, metadata recovery, and non-empty-index readiness checks.
+
+### Changed
+
+- Keep Search readiness and metadata repair semantics in Map so consumers can decide whether Search is usable without reconstructing Search storage or snapshot policy.
+
 ## 0.17.0 - 2026-09-20
 
 ### Added
