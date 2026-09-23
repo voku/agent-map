@@ -48,6 +48,7 @@ final readonly class MapReadinessInspector
         $searchState = 'unavailable';
         $searchSnapshot = null;
         $searchFailure = null;
+        $searchRecoveryCommand = null;
         if ($mapState === 'ready') {
             $search = (new SearchReadinessInspector())->inspect($map, $mapPath, $searchPath);
             $searchState = $search->state;
@@ -55,6 +56,7 @@ final readonly class MapReadinessInspector
             if ($search->state === 'invalid') {
                 $searchFailure = $search->message;
             }
+            $searchRecoveryCommand = $search->recoveryCommand;
         }
 
         return new MapReadiness(
@@ -68,6 +70,7 @@ final readonly class MapReadinessInspector
             mapFailure: $mapFailure,
             searchFailure: $searchFailure,
             map: $map,
+            searchRecoveryCommand: $searchRecoveryCommand,
         );
     }
 }

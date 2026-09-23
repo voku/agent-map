@@ -43,6 +43,8 @@ final class MapReadinessInspectorTest extends TestCase
         self::assertSame('unavailable', $readiness->searchState);
         self::assertNull($readiness->currentMap());
         self::assertFileDoesNotExist($this->artifacts->searchDatabase());
+        // No Search recovery before the Map itself is ready.
+        self::assertNull($readiness->searchRecoveryCommand);
     }
 
     public function testInvalidMapIsReportedWithoutInspectingSearch(): void
@@ -68,6 +70,8 @@ final class MapReadinessInspectorTest extends TestCase
         self::assertSame('missing', $readiness->searchState);
         self::assertNotNull($readiness->currentMap());
         self::assertFalse($readiness->rankedSearchReady());
+        // The owner's own recovery, so hosts never compose search-index prose.
+        self::assertStringStartsWith('agent-map search-index build ', (string) $readiness->searchRecoveryCommand);
     }
 
     public function testChangedAndMissingSourcesMakeTheMapStale(): void
@@ -122,6 +126,7 @@ final class MapReadinessInspectorTest extends TestCase
         self::assertSame('stale', $readiness->searchState);
         self::assertSame('sha256:older', $readiness->searchSnapshot);
         self::assertFalse($readiness->rankedSearchReady());
+        self::assertStringStartsWith('agent-map search-index refresh ', (string) $readiness->searchRecoveryCommand);
     }
 
     public function testSearchWithOldChunkPolicyIsStaleEvenWhenSnapshotMatches(): void
@@ -148,6 +153,7 @@ final class MapReadinessInspectorTest extends TestCase
         self::assertSame('ready', $readiness->searchState);
         self::assertSame('sha256:current', $readiness->searchSnapshot);
         self::assertTrue($readiness->rankedSearchReady());
+        self::assertNull($readiness->searchRecoveryCommand);
         self::assertSame($before, hash_file('sha256', $this->artifacts->searchDatabase()));
     }
 

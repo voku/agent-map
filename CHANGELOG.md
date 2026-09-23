@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.18.1 - 2026-09-23
+
+### Added
+
+- `MapReadiness::$searchRecoveryCommand` exposes the owner's Search recovery command (`agent-map search-index build|refresh ...`) from `SearchReadinessInspector`, so hosts show the owner's action instead of composing their own recovery prose (#96).
+
 ## 0.18.0 - 2026-09-20
 
 ### Added
