@@ -18,6 +18,9 @@ final readonly class MapReadiness
      * @param 'missing'|'invalid'|'stale'|'ready' $mapState
      * @param list<array{path: string, reason: 'missing'|'hash'}> $staleEntries
      * @param 'unavailable'|'missing'|'invalid'|'stale'|'ready' $searchState
+     * @param string|null $searchRecoveryCommand Owner command that makes Search current
+     *                                           again, when the owner can perform it; hosts
+     *                                           show it instead of composing their own.
      */
     public function __construct(
         public string $mapState,
@@ -30,6 +33,7 @@ final readonly class MapReadiness
         public ?string $mapFailure = null,
         public ?string $searchFailure = null,
         private ?AgentMapIndex $map = null,
+        public ?string $searchRecoveryCommand = null,
     ) {
     }
 
