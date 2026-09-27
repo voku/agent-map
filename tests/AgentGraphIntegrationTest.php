@@ -74,6 +74,22 @@ final class AgentGraphIntegrationTest extends TestCase
         self::assertSame([], $store->integrityFailures());
     }
 
+    public function testCurrentGraphReadsDoNotMutateDerivedDatabase(): void
+    {
+        $indexFile = $this->root . '/php-symbols.json';
+        (new IndexWriter())->write($this->map(), $indexFile, 'json');
+        $graphFile = MapArtifactPaths::graphDatabaseFor($indexFile);
+
+        $before = hash_file('sha256', $graphFile);
+        self::assertIsString($before);
+
+        $graphIndex = new MapGraphIndex();
+        self::assertSame($this->map()->mapDigest(), $graphIndex->openCurrent($indexFile)->sourceRevision());
+        self::assertSame([], $graphIndex->verifyCurrent($indexFile)->integrityFailures());
+
+        self::assertSame($before, hash_file('sha256', $graphFile));
+    }
+
     public function testGenerationMarkerChangeMakesOlderGraphFailClosed(): void
     {
         $indexFile = $this->root . '/php-symbols.json';
