@@ -63,7 +63,13 @@ final class SearchIndexStore
         // Search is a disposable derived snapshot. Keep it single-file so a genuinely read-only
         // consumer never needs SQLite to create or update WAL/SHM sidecars just to query it.
         // Opening an older WAL index writable migrates it back to this snapshot contract.
-        $this->pdo->exec('PRAGMA journal_mode = DELETE');
+        $statement = $this->pdo->query('PRAGMA journal_mode = DELETE');
+        $journalMode = $statement === false ? null : $statement->fetchColumn();
+        if (!is_string($journalMode) || strtolower($journalMode) !== 'delete') {
+            throw new RuntimeException(
+                'Unable to publish Search index as a single-file snapshot: ' . $this->databaseFile,
+            );
+        }
         $this->pdo->exec('PRAGMA synchronous = NORMAL');
         $this->migrate();
     }
