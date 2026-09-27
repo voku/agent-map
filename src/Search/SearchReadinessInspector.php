@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Search;
 
-use PDO;
-use PDOException;
 use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 
@@ -148,52 +146,19 @@ final readonly class SearchReadinessInspector
     /** @return array{metadata: array<string, string>, chunk_count: int} */
     private function readState(string $databasePath): array
     {
-        try {
-            $pdo = $this->openReadOnly($databasePath);
-            $statement = $pdo->query(
-                "SELECT key, value FROM search_meta WHERE key IN ('map_snapshot', 'chunk_policy_version')",
-            );
-            if ($statement === false) {
-                return ['metadata' => [], 'chunk_count' => 0];
+        $store = SearchIndexStore::openReadOnly($databasePath);
+        $metadata = [];
+        foreach (['map_snapshot', 'chunk_policy_version'] as $key) {
+            $value = $store->meta($key);
+            if ($value !== null) {
+                $metadata[$key] = $value;
             }
-            $metadata = [];
-            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                if (!is_string($row['key'] ?? null) || !is_string($row['value'] ?? null)) {
-                    continue;
-                }
-                $metadata[$row['key']] = $row['value'];
-            }
-
-            $countStatement = $pdo->query('SELECT COUNT(*) FROM code_chunks');
-            $chunkCount = $countStatement === false ? 0 : (int) $countStatement->fetchColumn();
-
-            return ['metadata' => $metadata, 'chunk_count' => $chunkCount];
-        } catch (PDOException $exception) {
-            throw new RuntimeException(
-                'Unable to inspect Search index: ' . $databasePath . ' (' . $exception->getMessage() . ')',
-                0,
-                $exception,
-            );
-        }
-    }
-
-    private function openReadOnly(string $databasePath): PDO
-    {
-        $dsn = 'sqlite:' . $databasePath;
-        $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION];
-
-        if (class_exists('Pdo\\Sqlite')) {
-            $options[\Pdo\Sqlite::ATTR_OPEN_FLAGS] = \Pdo\Sqlite::OPEN_READONLY;
-
-            return new \Pdo\Sqlite($dsn, null, null, $options);
         }
 
-        if (!defined('PDO::SQLITE_ATTR_OPEN_FLAGS') || !defined('PDO::SQLITE_OPEN_READONLY')) {
-            throw new RuntimeException('PDO SQLite read-only open flags are unavailable.');
-        }
-        $options[constant('PDO::SQLITE_ATTR_OPEN_FLAGS')] = constant('PDO::SQLITE_OPEN_READONLY');
-
-        return new PDO($dsn, null, null, $options);
+        return [
+            'metadata' => $metadata,
+            'chunk_count' => $store->chunkCount(),
+        ];
     }
 
     private function recoveryCommand(
