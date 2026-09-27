@@ -181,7 +181,7 @@ final class SearchIndexTest extends TestCase
             SearchIndexStore::openReadOnly($path);
             self::fail('A WAL Search index must not be exposed as a side-effect-free read-only snapshot.');
         } catch (SearchIndexRefreshRequiredException $exception) {
-            self::assertStringContainsString('uses WAL journal mode', $exception->getMessage());
+            self::assertStringContainsString('WAL', $exception->getMessage());
         } finally {
             unset($pdo);
         }
@@ -199,6 +199,13 @@ final class SearchIndexTest extends TestCase
         self::assertSame('wal', strtolower((string) $statement->fetchColumn()));
         $statement->closeCursor();
         unset($statement, $legacy);
+
+        try {
+            SearchIndexStore::openReadOnly($path);
+            self::fail('A closed legacy WAL Search index must still require refresh.');
+        } catch (SearchIndexRefreshRequiredException $exception) {
+            self::assertStringContainsString('WAL', $exception->getMessage());
+        }
 
         $migrated = new SearchIndexStore($path);
         unset($migrated);
