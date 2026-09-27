@@ -73,6 +73,16 @@ final readonly class SearchReadinessInspector
 
         try {
             $searchState = $this->readState($databasePath);
+        } catch (SearchIndexRefreshRequiredException $exception) {
+            return new SearchReadiness(
+                state: 'invalid',
+                databasePath: $databasePath,
+                mapSnapshot: $mapSnapshot,
+                searchSnapshot: null,
+                reason: 'search_index_refresh_required',
+                message: $exception->getMessage(),
+                recoveryCommand: $this->recoveryCommand('refresh', $index, $indexPath, $databasePath),
+            );
         } catch (RuntimeException $exception) {
             return new SearchReadiness(
                 state: 'invalid',
@@ -81,7 +91,6 @@ final readonly class SearchReadinessInspector
                 searchSnapshot: null,
                 reason: 'search_index_unreadable',
                 message: $exception->getMessage(),
-                recoveryCommand: $this->recoveryCommand('refresh', $index, $indexPath, $databasePath),
             );
         }
 
