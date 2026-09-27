@@ -81,6 +81,7 @@ final readonly class SearchReadinessInspector
                 searchSnapshot: null,
                 reason: 'search_index_unreadable',
                 message: $exception->getMessage(),
+                recoveryCommand: $this->recoveryCommand('refresh', $index, $indexPath, $databasePath),
             );
         }
 
