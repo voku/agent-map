@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Tests;
 
+use PDO;
 use PDOException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -135,22 +136,52 @@ final class SearchIndexTest extends TestCase
         self::assertNotSame([], $first['reasons']);
     }
 
-    public function testReadOnlyStoreSupportsHybridSearchWithoutMutatingDatabase(): void
+    public function testReadOnlyStoreSupportsHybridSearchFromLockedDirectoryWithoutMutation(): void
     {
         $index = $this->index();
         $writable = $this->store($index);
         unset($writable);
 
         $path = $this->root . '/.agent-map/search.sqlite';
-        $before = hash_file('sha256', $path);
-        self::assertIsString($before);
+        $directory = dirname($path);
+        $beforeHash = hash_file('sha256', $path);
+        self::assertIsString($beforeHash);
+        $beforeEntries = scandir($directory);
+        self::assertIsArray($beforeEntries);
+        self::assertFileDoesNotExist($path . '-wal');
+        self::assertFileDoesNotExist($path . '-shm');
+        self::assertTrue(chmod($directory, 0o555));
 
-        $store = SearchIndexStore::openReadOnly($path);
-        $result = (new HybridSearch())->search($index, $store, 'RetryHandler', 5);
+        try {
+            $store = SearchIndexStore::openReadOnly($path);
+            $result = (new HybridSearch())->search($index, $store, 'RetryHandler', 5);
 
-        self::assertNotSame([], $result['results']);
-        self::assertSame($result['map_snapshot'], $result['search_index_snapshot']);
-        self::assertSame($before, hash_file('sha256', $path));
+            self::assertNotSame([], $result['results']);
+            self::assertSame($result['map_snapshot'], $result['search_index_snapshot']);
+            self::assertSame($beforeHash, hash_file('sha256', $path));
+            self::assertSame($beforeEntries, scandir($directory));
+            self::assertFileDoesNotExist($path . '-wal');
+            self::assertFileDoesNotExist($path . '-shm');
+        } finally {
+            self::assertTrue(chmod($directory, 0o775));
+        }
+    }
+
+    public function testReadOnlyStoreRejectsLegacyWalIndex(): void
+    {
+        $path = $this->root . '/legacy-wal.sqlite';
+        $pdo = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        self::assertSame('wal', strtolower((string) $pdo->query('PRAGMA journal_mode = WAL')?->fetchColumn()));
+        $pdo->exec('CREATE TABLE legacy_probe (id INTEGER PRIMARY KEY)');
+
+        try {
+            SearchIndexStore::openReadOnly($path);
+            self::fail('A WAL Search index must not be exposed as a side-effect-free read-only snapshot.');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('uses WAL journal mode', $exception->getMessage());
+        } finally {
+            unset($pdo);
+        }
     }
 
     public function testReadOnlyStoreRejectsMutation(): void
