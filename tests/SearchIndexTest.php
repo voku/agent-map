@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Tests;
 
+use PDOException;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
@@ -131,6 +133,50 @@ final class SearchIndexTest extends TestCase
         self::assertSame(['structural', 'lexical', 'semantic'], array_keys($first['channel_ranks']));
         self::assertNull($first['channel_ranks']['semantic']);
         self::assertNotSame([], $first['reasons']);
+    }
+
+    public function testReadOnlyStoreSupportsHybridSearchWithoutMutatingDatabase(): void
+    {
+        $index = $this->index();
+        $writable = $this->store($index);
+        unset($writable);
+
+        $path = $this->root . '/.agent-map/search.sqlite';
+        $before = hash_file('sha256', $path);
+        self::assertIsString($before);
+
+        $store = SearchIndexStore::openReadOnly($path);
+        $result = (new HybridSearch())->search($index, $store, 'RetryHandler', 5);
+
+        self::assertNotSame([], $result['results']);
+        self::assertSame($result['map_snapshot'], $result['search_index_snapshot']);
+        self::assertSame($before, hash_file('sha256', $path));
+    }
+
+    public function testReadOnlyStoreRejectsMutation(): void
+    {
+        $writable = $this->store();
+        unset($writable);
+
+        $store = SearchIndexStore::openReadOnly($this->root . '/.agent-map/search.sqlite');
+
+        $this->expectException(PDOException::class);
+        $store->setMeta('read_only_probe', 'forbidden');
+    }
+
+    public function testReadOnlyStoreDoesNotCreateMissingDatabase(): void
+    {
+        $path = $this->root . '/missing/search.sqlite';
+
+        try {
+            SearchIndexStore::openReadOnly($path);
+            self::fail('Opening a missing Search index read-only must fail.');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('does not exist for read-only access', $exception->getMessage());
+        }
+
+        self::assertFileDoesNotExist($path);
+        self::assertDirectoryDoesNotExist(dirname($path));
     }
 
     public function testReplacingOneFileLeavesNoStaleLexicalRows(): void
