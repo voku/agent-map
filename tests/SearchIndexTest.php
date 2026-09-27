@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Tests;
 
+use PDO;
+use PDOException;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
@@ -15,6 +18,7 @@ use voku\AgentMap\Search\CodeChunk;
 use voku\AgentMap\Search\HybridSearch;
 use voku\AgentMap\Search\QueryPlanner;
 use voku\AgentGraph\Sqlite\SqliteVecBinary;
+use voku\AgentMap\Search\SearchIndexRefreshRequiredException;
 use voku\AgentMap\Search\SearchIndexStore;
 
 final class SearchIndexTest extends TestCase
@@ -131,6 +135,117 @@ final class SearchIndexTest extends TestCase
         self::assertSame(['structural', 'lexical', 'semantic'], array_keys($first['channel_ranks']));
         self::assertNull($first['channel_ranks']['semantic']);
         self::assertNotSame([], $first['reasons']);
+    }
+
+    public function testReadOnlyStoreSupportsHybridSearchFromLockedDirectoryWithoutMutation(): void
+    {
+        $index = $this->index();
+        $writable = $this->store($index);
+        unset($writable);
+
+        $path = $this->root . '/.agent-map/search.sqlite';
+        $directory = dirname($path);
+        $beforeHash = hash_file('sha256', $path);
+        self::assertIsString($beforeHash);
+        $beforeEntries = scandir($directory);
+        self::assertIsArray($beforeEntries);
+        self::assertFileDoesNotExist($path . '-wal');
+        self::assertFileDoesNotExist($path . '-shm');
+        self::assertTrue(chmod($directory, 0o555));
+
+        try {
+            $store = SearchIndexStore::openReadOnly($path);
+            $result = (new HybridSearch())->search($index, $store, 'RetryHandler', 5);
+
+            self::assertNotSame([], $result['results']);
+            self::assertSame($result['map_snapshot'], $result['search_index_snapshot']);
+            self::assertSame($beforeHash, hash_file('sha256', $path));
+            self::assertSame($beforeEntries, scandir($directory));
+            self::assertFileDoesNotExist($path . '-wal');
+            self::assertFileDoesNotExist($path . '-shm');
+        } finally {
+            self::assertTrue(chmod($directory, 0o775));
+        }
+    }
+
+    public function testReadOnlyStoreRejectsLegacyWalIndex(): void
+    {
+        $path = $this->root . '/legacy-wal.sqlite';
+        $pdo = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $statement = $pdo->query('PRAGMA journal_mode = WAL');
+        self::assertNotFalse($statement);
+        self::assertSame('wal', strtolower((string) $statement->fetchColumn()));
+        $pdo->exec('CREATE TABLE legacy_probe (id INTEGER PRIMARY KEY)');
+        $statement->closeCursor();
+        unset($statement, $pdo);
+
+        try {
+            SearchIndexStore::openReadOnly($path);
+            self::fail('A WAL Search index must not be exposed as a side-effect-free read-only snapshot.');
+        } catch (SearchIndexRefreshRequiredException $exception) {
+            self::assertStringContainsString('WAL', $exception->getMessage());
+        }
+    }
+
+    public function testWritableOpenMigratesLegacyWalIndexToSingleFileSnapshot(): void
+    {
+        $store = $this->store();
+        unset($store);
+
+        $path = $this->root . '/.agent-map/search.sqlite';
+        $legacy = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $statement = $legacy->query('PRAGMA journal_mode = WAL');
+        self::assertNotFalse($statement);
+        self::assertSame('wal', strtolower((string) $statement->fetchColumn()));
+        $statement->closeCursor();
+        unset($statement, $legacy);
+
+        try {
+            SearchIndexStore::openReadOnly($path);
+            self::fail('A closed legacy WAL Search index must still require refresh.');
+        } catch (SearchIndexRefreshRequiredException $exception) {
+            self::assertStringContainsString('WAL', $exception->getMessage());
+        }
+
+        $migrated = new SearchIndexStore($path);
+        unset($migrated);
+
+        $probe = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $statement = $probe->query('PRAGMA journal_mode');
+        self::assertNotFalse($statement);
+        self::assertSame('delete', strtolower((string) $statement->fetchColumn()));
+        $statement->closeCursor();
+        unset($statement, $probe);
+
+        self::assertFileDoesNotExist($path . '-wal');
+        self::assertFileDoesNotExist($path . '-shm');
+        self::assertNotEmpty(SearchIndexStore::openReadOnly($path)->searchLexical('retry attempts', 5));
+    }
+
+    public function testReadOnlyStoreRejectsMutation(): void
+    {
+        $writable = $this->store();
+        unset($writable);
+
+        $store = SearchIndexStore::openReadOnly($this->root . '/.agent-map/search.sqlite');
+
+        $this->expectException(PDOException::class);
+        $store->setMeta('read_only_probe', 'forbidden');
+    }
+
+    public function testReadOnlyStoreDoesNotCreateMissingDatabase(): void
+    {
+        $path = $this->root . '/missing/search.sqlite';
+
+        try {
+            SearchIndexStore::openReadOnly($path);
+            self::fail('Opening a missing Search index read-only must fail.');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('does not exist for read-only access', $exception->getMessage());
+        }
+
+        self::assertFileDoesNotExist($path);
+        self::assertDirectoryDoesNotExist(dirname($path));
     }
 
     public function testReplacingOneFileLeavesNoStaleLexicalRows(): void

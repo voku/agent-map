@@ -38,24 +38,115 @@ final class SearchIndexStore
 
     private ?string $vectorVersion = null;
 
-    public function __construct(private readonly string $databaseFile)
-    {
-        $directory = dirname($this->databaseFile);
-        if (!is_dir($directory) && !mkdir($directory, 0o775, true) && !is_dir($directory)) {
-            throw new RuntimeException('Unable to create search index directory: ' . $directory);
+    public function __construct(
+        private readonly string $databaseFile,
+        private readonly bool $readOnly = false,
+    ) {
+        if ($this->readOnly) {
+            if (!is_file($this->databaseFile)) {
+                throw new RuntimeException('Search index does not exist for read-only access: ' . $this->databaseFile);
+            }
+        } else {
+            $directory = dirname($this->databaseFile);
+            if (!is_dir($directory) && !mkdir($directory, 0o775, true) && !is_dir($directory)) {
+                throw new RuntimeException('Unable to create search index directory: ' . $directory);
+            }
         }
 
+        if ($this->readOnly) {
+            $this->assertReadOnlySnapshot();
+        }
+
+        $this->pdo = $this->openConnection($this->readOnly);
+        if ($this->readOnly) {
+            return;
+        }
+
+        // Search is a disposable derived snapshot. Keep it single-file so a genuinely read-only
+        // consumer never needs SQLite to create or update WAL/SHM sidecars just to query it.
+        // Opening an older WAL index writable migrates it back to this snapshot contract.
+        $statement = $this->pdo->query('PRAGMA journal_mode = DELETE');
+        $journalMode = $statement === false ? null : $statement->fetchColumn();
+        if ($statement !== false) {
+            $statement->closeCursor();
+        }
+        unset($statement);
+        if (!is_string($journalMode) || strtolower($journalMode) !== 'delete') {
+            throw new RuntimeException(
+                'Unable to publish Search index as a single-file snapshot: ' . $this->databaseFile,
+            );
+        }
+        $this->pdo->exec('PRAGMA synchronous = NORMAL');
+        $this->migrate();
+    }
+
+    public static function openReadOnly(string $databaseFile): self
+    {
+        return new self($databaseFile, true);
+    }
+
+    private function openConnection(bool $readOnly): PDO
+    {
         $dsn = 'sqlite:' . $this->databaseFile;
         $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION];
+
+        if ($readOnly) {
+            if (class_exists('Pdo\\Sqlite')) {
+                $options[\Pdo\Sqlite::ATTR_OPEN_FLAGS] = \Pdo\Sqlite::OPEN_READONLY;
+
+                return new \Pdo\Sqlite($dsn, null, null, $options);
+            }
+
+            if (!defined('PDO::SQLITE_ATTR_OPEN_FLAGS') || !defined('PDO::SQLITE_OPEN_READONLY')) {
+                throw new RuntimeException('PDO SQLite read-only open flags are unavailable.');
+            }
+            $options[constant('PDO::SQLITE_ATTR_OPEN_FLAGS')] = constant('PDO::SQLITE_OPEN_READONLY');
+
+            return new PDO($dsn, null, null, $options);
+        }
+
         // `new PDO('sqlite:...')` returns a plain PDO even on 8.4, and a plain PDO has no
         // loadExtension(). The driver-specific subclass is what can load sqlite-vec at all, so it is
         // used when the runtime has it; older runtimes simply keep the lexical channel.
-        $this->pdo = class_exists('Pdo\Sqlite')
+        return class_exists('Pdo\\Sqlite')
             ? new \Pdo\Sqlite($dsn, null, null, $options)
             : new PDO($dsn, null, null, $options);
-        $this->pdo->exec('PRAGMA journal_mode = WAL');
-        $this->pdo->exec('PRAGMA synchronous = NORMAL');
-        $this->migrate();
+    }
+
+    private function assertReadOnlySnapshot(): void
+    {
+        if (is_file($this->databaseFile . '-wal') || is_file($this->databaseFile . '-shm')) {
+            throw new SearchIndexRefreshRequiredException(
+                'Search index uses WAL sidecars; refresh it once to publish a single-file snapshot before read-only access: '
+                . $this->databaseFile,
+            );
+        }
+
+        $header = file_get_contents($this->databaseFile, false, null, 0, 20);
+        if (!is_string($header) || strlen($header) < 20 || substr($header, 0, 16) !== "SQLite format 3\0") {
+            throw new RuntimeException(
+                'Unable to inspect Search index header for read-only access: ' . $this->databaseFile,
+            );
+        }
+
+        $writeVersion = ord($header[18]);
+        $readVersion = ord($header[19]);
+        if ($writeVersion === 2 && $readVersion === 2) {
+            throw new SearchIndexRefreshRequiredException(
+                'Search index uses WAL journal mode; refresh it once to publish a single-file snapshot before read-only access: '
+                . $this->databaseFile,
+            );
+        }
+        if ($writeVersion !== 1 || $readVersion !== 1) {
+            throw new RuntimeException(
+                sprintf(
+                    'Search index has unsupported SQLite journal format for read-only access: write=%d, read=%d (%s)',
+                    $writeVersion,
+                    $readVersion,
+                    $this->databaseFile,
+                ),
+            );
+        }
     }
 
     /**

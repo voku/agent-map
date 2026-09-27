@@ -153,6 +153,32 @@ final class SearchReadinessInspectorTest extends TestCase
         self::assertSame($before, hash_file('sha256', $this->searchPath));
     }
 
+    public function testLegacyWalSearchIsInvalidButOwnerRefreshIsExposed(): void
+    {
+        $map = $this->writeMap('sha256:current');
+        $this->writeSearchDatabase('sha256:current');
+
+        $legacy = new PDO(
+            'sqlite:' . $this->searchPath,
+            null,
+            null,
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+        );
+        $statement = $legacy->query('PRAGMA journal_mode = WAL');
+        self::assertNotFalse($statement);
+        self::assertSame('wal', strtolower((string) $statement->fetchColumn()));
+        $statement->closeCursor();
+        unset($statement, $legacy);
+
+        $readiness = (new SearchReadinessInspector())->inspect($map, $this->mapPath, $this->searchPath);
+
+        self::assertSame('invalid', $readiness->state);
+        self::assertSame('search_index_refresh_required', $readiness->reason);
+        self::assertIsString($readiness->message);
+        self::assertStringContainsString('WAL', $readiness->message);
+        self::assertStringStartsWith('agent-map search-index refresh ', (string) $readiness->recoveryCommand);
+    }
+
     public function testCorruptDatabaseIsInvalidAndDoesNotGetMigrated(): void
     {
         $map = $this->writeMap('sha256:current');
