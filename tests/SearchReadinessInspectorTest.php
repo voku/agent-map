@@ -174,6 +174,7 @@ final class SearchReadinessInspectorTest extends TestCase
 
         self::assertSame('invalid', $readiness->state);
         self::assertSame('search_index_refresh_required', $readiness->reason);
+        self::assertIsString($readiness->message);
         self::assertStringContainsString('WAL', $readiness->message);
         self::assertStringStartsWith('agent-map search-index refresh ', (string) $readiness->recoveryCommand);
     }
