@@ -171,7 +171,9 @@ final class SearchIndexTest extends TestCase
     {
         $path = $this->root . '/legacy-wal.sqlite';
         $pdo = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-        self::assertSame('wal', strtolower((string) $pdo->query('PRAGMA journal_mode = WAL')?->fetchColumn()));
+        $statement = $pdo->query('PRAGMA journal_mode = WAL');
+        self::assertNotFalse($statement);
+        self::assertSame('wal', strtolower((string) $statement->fetchColumn()));
         $pdo->exec('CREATE TABLE legacy_probe (id INTEGER PRIMARY KEY)');
 
         try {
