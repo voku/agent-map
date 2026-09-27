@@ -38,24 +38,62 @@ final class SearchIndexStore
 
     private ?string $vectorVersion = null;
 
-    public function __construct(private readonly string $databaseFile)
-    {
-        $directory = dirname($this->databaseFile);
-        if (!is_dir($directory) && !mkdir($directory, 0o775, true) && !is_dir($directory)) {
-            throw new RuntimeException('Unable to create search index directory: ' . $directory);
+    public function __construct(
+        private readonly string $databaseFile,
+        private readonly bool $readOnly = false,
+    ) {
+        if ($this->readOnly) {
+            if (!is_file($this->databaseFile)) {
+                throw new RuntimeException('Search index does not exist for read-only access: ' . $this->databaseFile);
+            }
+        } else {
+            $directory = dirname($this->databaseFile);
+            if (!is_dir($directory) && !mkdir($directory, 0o775, true) && !is_dir($directory)) {
+                throw new RuntimeException('Unable to create search index directory: ' . $directory);
+            }
         }
 
-        $dsn = 'sqlite:' . $this->databaseFile;
-        $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION];
-        // `new PDO('sqlite:...')` returns a plain PDO even on 8.4, and a plain PDO has no
-        // loadExtension(). The driver-specific subclass is what can load sqlite-vec at all, so it is
-        // used when the runtime has it; older runtimes simply keep the lexical channel.
-        $this->pdo = class_exists('Pdo\Sqlite')
-            ? new \Pdo\Sqlite($dsn, null, null, $options)
-            : new PDO($dsn, null, null, $options);
+        $this->pdo = $this->openConnection($this->readOnly);
+        if ($this->readOnly) {
+            return;
+        }
+
         $this->pdo->exec('PRAGMA journal_mode = WAL');
         $this->pdo->exec('PRAGMA synchronous = NORMAL');
         $this->migrate();
+    }
+
+    public static function openReadOnly(string $databaseFile): self
+    {
+        return new self($databaseFile, true);
+    }
+
+    private function openConnection(bool $readOnly): PDO
+    {
+        $dsn = 'sqlite:' . $this->databaseFile;
+        $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION];
+
+        if ($readOnly) {
+            if (class_exists('Pdo\\Sqlite')) {
+                $options[\Pdo\Sqlite::ATTR_OPEN_FLAGS] = \Pdo\Sqlite::OPEN_READONLY;
+
+                return new \Pdo\Sqlite($dsn, null, null, $options);
+            }
+
+            if (!defined('PDO::SQLITE_ATTR_OPEN_FLAGS') || !defined('PDO::SQLITE_OPEN_READONLY')) {
+                throw new RuntimeException('PDO SQLite read-only open flags are unavailable.');
+            }
+            $options[constant('PDO::SQLITE_ATTR_OPEN_FLAGS')] = constant('PDO::SQLITE_OPEN_READONLY');
+
+            return new PDO($dsn, null, null, $options);
+        }
+
+        // `new PDO('sqlite:...')` returns a plain PDO even on 8.4, and a plain PDO has no
+        // loadExtension(). The driver-specific subclass is what can load sqlite-vec at all, so it is
+        // used when the runtime has it; older runtimes simply keep the lexical channel.
+        return class_exists('Pdo\\Sqlite')
+            ? new \Pdo\Sqlite($dsn, null, null, $options)
+            : new PDO($dsn, null, null, $options);
     }
 
     /**
