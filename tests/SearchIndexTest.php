@@ -18,6 +18,7 @@ use voku\AgentMap\Search\CodeChunk;
 use voku\AgentMap\Search\HybridSearch;
 use voku\AgentMap\Search\QueryPlanner;
 use voku\AgentGraph\Sqlite\SqliteVecBinary;
+use voku\AgentMap\Search\SearchIndexRefreshRequiredException;
 use voku\AgentMap\Search\SearchIndexStore;
 
 final class SearchIndexTest extends TestCase
@@ -179,11 +180,37 @@ final class SearchIndexTest extends TestCase
         try {
             SearchIndexStore::openReadOnly($path);
             self::fail('A WAL Search index must not be exposed as a side-effect-free read-only snapshot.');
-        } catch (RuntimeException $exception) {
+        } catch (SearchIndexRefreshRequiredException $exception) {
             self::assertStringContainsString('uses WAL journal mode', $exception->getMessage());
         } finally {
             unset($pdo);
         }
+    }
+
+    public function testWritableOpenMigratesLegacyWalIndexToSingleFileSnapshot(): void
+    {
+        $store = $this->store();
+        unset($store);
+
+        $path = $this->root . '/.agent-map/search.sqlite';
+        $legacy = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $statement = $legacy->query('PRAGMA journal_mode = WAL');
+        self::assertNotFalse($statement);
+        self::assertSame('wal', strtolower((string) $statement->fetchColumn()));
+        unset($legacy);
+
+        $migrated = new SearchIndexStore($path);
+        unset($migrated);
+
+        $probe = new PDO('sqlite:' . $path, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $statement = $probe->query('PRAGMA journal_mode');
+        self::assertNotFalse($statement);
+        self::assertSame('delete', strtolower((string) $statement->fetchColumn()));
+        unset($probe);
+
+        self::assertFileDoesNotExist($path . '-wal');
+        self::assertFileDoesNotExist($path . '-shm');
+        self::assertNotEmpty(SearchIndexStore::openReadOnly($path)->searchLexical('retry attempts', 5));
     }
 
     public function testReadOnlyStoreRejectsMutation(): void
