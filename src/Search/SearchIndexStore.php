@@ -115,6 +115,13 @@ final class SearchIndexStore
 
     private function assertReadOnlySnapshot(): void
     {
+        if (is_file($this->databaseFile . '-wal') || is_file($this->databaseFile . '-shm')) {
+            throw new SearchIndexRefreshRequiredException(
+                'Search index uses WAL sidecars; refresh it once to publish a single-file snapshot before read-only access: '
+                . $this->databaseFile,
+            );
+        }
+
         $header = file_get_contents($this->databaseFile, false, null, 0, 20);
         if (!is_string($header) || strlen($header) < 20 || substr($header, 0, 16) !== "SQLite format 3\0") {
             throw new RuntimeException(
