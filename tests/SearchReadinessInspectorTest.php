@@ -167,17 +167,15 @@ final class SearchReadinessInspectorTest extends TestCase
         $statement = $legacy->query('PRAGMA journal_mode = WAL');
         self::assertNotFalse($statement);
         self::assertSame('wal', strtolower((string) $statement->fetchColumn()));
+        $statement->closeCursor();
+        unset($statement, $legacy);
 
-        try {
-            $readiness = (new SearchReadinessInspector())->inspect($map, $this->mapPath, $this->searchPath);
+        $readiness = (new SearchReadinessInspector())->inspect($map, $this->mapPath, $this->searchPath);
 
-            self::assertSame('invalid', $readiness->state);
-            self::assertSame('search_index_refresh_required', $readiness->reason);
-            self::assertStringContainsString('WAL', $readiness->message);
-            self::assertStringStartsWith('agent-map search-index refresh ', (string) $readiness->recoveryCommand);
-        } finally {
-            unset($legacy);
-        }
+        self::assertSame('invalid', $readiness->state);
+        self::assertSame('search_index_refresh_required', $readiness->reason);
+        self::assertStringContainsString('WAL', $readiness->message);
+        self::assertStringStartsWith('agent-map search-index refresh ', (string) $readiness->recoveryCommand);
     }
 
     public function testCorruptDatabaseIsInvalidAndDoesNotGetMigrated(): void
