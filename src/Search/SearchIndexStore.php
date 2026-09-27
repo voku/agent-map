@@ -120,8 +120,8 @@ final class SearchIndexStore
             );
         }
         if (strtolower($journalMode) === 'wal') {
-            throw new RuntimeException(
-                'Search index uses WAL journal mode; open it writable once to publish a single-file snapshot before read-only access: '
+            throw new SearchIndexRefreshRequiredException(
+                'Search index uses WAL journal mode; refresh it once to publish a single-file snapshot before read-only access: '
                 . $this->databaseFile,
             );
         }
