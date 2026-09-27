@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.18.2 - 2026-09-27
+
+### Added
+
+- Add `SearchIndexStore::openReadOnly()` as the owner boundary for querying an existing Search index without creating directories, migrating schema, or producing SQLite WAL/SHM sidecars; legacy WAL snapshots are rejected with an explicit refresh requirement (#117).
+
+### Changed
+
+- Consume `voku/agent-graph` 0.2.3 through `GraphStore::openReadOnly()` when opening/verifying the derived graph, so read-only Map inspection no longer mutates graph storage (#118).
+- Persist writable Search indexes in single-file `DELETE` journal mode so a published Search snapshot can be consumed read-only without hidden sidecar state (#117).
+
 ## 0.18.1 - 2026-09-23
 
 ### Added
