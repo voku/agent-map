@@ -55,10 +55,15 @@ final class SearchIndexStore
 
         $this->pdo = $this->openConnection($this->readOnly);
         if ($this->readOnly) {
+            $this->assertReadOnlySnapshot();
+
             return;
         }
 
-        $this->pdo->exec('PRAGMA journal_mode = WAL');
+        // Search is a disposable derived snapshot. Keep it single-file so a genuinely read-only
+        // consumer never needs SQLite to create or update WAL/SHM sidecars just to query it.
+        // Opening an older WAL index writable migrates it back to this snapshot contract.
+        $this->pdo->exec('PRAGMA journal_mode = DELETE');
         $this->pdo->exec('PRAGMA synchronous = NORMAL');
         $this->migrate();
     }
@@ -94,6 +99,32 @@ final class SearchIndexStore
         return class_exists('Pdo\\Sqlite')
             ? new \Pdo\Sqlite($dsn, null, null, $options)
             : new PDO($dsn, null, null, $options);
+    }
+
+    private function assertReadOnlySnapshot(): void
+    {
+        try {
+            $statement = $this->pdo->query('PRAGMA journal_mode');
+            $journalMode = $statement === false ? null : $statement->fetchColumn();
+        } catch (\PDOException $exception) {
+            throw new RuntimeException(
+                'Unable to inspect Search index journal mode for read-only access: ' . $this->databaseFile,
+                0,
+                $exception,
+            );
+        }
+
+        if (!is_string($journalMode)) {
+            throw new RuntimeException(
+                'Unable to determine Search index journal mode for read-only access: ' . $this->databaseFile,
+            );
+        }
+        if (strtolower($journalMode) === 'wal') {
+            throw new RuntimeException(
+                'Search index uses WAL journal mode; open it writable once to publish a single-file snapshot before read-only access: '
+                . $this->databaseFile,
+            );
+        }
     }
 
     /**
