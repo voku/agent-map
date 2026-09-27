@@ -176,14 +176,14 @@ final class SearchIndexTest extends TestCase
         self::assertNotFalse($statement);
         self::assertSame('wal', strtolower((string) $statement->fetchColumn()));
         $pdo->exec('CREATE TABLE legacy_probe (id INTEGER PRIMARY KEY)');
+        $statement->closeCursor();
+        unset($statement, $pdo);
 
         try {
             SearchIndexStore::openReadOnly($path);
             self::fail('A WAL Search index must not be exposed as a side-effect-free read-only snapshot.');
         } catch (SearchIndexRefreshRequiredException $exception) {
             self::assertStringContainsString('WAL', $exception->getMessage());
-        } finally {
-            unset($pdo);
         }
     }
 
