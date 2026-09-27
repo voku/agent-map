@@ -197,7 +197,8 @@ final class SearchIndexTest extends TestCase
         $statement = $legacy->query('PRAGMA journal_mode = WAL');
         self::assertNotFalse($statement);
         self::assertSame('wal', strtolower((string) $statement->fetchColumn()));
-        unset($legacy);
+        $statement->closeCursor();
+        unset($statement, $legacy);
 
         $migrated = new SearchIndexStore($path);
         unset($migrated);
@@ -206,7 +207,8 @@ final class SearchIndexTest extends TestCase
         $statement = $probe->query('PRAGMA journal_mode');
         self::assertNotFalse($statement);
         self::assertSame('delete', strtolower((string) $statement->fetchColumn()));
-        unset($probe);
+        $statement->closeCursor();
+        unset($statement, $probe);
 
         self::assertFileDoesNotExist($path . '-wal');
         self::assertFileDoesNotExist($path . '-shm');
