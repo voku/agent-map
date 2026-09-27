@@ -53,10 +53,12 @@ final class SearchIndexStore
             }
         }
 
-        $this->pdo = $this->openConnection($this->readOnly);
         if ($this->readOnly) {
             $this->assertReadOnlySnapshot();
+        }
 
+        $this->pdo = $this->openConnection($this->readOnly);
+        if ($this->readOnly) {
             return;
         }
 
@@ -65,6 +67,10 @@ final class SearchIndexStore
         // Opening an older WAL index writable migrates it back to this snapshot contract.
         $statement = $this->pdo->query('PRAGMA journal_mode = DELETE');
         $journalMode = $statement === false ? null : $statement->fetchColumn();
+        if ($statement !== false) {
+            $statement->closeCursor();
+        }
+        unset($statement);
         if (!is_string($journalMode) || strtolower($journalMode) !== 'delete') {
             throw new RuntimeException(
                 'Unable to publish Search index as a single-file snapshot: ' . $this->databaseFile,
@@ -109,26 +115,29 @@ final class SearchIndexStore
 
     private function assertReadOnlySnapshot(): void
     {
-        try {
-            $statement = $this->pdo->query('PRAGMA journal_mode');
-            $journalMode = $statement === false ? null : $statement->fetchColumn();
-        } catch (\PDOException $exception) {
+        $header = file_get_contents($this->databaseFile, false, null, 0, 20);
+        if (!is_string($header) || strlen($header) < 20 || substr($header, 0, 16) !== "SQLite format 3\0") {
             throw new RuntimeException(
-                'Unable to inspect Search index journal mode for read-only access: ' . $this->databaseFile,
-                0,
-                $exception,
+                'Unable to inspect Search index header for read-only access: ' . $this->databaseFile,
             );
         }
 
-        if (!is_string($journalMode)) {
-            throw new RuntimeException(
-                'Unable to determine Search index journal mode for read-only access: ' . $this->databaseFile,
-            );
-        }
-        if (strtolower($journalMode) === 'wal') {
+        $writeVersion = ord($header[18]);
+        $readVersion = ord($header[19]);
+        if ($writeVersion === 2 && $readVersion === 2) {
             throw new SearchIndexRefreshRequiredException(
                 'Search index uses WAL journal mode; refresh it once to publish a single-file snapshot before read-only access: '
                 . $this->databaseFile,
+            );
+        }
+        if ($writeVersion !== 1 || $readVersion !== 1) {
+            throw new RuntimeException(
+                sprintf(
+                    'Search index has unsupported SQLite journal format for read-only access: write=%d, read=%d (%s)',
+                    $writeVersion,
+                    $readVersion,
+                    $this->databaseFile,
+                ),
             );
         }
     }
