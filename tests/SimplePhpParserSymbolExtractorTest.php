@@ -282,6 +282,33 @@ final class SimplePhpParserSymbolExtractorTest extends TestCase
         );
     }
 
+    public function testPreservesCompositeAttributeExpressionsWithUnresolvedOperands(): void
+    {
+        $file = $this->write('CompositeAttributeExpressions', <<<'PHP'
+        <?php
+
+        declare(strict_types=1);
+
+        namespace Demo\Map;
+
+        #[Rule(
+            !ArchitectureRules::Foo,
+            ArchitectureRules::Foo ? 'yes' : 'no',
+        )]
+        final class Example
+        {
+        }
+        PHP);
+
+        $result = (new SimplePhpParserSymbolExtractor())->extract($file);
+
+        self::assertTrue($result->ok);
+        self::assertSame(
+            ["Demo\\Map\\Rule(!\\Demo\\Map\\ArchitectureRules::Foo, \\Demo\\Map\\ArchitectureRules::Foo ? 'yes' : 'no')"],
+            $result->symbols[0]->attributes,
+        );
+    }
+
     public function testExtractsAbstractFinalByReferenceAndVariadicMetadata(): void
     {
         $file = $this->write('Metadata', <<<'PHP'
