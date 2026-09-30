@@ -365,6 +365,32 @@ final class SimplePhpParserSymbolExtractorTest extends TestCase
         );
     }
 
+    public function testPreservesDoubleQuoteInAssociativeAttributeArrayKey(): void
+    {
+        $file = $this->write('DoubleQuoteAttributeArrayKey', <<<'PHP'
+        <?php
+
+        declare(strict_types=1);
+
+        namespace Demo\Map;
+
+        #[Rule([
+            'a"b' => 1,
+        ])]
+        final class Example
+        {
+        }
+        PHP);
+
+        $result = (new SimplePhpParserSymbolExtractor())->extract($file);
+
+        self::assertTrue($result->ok);
+        self::assertSame(
+            ["Demo\\Map\\Rule(['a\"b' => 1])"],
+            $result->symbols[0]->attributes,
+        );
+    }
+
     public function testPreservesUnresolvedAttributeArrayKeyExpression(): void
     {
         $file = $this->write('UnresolvedAttributeArrayKey', <<<'PHP'

@@ -276,7 +276,13 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
 
     private function renderAttributeArrayKey(int|string $key): string
     {
-        return is_int($key) ? (string) $key : "'" . addslashes($key) . "'";
+        if (is_int($key)) {
+            return (string) $key;
+        }
+
+        $escaped = str_replace(['\\', "'"], ['\\\\', "\\'"], $key);
+
+        return "'" . $escaped . "'";
     }
 
     /**
