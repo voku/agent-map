@@ -309,6 +309,114 @@ final class SimplePhpParserSymbolExtractorTest extends TestCase
         );
     }
 
+    public function testAstOnlyKeepsProcessGlobalConstantsAsSourceExpressions(): void
+    {
+        if (!defined('AGENT_MAP_ATTRIBUTE_RUNTIME_VALUE')) {
+            define('AGENT_MAP_ATTRIBUTE_RUNTIME_VALUE', 'runtime-value');
+        }
+
+        $file = $this->write('ProcessGlobalAttributeConstant', <<<'PHP'
+        <?php
+
+        declare(strict_types=1);
+
+        namespace Demo\Map;
+
+        #[Rule(\AGENT_MAP_ATTRIBUTE_RUNTIME_VALUE)]
+        final class Example
+        {
+        }
+        PHP);
+
+        $result = (new SimplePhpParserSymbolExtractor())->extract($file);
+
+        self::assertTrue($result->ok);
+        self::assertSame(
+            ['Demo\\Map\\Rule(\\AGENT_MAP_ATTRIBUTE_RUNTIME_VALUE)'],
+            $result->symbols[0]->attributes,
+        );
+    }
+
+    public function testPreservesResolvedAttributeArrayKeys(): void
+    {
+        $file = $this->write('ResolvedAttributeArrayKeys', <<<'PHP'
+        <?php
+
+        declare(strict_types=1);
+
+        namespace Demo\Map;
+
+        #[Rule([
+            true => 'bool',
+            null => 'null',
+            2.9 => 'float',
+        ])]
+        final class Example
+        {
+        }
+        PHP);
+
+        $result = (new SimplePhpParserSymbolExtractor())->extract($file);
+
+        self::assertTrue($result->ok);
+        self::assertSame(
+            ["Demo\\Map\\Rule([1 => 'bool', '' => 'null', 2 => 'float'])"],
+            $result->symbols[0]->attributes,
+        );
+    }
+
+    public function testPreservesDoubleQuoteInAssociativeAttributeArrayKey(): void
+    {
+        $file = $this->write('DoubleQuoteAttributeArrayKey', <<<'PHP'
+        <?php
+
+        declare(strict_types=1);
+
+        namespace Demo\Map;
+
+        #[Rule([
+            'a"b' => 1,
+        ])]
+        final class Example
+        {
+        }
+        PHP);
+
+        $result = (new SimplePhpParserSymbolExtractor())->extract($file);
+
+        self::assertTrue($result->ok);
+        self::assertSame(
+            ["Demo\\Map\\Rule(['a\"b' => 1])"],
+            $result->symbols[0]->attributes,
+        );
+    }
+
+    public function testPreservesUnresolvedAttributeArrayKeyExpression(): void
+    {
+        $file = $this->write('UnresolvedAttributeArrayKey', <<<'PHP'
+        <?php
+
+        declare(strict_types=1);
+
+        namespace Demo\Map;
+
+        #[Rule([
+            ArchitectureRules::Foo => 'value',
+        ])]
+        final class Example
+        {
+        }
+        PHP);
+
+        $result = (new SimplePhpParserSymbolExtractor())->extract($file);
+
+        self::assertTrue($result->ok);
+        self::assertSame(
+            ["Demo\\Map\\Rule([\\Demo\\Map\\ArchitectureRules::Foo => 'value'])"],
+            $result->symbols[0]->attributes,
+        );
+    }
+
     public function testExtractsAbstractFinalByReferenceAndVariadicMetadata(): void
     {
         $file = $this->write('Metadata', <<<'PHP'
