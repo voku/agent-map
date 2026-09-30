@@ -258,11 +258,25 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
         }
 
         if (is_array($value)) {
-            return '[' . implode(', ', array_map($this->renderAttributeValue(...), $value)) . ']';
+            if (array_is_list($value)) {
+                return '[' . implode(', ', array_map($this->renderAttributeValue(...), $value)) . ']';
+            }
+
+            $items = [];
+            foreach ($value as $key => $item) {
+                $items[] = $this->renderAttributeArrayKey($key) . ' => ' . $this->renderAttributeValue($item);
+            }
+
+            return '[' . implode(', ', $items) . ']';
         }
 
         // Keep unsupported parser values explicit instead of guessing at their representation.
         return '...';
+    }
+
+    private function renderAttributeArrayKey(int|string $key): string
+    {
+        return is_int($key) ? (string) $key : "'" . addslashes($key) . "'";
     }
 
     /**

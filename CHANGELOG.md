@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.18.3 - 2026-09-30
+
+### Fixed
+
+- Keep AST-only attribute extraction source-bound when process-global constants exist, consuming the upstream `voku/simple-php-code-parser` 0.22.7 fix instead of leaking runtime constant values into repository maps.
+- Preserve associative and coerced PHP array keys when rendering structured attribute arguments; unresolved array-key expressions remain intact as source expressions.
+
+### Changed
+
+- Require `voku/simple-php-code-parser ^0.22.7` for the AST-only constant-expression and array-key correctness fixes.
+
 ## 0.18.2 - 2026-09-27
 
 ### Added
