@@ -11,6 +11,7 @@ use voku\AgentMap\Index\ParameterEntry;
 use voku\AgentMap\Index\SymbolEntry;
 use voku\SimplePhpParser\Model\BasePHPClass;
 use voku\SimplePhpParser\Model\PHPAttribute;
+use voku\SimplePhpParser\Model\PHPAttributeExpression;
 use voku\SimplePhpParser\Model\PHPClass;
 use voku\SimplePhpParser\Model\PHPEnum;
 use voku\SimplePhpParser\Model\PHPFunction;
@@ -222,14 +223,6 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
 
     /**
      * Renders one attribute as `Name(arg, key: arg, ...)`.
-     *
-     * Known upstream limitation: PhpCodeParser's argument-value resolver
-     * (voku\SimplePhpParser\Parsers\Helper\Utils::getPhpParserValueFromNode)
-     * behaves differently when reached through an Arg node than when called
-     * directly on an expression. For enum-case/class-const arguments
-     * (`#[Rule(ArchitectureRules::Foo)]`) it returns only the bare case name
-     * as a string ('Foo'), indistinguishable here from a real string literal
-     * argument — the enclosing enum/class is not recoverable at this layer.
      */
     private function renderAttribute(PHPAttribute $attribute): string
     {
@@ -244,6 +237,10 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
 
     private function renderAttributeValue(mixed $value): string
     {
+        if ($value instanceof PHPAttributeExpression) {
+            return $value->expression;
+        }
+
         if (is_string($value)) {
             return "'" . addslashes($value) . "'";
         }
@@ -264,12 +261,7 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
             return '[' . implode(', ', array_map($this->renderAttributeValue(...), $value)) . ']';
         }
 
-        // Array-literal attribute arguments resolved via the AST path (no
-        // reflection) come back as an unresolved php-parser node rather than
-        // a real PHP array — voku/simple-php-code-parser's
-        // getPhpParserValueFromNode() only unwraps Array_ nodes passed
-        // directly, not ones reached through an Arg wrapper. Render as an
-        // explicit placeholder instead of guessing at the contents.
+        // Keep unsupported parser values explicit instead of guessing at their representation.
         return '...';
     }
 
