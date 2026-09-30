@@ -277,7 +277,7 @@ final class SimplePhpParserSymbolExtractorTest extends TestCase
 
         self::assertTrue($result->ok);
         self::assertSame(
-            ["Demo\\Map\\Rule('Foo', Demo\\Map\\ArchitectureRules::Foo)"],
+            ["Demo\\Map\\Rule('Foo', \\Demo\\Map\\ArchitectureRules::Foo)"],
             $result->symbols[0]->attributes,
         );
     }
