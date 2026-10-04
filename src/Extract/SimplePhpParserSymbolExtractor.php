@@ -37,12 +37,12 @@ final readonly class SimplePhpParserSymbolExtractor implements SymbolExtractor
         }
 
         try {
-            // Pass the already-read $code rather than $file: getPhpFiles()
-            // would otherwise re-read the file itself, doubling disk I/O.
+            // Parse the already-read source explicitly so this path never relies on
+            // getPhpFiles() guessing whether its input is a path or raw PHP source.
             // astOnly() restricts parsing strictly to the source file text, avoiding
             // reflection-enrichment, parent autoloading, and inherited member explosion.
             $options = class_exists(ParserOptions::class) ? ParserOptions::astOnly() : null;
-            $container = $this->withoutApplicationAutoloaders(static fn (): ParserContainer => PhpCodeParser::getPhpFiles(
+            $container = $this->withoutApplicationAutoloaders(static fn (): ParserContainer => PhpCodeParser::getFromString(
                 $code,
                 options: $options,
             ));
