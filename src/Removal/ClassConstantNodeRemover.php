@@ -55,6 +55,7 @@ final readonly class ClassConstantNodeRemover
             throw new RuntimeException('Class constant removal requires the declaration to end on its own line without trailing source: ' . $path . '.');
         }
         $end = $nextNewline === false ? strlen($source) - 1 : $nextNewline;
+        ['start' => $start, 'end' => $end] = BlankLineSeparation::absorb($source, $start, $end);
 
         return [
             'start' => $start,
