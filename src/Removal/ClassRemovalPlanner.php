@@ -64,13 +64,22 @@ final readonly class ClassRemovalPlanner
         $locator = new SourceClassNameLocator($map->root);
         if ($stale === [] && $blockers === []) {
             try {
-                (new ClassFileRemovalInspector($locator))->assertOwnedFile(
+                $hasDocblock = (new ClassFileRemovalInspector($locator))->inspectOwnedFile(
                     $file->path,
                     $file->namespace,
                     $symbol->name,
                     $symbol->lineStart,
                     $symbol->lineEnd,
                 );
+                if ($hasDocblock) {
+                    $blindSpots[] = new PlanBlindSpot(
+                        kind: 'class_phpdoc',
+                        message: 'Class PHPDoc may contain runtime or framework metadata that ordinary type relations do not prove unused.',
+                        path: $file->path,
+                        lineStart: $symbol->lineStart,
+                        lineEnd: $symbol->lineEnd,
+                    );
+                }
             } catch (RuntimeException $exception) {
                 $blockers[] = $exception->getMessage();
             }
