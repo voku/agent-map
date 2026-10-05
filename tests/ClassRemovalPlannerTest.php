@@ -120,6 +120,23 @@ PHP);
         ));
     }
 
+    public function testClassPhpDocRequiresReviewButKeepsExactDeletionEvidence(): void
+    {
+        file_put_contents($this->root . '/src/Obsolete.php', <<<'PHP'
+<?php
+namespace Demo;
+
+/** @Entity */
+final class Obsolete {}
+PHP);
+
+        $plan = $this->plan('Demo\\Obsolete');
+
+        self::assertSame(ClassRemovalPlan::STATUS_REVIEW_REQUIRED, $plan->status, implode("\n", $plan->blockers));
+        self::assertCount(1, $plan->deletions);
+        self::assertContains('class_phpdoc', array_map(static fn ($spot): string => $spot->kind, $plan->blindSpots));
+    }
+
     public function testClassAttributeRequiresReviewButKeepsExactDeletionEvidence(): void
     {
         file_put_contents($this->root . '/src/Obsolete.php', <<<'PHP'
