@@ -21,13 +21,14 @@ final readonly class ClassFileRemovalInspector
     {
     }
 
-    public function assertOwnedFile(
+    /** Returns whether the owned class declaration carries a PHPDoc block. */
+    public function inspectOwnedFile(
         string $path,
         string $expectedNamespace,
         string $expectedShortName,
         int $lineStart,
         int $lineEnd,
-    ): void {
+    ): bool {
         if ($expectedNamespace === '') {
             throw new RuntimeException('Class removal contract 1.0 requires a namespaced class in its own file: ' . $path);
         }
@@ -62,6 +63,7 @@ final readonly class ClassFileRemovalInspector
         }
 
         $matches = 0;
+        $hasDocblock = false;
         foreach ($namespace->stmts as $statement) {
             if ($statement instanceof Use_ || $statement instanceof GroupUse || $statement instanceof Nop) {
                 continue;
@@ -73,6 +75,7 @@ final readonly class ClassFileRemovalInspector
                 && $statement->getEndLine() === $lineEnd
             ) {
                 ++$matches;
+                $hasDocblock = $statement->getDocComment() !== null;
                 continue;
             }
 
@@ -89,5 +92,7 @@ final readonly class ClassFileRemovalInspector
                 $matches,
             ));
         }
+
+        return $hasDocblock;
     }
 }
