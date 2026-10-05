@@ -108,7 +108,7 @@ Shared invariants, all of them machine-checkable:
 | graph ranking | - | **removed in 0.9** | `rank` had no consumer, appeared in no skill and was derivable from `callers`/`callees`. `GraphRanker` survives as an internal collaborator of `discover`; it is no longer public API. |
 | temporal history | `history diff/coupling/claims/observe/show` | experimental | Derived evidence by [ADR 0002](adr/0002-temporal-history-is-derived-evidence.md); no automated consumer. |
 | repository status | `summary`, `stats`, `changed` | diagnostic | Human orientation. The output shape is not a machine contract. |
-| plan capability discovery | `plan-capabilities` | stable | Covers all fourteen contracts across the rename, removal, move, copy, and scaffold families. Routing and discovery read the same registry, so an advertised contract is always routable. |
+| plan capability discovery | `plan-capabilities` | stable | Covers all fifteen contracts across the rename, removal, move, copy, and scaffold families. Routing and discovery read the same registry, so an advertised contract is always routable. |
 
 ## What 1.0 freezes
 
