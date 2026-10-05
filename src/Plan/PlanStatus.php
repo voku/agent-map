@@ -25,8 +25,9 @@ final class PlanStatus
     /**
      * @param list<PlanEdit> $edits
      * @param list<PlanMove> $moves
+     * @param list<PlanFileDeletion> $deletions
      */
-    public static function assertPublishable(string $planType, string $status, array $edits, array $moves = []): void
+    public static function assertPublishable(string $planType, string $status, array $edits, array $moves = [], array $deletions = []): void
     {
         if (!in_array($status, self::ALL, true)) {
             throw new InvalidArgumentException(sprintf(
@@ -37,15 +38,16 @@ final class PlanStatus
             ));
         }
 
-        if ($status !== self::BLOCKED || ($edits === [] && $moves === [])) {
+        if ($status !== self::BLOCKED || ($edits === [] && $moves === [] && $deletions === [])) {
             return;
         }
 
         throw new InvalidArgumentException(sprintf(
-            '%s is blocked but carries %d edit(s) and %d move(s); a blocked plan must publish no applicable mutation.',
+            '%s is blocked but carries %d edit(s), %d move(s) and %d file deletion(s); a blocked plan must publish no applicable mutation.',
             $planType,
             count($edits),
             count($moves),
+            count($deletions),
         ));
     }
 }

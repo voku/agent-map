@@ -13,9 +13,11 @@ use voku\AgentMap\Move\MethodMovePlan;
 use InvalidArgumentException;
 use voku\AgentMap\Plan\GovernedPlan;
 use voku\AgentMap\Plan\PlanEdit;
+use voku\AgentMap\Plan\PlanFileDeletion;
 use voku\AgentMap\Plan\PlanMove;
 use voku\AgentMap\Plan\PlanStatus;
 use voku\AgentMap\Removal\ClassConstantRemovalPlan;
+use voku\AgentMap\Removal\ClassRemovalPlan;
 use voku\AgentMap\Removal\MethodRemovalPlan;
 use voku\AgentMap\Removal\PropertyRemovalPlan;
 use voku\AgentMap\Rename\ClassConstantRenamePlan;
@@ -49,6 +51,7 @@ final class PlanContractShapeTest extends TestCase
         MethodRemovalPlan::class,
         PropertyRemovalPlan::class,
         ClassConstantRemovalPlan::class,
+        ClassRemovalPlan::class,
         ClassMovePlan::class,
         MethodMovePlan::class,
         MethodCopyPlan::class,
@@ -181,19 +184,42 @@ final class PlanContractShapeTest extends TestCase
         }
     }
 
+    public function testABlockedPlanCannotBeConstructedWithFileDeletionsEither(): void
+    {
+        $withDeletions = array_values(array_filter(
+            self::PLAN_CLASSES,
+            fn (string $planClass): bool => $this->acceptsDeletions($planClass),
+        ));
+        self::assertNotSame([], $withDeletions, 'At least one contract must carry file deletions for this to mean anything.');
+
+        foreach ($withDeletions as $planClass) {
+            try {
+                $this->plan($planClass, PlanStatus::BLOCKED, [], [], [$this->deletion()]);
+                self::fail($planClass . ' constructed a blocked plan carrying a file deletion.');
+            } catch (InvalidArgumentException $exception) {
+                self::assertStringContainsString('must publish no applicable mutation', $exception->getMessage(), $planClass);
+            }
+        }
+    }
+
     public function testTheGuardOnlyRejectsBlockedPlans(): void
     {
-        // Without this, a guard that rejected everything would pass the two tests above.
+        // Without this, a guard that rejected everything would pass the tests above.
         foreach (self::PLAN_CLASSES as $planClass) {
             foreach ([PlanStatus::SAFE, PlanStatus::REVIEW_REQUIRED] as $status) {
                 $moves = $this->acceptsMoves($planClass) ? [$this->move()] : [];
-                $plan = $this->plan($planClass, $status, [$this->edit()], $moves);
+                $deletions = $this->acceptsDeletions($planClass) ? [$this->deletion()] : [];
+                $edits = $deletions === [] ? [$this->edit()] : [];
+                $plan = $this->plan($planClass, $status, $edits, $moves, $deletions);
 
                 $payload = $plan->toArray();
                 self::assertSame($status, $payload['status'], $planClass);
-                self::assertCount(1, (array) $payload['edits'], $planClass);
+                self::assertCount(count($edits), (array) $payload['edits'], $planClass);
                 if ($moves !== []) {
                     self::assertCount(1, (array) $payload['moves'], $planClass);
+                }
+                if ($deletions !== []) {
+                    self::assertCount(1, (array) $payload['deletions'], $planClass);
                 }
             }
         }
@@ -228,6 +254,18 @@ final class PlanContractShapeTest extends TestCase
         new PlanMove(fromPath: 'src/Target.php', toPath: '..\\outside\\Target.php', sourceSha256: 'sha256:0', reason: 'escape probe');
     }
 
+    public function testAFileDeletionCannotNameAPathOutsideTheProjectRoot(): void
+    {
+        foreach (['../outside.php', '/tmp/outside.php', 'C:/outside.php', 'src/../../outside.php', ''] as $path) {
+            try {
+                new PlanFileDeletion(path: $path, sourceSha256: 'sha256:0', reason: 'escape probe');
+                self::fail('PlanFileDeletion represented a path outside the project root: ' . $path);
+            } catch (InvalidArgumentException $exception) {
+                self::assertStringContainsString('must stay inside the project root', $exception->getMessage(), $path);
+            }
+        }
+    }
+
     public function testAnUnknownStatusIsRejectedRatherThanCarried(): void
     {
         foreach (self::PLAN_CLASSES as $planClass) {
@@ -253,8 +291,9 @@ final class PlanContractShapeTest extends TestCase
      * @param class-string<GovernedPlan> $planClass
      * @param list<PlanEdit> $edits
      * @param list<PlanMove> $moves
+     * @param list<PlanFileDeletion> $deletions
      */
-    private function plan(string $planClass, string $status = PlanStatus::SAFE, array $edits = [], array $moves = []): GovernedPlan
+    private function plan(string $planClass, string $status = PlanStatus::SAFE, array $edits = [], array $moves = [], array $deletions = []): GovernedPlan
     {
         $reflection = new ReflectionClass($planClass);
         $constructor = $reflection->getConstructor();
@@ -266,6 +305,7 @@ final class PlanContractShapeTest extends TestCase
                 'status' => $status,
                 'edits' => $edits,
                 'moves' => $moves,
+                'deletions' => $deletions,
                 default => $this->emptyArgument($parameter, $planClass),
             };
         }
@@ -284,6 +324,21 @@ final class PlanContractShapeTest extends TestCase
 
         foreach ($constructor->getParameters() as $parameter) {
             if ($parameter->getName() === 'moves') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @param class-string<GovernedPlan> $planClass */
+    private function acceptsDeletions(string $planClass): bool
+    {
+        $constructor = (new ReflectionClass($planClass))->getConstructor();
+        self::assertNotNull($constructor, $planClass);
+
+        foreach ($constructor->getParameters() as $parameter) {
+            if ($parameter->getName() === 'deletions') {
                 return true;
             }
         }
@@ -313,6 +368,15 @@ final class PlanContractShapeTest extends TestCase
         return new PlanMove(
             fromPath: 'src/Target.php',
             toPath: 'src/Moved/Target.php',
+            sourceSha256: 'sha256:0',
+            reason: 'contract shape probe',
+        );
+    }
+
+    private function deletion(): PlanFileDeletion
+    {
+        return new PlanFileDeletion(
+            path: 'src/Target.php',
             sourceSha256: 'sha256:0',
             reason: 'contract shape probe',
         );

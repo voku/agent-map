@@ -56,11 +56,11 @@ whose per-capability verdicts are the measured basis for anything below marked *
 
 ### Governed plan family
 
-All fourteen plans across five families are **stable** contracts at version `1.0`, and share one envelope: `type`,
+All fifteen plans across five families are **stable** contracts at version `1.0`, and share one envelope: `type`,
 `contract_version`, `status`, `target_id`, `provenance`, `edits`, `blind_spots`, `stale_evidence`,
-`blockers`, `not_observable`, plus contract-specific identity and, where it applies, `moves`.
+`blockers`, `not_observable`, plus contract-specific identity and, where it applies, `moves` or `deletions`.
 `voku\AgentMap\Plan\GovernedPlan` declares the shared behaviour, the shared value objects
-(`PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence`, `PlanMove`) live beside it, and
+(`PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence`, `PlanMove`, `PlanFileDeletion`) live beside it, and
 `tests/PlanContractShapeTest.php` pins the envelope.
 
 | family | contract | command | needs PHPStan |
@@ -74,6 +74,7 @@ All fourteen plans across five families are **stable** contracts at version `1.0
 | removal | `method_removal_plan@1.0` | `method-removal-plan` | yes |
 | removal | `property_removal_plan@1.0` | `property-removal-plan` | yes |
 | removal | `class_constant_removal_plan@1.0` | `class-constant-removal-plan` | yes |
+| removal | `class_removal_plan@1.0` | `class-removal-plan` | yes |
 | move | `class_move_plan@1.0` | `class-move-plan` | no |
 | move | `method_move_plan@1.0` | `method-move-plan` | yes |
 | copy | `method_copy_plan@1.0` | `method-copy-plan` | yes |
@@ -84,17 +85,17 @@ Shared invariants, all of them machine-checkable:
 
 - `status` is exactly one of `safe`, `review_required`, `blocked`, and a plan carrying anything else
   cannot be constructed.
-- A `blocked` plan publishes **no** edits and **no** moves. There is no partial mutation evidence.
+- A `blocked` plan publishes **no** edits, **no** moves, and **no** file deletions. There is no partial mutation evidence.
   This is enforced in the constructor of every plan, not left to each planner's discretion: a blocked
-  plan holding an edit or a move is not representable.
-- Every path a plan names stays inside the project root. `PlanMove` refuses absolute paths, `..`
+  plan holding an edit, a move, or a file deletion is not representable.
+- Every path a plan names stays inside the project root. `PlanMove` and `PlanFileDeletion` refuse absolute paths, `..`
   segments and Windows drive paths rather than normalizing them into something that looks local.
 - Evidence identity lives in `provenance` (map digest, effective backend, analysis fingerprint) and
   nowhere else. The pre-0.9 top-level `backend` / `map_digest` aliases were removed in 0.9.
 - Stale source evidence is machine-distinct from semantic blockers, because the recovery differs.
 - Every edit carries the pre-edit source SHA-256 and an exact byte range; every move carries the same
   hash and requires an absent destination.
-- CLI exit code is `1` for a blocked plan and `0` otherwise, uniformly across all fourteen commands.
+- CLI exit code is `1` for a blocked plan and `0` otherwise, uniformly across all fifteen commands.
 - `text` is a human projection; `json` and `toon` are two serializers of one model, never two
   semantic implementations. Plans deliberately do not emit `markdown`.
 
@@ -108,7 +109,7 @@ Shared invariants, all of them machine-checkable:
 | graph ranking | - | **removed in 0.9** | `rank` had no consumer, appeared in no skill and was derivable from `callers`/`callees`. `GraphRanker` survives as an internal collaborator of `discover`; it is no longer public API. |
 | temporal history | `history diff/coupling/claims/observe/show` | experimental | Derived evidence by [ADR 0002](adr/0002-temporal-history-is-derived-evidence.md); no automated consumer. |
 | repository status | `summary`, `stats`, `changed` | diagnostic | Human orientation. The output shape is not a machine contract. |
-| plan capability discovery | `plan-capabilities` | stable | Covers all fourteen contracts across the rename, removal, move, copy, and scaffold families. Routing and discovery read the same registry, so an advertised contract is always routable. |
+| plan capability discovery | `plan-capabilities` | stable | Covers all fifteen contracts across the rename, removal, move, copy, and scaffold families. Routing and discovery read the same registry, so an advertised contract is always routable. |
 
 ## What 1.0 freezes
 
@@ -176,7 +177,7 @@ reason to exist.
 - [ ] every public surface has an owner, a tier, and a stated reason to exist;
 - [ ] the persisted map schema has explicit compatibility rules;
 - [ ] every stable plan contract is versioned and shares the frozen envelope;
-- [ ] a blocked plan provably never exposes applicable edits or moves;
+- [ ] a blocked plan provably never exposes applicable edits, moves, or file deletions;
 - [ ] provenance and freshness semantics are consistent across every surface that reports them;
 - [ ] structural-only and PHPStan-backed modes fail predictably rather than silently differing;
 - [ ] the library API is the supported machine boundary, and no consumer reconstructs private paths;
@@ -188,7 +189,7 @@ reason to exist.
 
 ## Release shape
 
-`0.10.0` completes the governed plan surface across all fourteen contracts and introduces the split
+`0.10.0` completes the governed plan surface across all fifteen contracts and introduces the split
 index format for high-performance navigation. Ahead of 1.0, the package focuses on dogfood proof,
 fresh-consumer ergonomics, and compatibility hardening (fresh install, structural-only projects,
 PHPStan-backed projects, large repositories, partial `--paths`, JSON/TOON parity, and Windows paths).
