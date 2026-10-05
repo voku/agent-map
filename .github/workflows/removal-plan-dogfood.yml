@@ -39,8 +39,52 @@ jobs:
             "$root/property-safe/src" \
             "$root/property-used/src" \
             "$root/class-constant-safe/src" \
-            "$root/class-constant-used/src"
+            "$root/class-constant-used/src" \
+            "$root/class-safe/src" \
+            "$root/class-used/src"
           echo "DOGFOOD_ROOT=$root" >> "$GITHUB_ENV"
+
+          cat > "$root/class-safe/src/Obsolete.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood\Legacy;
+
+          final class Obsolete
+          {
+          }
+          PHP
+
+          cat > "$root/class-used/src/Obsolete.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood\Legacy;
+
+          final class Obsolete
+          {
+          }
+          PHP
+
+          cat > "$root/class-used/src/Consumer.php" <<'PHP'
+          <?php
+
+          declare(strict_types=1);
+
+          namespace Dogfood;
+
+          use Dogfood\Legacy\Obsolete;
+
+          final class Consumer
+          {
+              public function make(): Obsolete
+              {
+                  return new Obsolete();
+              }
+          }
+          PHP
 
           cat > "$root/method-safe/src/Worker.php" <<'PHP'
           <?php
@@ -151,6 +195,77 @@ jobs:
               }
           }
           PHP
+
+      - name: Publish exact read-only class-removal evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/class-safe" \
+            --paths=src \
+            --out="$DOGFOOD_ROOT/class-safe/map.json" \
+            --phpstan-memory-limit=512M
+
+          before="$(sha256sum "$DOGFOOD_ROOT/class-safe/src/Obsolete.php" | cut -d' ' -f1)"
+          php bin/agent-map class-removal-plan \
+            'Dogfood\Legacy\Obsolete' \
+            --index="$DOGFOOD_ROOT/class-safe/map.json" \
+            --format=json > "$DOGFOOD_ROOT/class-safe/plan.json"
+          after="$(sha256sum "$DOGFOOD_ROOT/class-safe/src/Obsolete.php" | cut -d' ' -f1)"
+          test "$before" = "$after"
+
+          jq -e '
+            (.type == "class_removal_plan")
+            and (.contract_version == "1.0")
+            and (.status == "safe")
+            and (.blind_spots == [])
+            and (.stale_evidence == [])
+            and (.blockers == [])
+            and (.edits == [])
+            and (.deletions | length == 1)
+            and (.deletions[0].path == "src/Obsolete.php")
+            and (.deletions[0].source_sha256 | startswith("sha256:"))
+          ' "$DOGFOOD_ROOT/class-safe/plan.json" >/dev/null
+
+          php bin/agent-map class-removal-plan \
+            'Dogfood\Legacy\Obsolete' \
+            --index="$DOGFOOD_ROOT/class-safe/map.json" \
+            --format=text > "$DOGFOOD_ROOT/class-safe/plan.txt"
+          php bin/agent-map class-removal-plan \
+            'Dogfood\Legacy\Obsolete' \
+            --index="$DOGFOOD_ROOT/class-safe/map.json" \
+            --format=toon > "$DOGFOOD_ROOT/class-safe/plan.toon"
+          test -s "$DOGFOOD_ROOT/class-safe/plan.txt"
+          test -s "$DOGFOOD_ROOT/class-safe/plan.toon"
+          test "$before" = "$(sha256sum "$DOGFOOD_ROOT/class-safe/src/Obsolete.php" | cut -d' ' -f1)"
+
+      - name: Prove observed class usages fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          php bin/agent-map build \
+            --root="$DOGFOOD_ROOT/class-used" \
+            --paths=src \
+            --out="$DOGFOOD_ROOT/class-used/map.json" \
+            --phpstan-memory-limit=512M
+
+          set +e
+          php bin/agent-map class-removal-plan \
+            'Dogfood\Legacy\Obsolete' \
+            --index="$DOGFOOD_ROOT/class-used/map.json" \
+            --format=json > "$DOGFOOD_ROOT/class-used/plan.json"
+          status=$?
+          set -e
+          test "$status" -eq 1
+
+          jq -e '
+            (.status == "blocked")
+            and (.edits == [])
+            and (.deletions == [])
+            and ([.blockers[] | contains("incoming")] | any)
+          ' "$DOGFOOD_ROOT/class-used/plan.json" >/dev/null
 
       - name: Publish exact read-only method-removal evidence
         shell: bash
