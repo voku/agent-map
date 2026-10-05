@@ -182,7 +182,7 @@ Usage: agent-map class-removal-plan ClassName [--index PATH] [--format text|json
 
 Plan deletion of one unused namespaced PHP class together with its complete owned source file. The command never changes source.
 Contract 1.0 requires a PHPStan-backed map, one ordinary class as the file's only indexed symbol, no incoming usage
-evidence, and no independently owned top-level PHP statements. Class attributes and exact string/PHPDoc references require
+evidence, and no independently owned top-level PHP statements. Class PHPDoc, class attributes and exact string/PHPDoc references require
 review. Interfaces, traits, enums, multi-symbol files, braced/global namespaces, stale evidence, and live references fail closed.
 
 TEXT;
