@@ -10,6 +10,7 @@ use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\TraitUse;
 use RuntimeException;
+use voku\SimplePhpParser\Parsers\Helper\AstNodeInspector;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 /** Maps one private property declaration to an exact whole-line deletion range. */
@@ -60,17 +61,12 @@ final readonly class PropertyNodeRemover
         }
 
         $property = $matches[0];
-        $nodeStart = $property->getStartFilePos();
-        $lineStart = $property->getStartLine();
-        $doc = $property->getDocComment();
-        if ($doc !== null) {
-            $nodeStart = min($nodeStart, $doc->getStartFilePos());
-            $lineStart = min($lineStart, $doc->getStartLine());
+        $owned = AstNodeInspector::ownedRange($property);
+        if ($owned === null) {
+            throw new RuntimeException('Parser did not expose source positions for the declaration in ' . $path . '.');
         }
-        foreach ($property->attrGroups as $attributeGroup) {
-            $nodeStart = min($nodeStart, $attributeGroup->getStartFilePos());
-            $lineStart = min($lineStart, $attributeGroup->getStartLine());
-        }
+        $nodeStart = $owned['startFilePos'];
+        $lineStart = $owned['startLine'];
 
         $previousNewline = strrpos(substr($source, 0, $nodeStart), "\n");
         $start = $previousNewline === false ? 0 : $previousNewline + 1;
@@ -104,7 +100,7 @@ final readonly class PropertyNodeRemover
             'single_property' => count($property->props) === 1,
             'hooks' => $property->hooks !== [],
             'has_attributes' => $property->attrGroups !== [],
-            'has_docblock' => $doc !== null,
+            'has_docblock' => $property->getDocComment() !== null,
             'owner_uses_trait' => $this->ownerUsesTrait($class),
             'owner_has_load_metadata' => $this->ownerHasLoadMetadata($class),
         ];

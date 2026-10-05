@@ -9,6 +9,7 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\ClassConst;
 use PhpParser\Node\Stmt\ClassLike;
 use RuntimeException;
+use voku\SimplePhpParser\Parsers\Helper\AstNodeInspector;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 /** Maps one class-constant declaration to an exact whole-line deletion range. */
@@ -31,17 +32,12 @@ final readonly class ClassConstantNodeRemover
         }
 
         $constant = $matches[0];
-        $nodeStart = $constant->getStartFilePos();
-        $lineStart = $constant->getStartLine();
-        $doc = $constant->getDocComment();
-        if ($doc !== null) {
-            $nodeStart = min($nodeStart, $doc->getStartFilePos());
-            $lineStart = min($lineStart, $doc->getStartLine());
+        $owned = AstNodeInspector::ownedRange($constant);
+        if ($owned === null) {
+            throw new RuntimeException('Parser did not expose source positions for the declaration in ' . $path . '.');
         }
-        foreach ($constant->attrGroups as $attributeGroup) {
-            $nodeStart = min($nodeStart, $attributeGroup->getStartFilePos());
-            $lineStart = min($lineStart, $attributeGroup->getStartLine());
-        }
+        $nodeStart = $owned['startFilePos'];
+        $lineStart = $owned['startLine'];
 
         $previousNewline = strrpos(substr($source, 0, $nodeStart), "\n");
         $start = $previousNewline === false ? 0 : $previousNewline + 1;
@@ -66,7 +62,7 @@ final readonly class ClassConstantNodeRemover
             'private' => $constant->isPrivate(),
             'single_constant' => count($constant->consts) === 1,
             'has_attributes' => $constant->attrGroups !== [],
-            'has_docblock' => $doc !== null,
+            'has_docblock' => $constant->getDocComment() !== null,
         ];
     }
 
