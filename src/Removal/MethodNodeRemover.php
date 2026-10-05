@@ -57,6 +57,7 @@ final readonly class MethodNodeRemover
         }
 
         $end = $nextNewline === false ? strlen($source) - 1 : $nextNewline;
+        ['start' => $start, 'end' => $end] = BlankLineSeparation::absorb($source, $start, $end);
         if ($start < 0 || $end < $start) {
             throw new RuntimeException('Parser did not expose a valid method-removal byte range for ' . $path . '.');
         }
