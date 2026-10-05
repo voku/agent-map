@@ -89,7 +89,10 @@ TEXT;
         }
     }
 
-    /** @param list<string> $tokens @return array{arguments: list<string>, options: array<string, string>, help: bool} */
+    /**
+     * @param list<string> $tokens
+     * @return array{arguments: list<string>, options: array<string, string>, help: bool}
+     */
     private function parse(array $tokens): array
     {
         $arguments = [];
