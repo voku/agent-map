@@ -40,6 +40,8 @@ final class CliApplicationTest extends TestCase
         self::assertSame(1, substr_count($output, 'Property refactoring evidence:'));
         self::assertSame(1, substr_count($output, 'Method removal evidence:'));
         self::assertSame(1, substr_count($output, 'Property removal evidence:'));
+        self::assertSame(1, substr_count($output, 'Class removal evidence:'));
+        self::assertSame(1, substr_count($output, 'class-removal-plan Build an exact unused-class owned-file deletion plan'));
         self::assertSame(1, substr_count($output, 'Class-constant removal evidence:'));
         self::assertSame(1, substr_count($output, 'Test discovery:'));
         self::assertSame(1, substr_count($output, 'tests      Discover tests covering a PHP class, method, or file with direct callers and companions'));
@@ -83,6 +85,14 @@ final class CliApplicationTest extends TestCase
                 'kind' => 'method',
                 'command' => 'method-move-plan',
                 'plan_type' => 'method_move_plan',
+                'contract_version' => '1.0',
+                'semantic_backend' => 'phpstan',
+            ],
+            [
+                'family' => 'removal',
+                'kind' => 'class',
+                'command' => 'class-removal-plan',
+                'plan_type' => 'class_removal_plan',
                 'contract_version' => '1.0',
                 'semantic_backend' => 'phpstan',
             ],
