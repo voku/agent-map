@@ -254,6 +254,18 @@ final class PlanContractShapeTest extends TestCase
         new PlanMove(fromPath: 'src/Target.php', toPath: '..\\outside\\Target.php', sourceSha256: 'sha256:0', reason: 'escape probe');
     }
 
+    public function testAFileDeletionCannotNameAPathOutsideTheProjectRoot(): void
+    {
+        foreach (['../outside.php', '/tmp/outside.php', 'C:/outside.php', 'src/../../outside.php', ''] as $path) {
+            try {
+                new PlanFileDeletion(path: $path, sourceSha256: 'sha256:0', reason: 'escape probe');
+                self::fail('PlanFileDeletion represented a path outside the project root: ' . $path);
+            } catch (InvalidArgumentException $exception) {
+                self::assertStringContainsString('must stay inside the project root', $exception->getMessage(), $path);
+            }
+        }
+    }
+
     public function testAnUnknownStatusIsRejectedRatherThanCarried(): void
     {
         foreach (self::PLAN_CLASSES as $planClass) {
