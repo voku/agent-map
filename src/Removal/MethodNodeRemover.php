@@ -10,6 +10,7 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt\ClassMethod;
 use RuntimeException;
+use voku\SimplePhpParser\Parsers\Helper\AstNodeInspector;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 /** Maps a method declaration to a whole-line byte deletion, including its PHPDoc and attributes. */
@@ -32,14 +33,11 @@ final readonly class MethodNodeRemover
         }
 
         $method = $matches[0];
-        $nodeStart = $method->getStartFilePos();
-        $doc = $method->getDocComment();
-        if ($doc !== null) {
-            $nodeStart = min($nodeStart, $doc->getStartFilePos());
+        $owned = AstNodeInspector::ownedRange($method);
+        if ($owned === null) {
+            throw new RuntimeException('Parser did not expose source positions for the declaration in ' . $path . '.');
         }
-        foreach ($method->attrGroups as $attributeGroup) {
-            $nodeStart = min($nodeStart, $attributeGroup->getStartFilePos());
-        }
+        $nodeStart = $owned['startFilePos'];
 
         $previousNewline = strrpos(substr($source, 0, $nodeStart), "\n");
         $start = $previousNewline === false ? 0 : $previousNewline + 1;
