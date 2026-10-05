@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.19.0 - 2026-10-05
+
+### Added
+
+- Add `class_removal_plan@1.0`: a PHPStan-backed, fail-closed plan for deleting one unused namespaced class only when it exclusively owns its source file; live type evidence blocks, while class PHPDoc, class attributes and exact string/PHPDoc references require review.
+
 ## 0.18.4 - 2026-10-05
 
 ### Changed
@@ -30,8 +36,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## 0.18.2 - 2026-09-27
 
 ### Added
-
-- Add `class_removal_plan@1.0`: a PHPStan-backed, fail-closed plan for deleting one unused namespaced class only when it exclusively owns its source file; live type evidence blocks, while class PHPDoc, class attributes and exact string/PHPDoc references require review.
 
 - Add `SearchIndexStore::openReadOnly()` as the owner boundary for querying an existing Search index without creating directories, migrating schema, or producing SQLite WAL/SHM sidecars; legacy WAL snapshots are rejected with an explicit refresh requirement (#117).
 
