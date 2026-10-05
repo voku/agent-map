@@ -35,7 +35,16 @@ final readonly class ClassFileRemovalInspector
 
         $namespaces = [];
         foreach ($this->locator->astFor($path) as $statement) {
-            if ($statement instanceof Declare_ || $statement instanceof Nop) {
+            if ($statement instanceof Declare_) {
+                if ($statement->stmts === null) {
+                    continue;
+                }
+
+                throw new RuntimeException(
+                    'Class removal cannot own the whole file because a top-level declare contains a statement body: ' . $path,
+                );
+            }
+            if ($statement instanceof Nop) {
                 continue;
             }
             if ($statement instanceof Namespace_) {
