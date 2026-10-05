@@ -56,11 +56,11 @@ whose per-capability verdicts are the measured basis for anything below marked *
 
 ### Governed plan family
 
-All fourteen plans across five families are **stable** contracts at version `1.0`, and share one envelope: `type`,
+All fifteen plans across five families are **stable** contracts at version `1.0`, and share one envelope: `type`,
 `contract_version`, `status`, `target_id`, `provenance`, `edits`, `blind_spots`, `stale_evidence`,
-`blockers`, `not_observable`, plus contract-specific identity and, where it applies, `moves`.
+`blockers`, `not_observable`, plus contract-specific identity and, where it applies, `moves` or `deletions`.
 `voku\AgentMap\Plan\GovernedPlan` declares the shared behaviour, the shared value objects
-(`PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence`, `PlanMove`) live beside it, and
+(`PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence`, `PlanMove`, `PlanFileDeletion`) live beside it, and
 `tests/PlanContractShapeTest.php` pins the envelope.
 
 | family | contract | command | needs PHPStan |
