@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.18.4 - 2026-10-05
+
 ### Changed
 
 - Method, property and class-constant removal now take the declaration range, including its PHPDoc comment and attributes, from `voku/simple-php-code-parser` (`AstNodeInspector::ownedRange()`, 0.22.12) instead of reconstructing it from the AST in three places. Removal plans and their byte ranges are unchanged; a node without source positions now fails closed with a clear error. Requires `voku/simple-php-code-parser` `^0.22.12`.
