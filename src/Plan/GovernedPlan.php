@@ -14,7 +14,7 @@ namespace voku\AgentMap\Plan;
  */
 interface GovernedPlan
 {
-    /** A blocked plan publishes no edits or moves, whatever its concrete evidence would have been. */
+    /** A blocked plan publishes no edits, moves or file deletions, whatever its concrete evidence would have been. */
     public function isBlocked(): bool;
 
     /** @return array<string, mixed> */
