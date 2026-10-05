@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add `class_removal_plan@1.0`: a PHPStan-backed, fail-closed plan for deleting one unused namespaced class only when it exclusively owns its source file; live type evidence blocks, while class attributes and exact string/PHPDoc references require review.
+
 - Add `SearchIndexStore::openReadOnly()` as the owner boundary for querying an existing Search index without creating directories, migrating schema, or producing SQLite WAL/SHM sidecars; legacy WAL snapshots are rejected with an explicit refresh requirement (#117).
 
 ### Changed
