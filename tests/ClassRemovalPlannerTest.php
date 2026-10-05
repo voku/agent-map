@@ -120,6 +120,29 @@ PHP);
         ));
     }
 
+    public function testExecutableDeclareBodyBlocksOwnedFileDeletion(): void
+    {
+        file_put_contents($this->root . '/src/Obsolete.php', <<<'PHP'
+<?php
+declare(ticks=1) {
+    register_shutdown_function(static function (): void {});
+}
+
+namespace Demo;
+
+final class Obsolete {}
+PHP);
+
+        $plan = $this->plan('Demo\\Obsolete');
+
+        self::assertSame(ClassRemovalPlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->deletions);
+        self::assertNotEmpty(array_filter(
+            $plan->blockers,
+            static fn (string $blocker): bool => str_contains($blocker, 'top-level declare contains a statement body'),
+        ));
+    }
+
     public function testClassPhpDocRequiresReviewButKeepsExactDeletionEvidence(): void
     {
         file_put_contents($this->root . '/src/Obsolete.php', <<<'PHP'
