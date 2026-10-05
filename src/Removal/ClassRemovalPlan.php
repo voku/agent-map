@@ -41,10 +41,10 @@ final readonly class ClassRemovalPlan implements GovernedPlan
         public array $blockers,
         public array $notObservable,
     ) {
+        PlanStatus::assertPublishable(self::PLAN_TYPE, $status, $edits, [], $deletions);
         if ($edits !== []) {
             throw new InvalidArgumentException('Class removal contract 1.0 deletes one owned file and cannot publish source edits.');
         }
-        PlanStatus::assertPublishable(self::PLAN_TYPE, $status, $edits, [], $deletions);
     }
 
     public function isBlocked(): bool
