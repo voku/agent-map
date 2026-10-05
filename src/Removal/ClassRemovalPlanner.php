@@ -187,7 +187,10 @@ final readonly class ClassRemovalPlanner
         return $matches[0];
     }
 
-    /** @param list<PlanBlindSpot> $blindSpots @return list<PlanBlindSpot> */
+    /**
+     * @param list<PlanBlindSpot> $blindSpots
+     * @return list<PlanBlindSpot>
+     */
     private function uniqueBlindSpots(array $blindSpots): array
     {
         $unique = [];
