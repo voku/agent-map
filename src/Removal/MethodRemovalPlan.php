@@ -10,6 +10,7 @@ use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Plan\PlanProvenance;
 use voku\AgentMap\Plan\PlanStaleEvidence;
 use voku\AgentMap\Plan\PlanStatus;
+use voku\AgentMap\Reference\NonPhpReferenceReport;
 
 /** Versioned, read-only plan for removing one unused private method. */
 final readonly class MethodRemovalPlan implements GovernedPlan
@@ -36,6 +37,7 @@ final readonly class MethodRemovalPlan implements GovernedPlan
         public array $staleEvidence,
         public array $blockers,
         public array $notObservable,
+        public ?NonPhpReferenceReport $nonPhpReferences = null,
     ) {
         PlanStatus::assertPublishable(self::PLAN_TYPE, $status, $edits);
     }
@@ -48,7 +50,7 @@ final readonly class MethodRemovalPlan implements GovernedPlan
     /** @return array<string, mixed> */
     public function toArray(): array
     {
-        return [
+        $data = [
             'type' => self::PLAN_TYPE,
             'contract_version' => self::CONTRACT_VERSION,
             'status' => $this->status,
@@ -60,5 +62,12 @@ final readonly class MethodRemovalPlan implements GovernedPlan
             'blockers' => $this->blockers,
             'not_observable' => $this->notObservable,
         ];
+
+        // Residue evidence for a later cleanup stage; it never changes the plan status or its edits.
+        if ($this->nonPhpReferences !== null && !$this->nonPhpReferences->isEmpty()) {
+            $data['non_php_references'] = $this->nonPhpReferences->toArray();
+        }
+
+        return $data;
     }
 }

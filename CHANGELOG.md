@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- `method_rename_plan`, `class_rename_plan` and `method_removal_plan` carry an optional `non_php_references` block that lists Markdown and Twig / Smarty / Blade template mentions of the planned symbol, with a confidence grade, exact byte ranges and a `historical` flag for changelog-style files. It is residue evidence for a separate cleanup stage and never changes plan status, edits, blind spots or blockers; a symbol without mentions produces no key. See `docs/stability.md`.
+
 ## 0.19.1 - 2026-10-06
 
 ### Fixed

@@ -63,6 +63,19 @@ All fifteen plans across five families are **stable** contracts at version `1.0`
 (`PlanProvenance`, `PlanEdit`, `PlanBlindSpot`, `PlanStaleEvidence`, `PlanMove`, `PlanFileDeletion`) live beside it, and
 `tests/PlanContractShapeTest.php` pins the envelope.
 
+### Optional residue evidence: `non_php_references`
+
+`method_rename_plan`, `class_rename_plan` and `method_removal_plan` may carry one more key, present only when something was found:
+`non_php_references` lists places outside PHP source that appear to mention the planned symbol: Markdown documents (`markdown_reference`)
+and Twig, Smarty and Blade templates (`template_reference_candidate`). Each entry has `confidence` (`exact_fqcn`,
+`class_member_qualified`, `code_name` or `member_name_only`), an exact `path` / `line` / byte range / `matched` text, and `historical`
+for changelog-style files. The block also states `total`, `truncated` and `scanned_files`.
+
+This is **residue evidence, never edit authority**. A text match does not prove the text means the symbol (a template variable has no
+static type, prose is ambiguous), so it never changes `status`, `edits`, `blind_spots` or `blockers`: a plan that is `safe` for PHP stays
+`safe`. A host uses the list as the worklist for a separate, governed cleanup of the non-PHP mentions, and can re-run the scan afterwards to
+see what remains. The key is additive and optional; consumers that do not know it keep working unchanged.
+
 | family | contract | command | needs PHPStan |
 | --- | --- | --- | --- |
 | rename | `class_rename_plan@1.0` | `class-rename-plan` | no |
