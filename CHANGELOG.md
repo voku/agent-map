@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.19.1 - 2026-10-06
+
+### Fixed
+
+- Make `class_removal_plan@1.0` reject top-level `declare` statements with statement bodies when proving whole-file ownership, so executable work in block/colon-form `declare` syntax cannot be silently deleted with the class file.
+
 ## 0.19.0 - 2026-10-05
 
 ### Added
