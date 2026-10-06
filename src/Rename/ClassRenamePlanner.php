@@ -15,6 +15,8 @@ use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Plan\PlanMove;
 use voku\AgentMap\Plan\PlanProvenance;
 use voku\AgentMap\Plan\PlanStaleEvidence;
+use voku\AgentMap\Reference\NonPhpReferenceScanner;
+use voku\AgentMap\Reference\ReferenceTarget;
 
 /** Builds a read-only, fail-closed plan for one same-namespace PHP class rename. */
 final readonly class ClassRenamePlanner
@@ -324,6 +326,10 @@ final readonly class ClassRenamePlanner
             staleEvidence: $staleEvidence,
             blockers: $blockers,
             notObservable: self::NOT_OBSERVABLE,
+            nonPhpReferences: $status === ClassRenamePlan::STATUS_BLOCKED ? null : (new NonPhpReferenceScanner())->scan(
+                $map->root,
+                ReferenceTarget::classLike($symbol->fqn),
+            ),
         );
     }
 

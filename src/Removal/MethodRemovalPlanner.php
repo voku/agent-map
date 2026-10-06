@@ -11,6 +11,8 @@ use voku\AgentMap\Plan\PlanBlindSpot;
 use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Plan\PlanProvenance;
 use voku\AgentMap\Plan\PlanStaleEvidence;
+use voku\AgentMap\Reference\NonPhpReferenceScanner;
+use voku\AgentMap\Reference\ReferenceTarget;
 
 /** Builds a fail-closed exact deletion plan, inspired by Rector's Removing rules. */
 final readonly class MethodRemovalPlanner
@@ -157,6 +159,10 @@ final readonly class MethodRemovalPlanner
             $stale,
             $blockers,
             self::NOT_OBSERVABLE,
+            $status === MethodRemovalPlan::STATUS_BLOCKED ? null : (new NonPhpReferenceScanner())->scan(
+                $map->root,
+                ReferenceTarget::method($method->owner->fqn, $method->method->name),
+            ),
         );
     }
 

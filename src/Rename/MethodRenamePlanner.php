@@ -14,6 +14,8 @@ use voku\AgentMap\Plan\PlanBlindSpot;
 use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Plan\PlanProvenance;
 use voku\AgentMap\Plan\PlanStaleEvidence;
+use voku\AgentMap\Reference\NonPhpReferenceScanner;
+use voku\AgentMap\Reference\ReferenceTarget;
 
 /** Builds a read-only, fail-closed rename plan for one PHP method family. */
 final readonly class MethodRenamePlanner
@@ -443,6 +445,13 @@ final readonly class MethodRenamePlanner
             staleEvidence: $staleEvidence,
             blockers: $blockers,
             notObservable: self::NOT_OBSERVABLE,
+            nonPhpReferences: $status === MethodRenamePlan::STATUS_BLOCKED ? null : (new NonPhpReferenceScanner())->scan(
+                $map->root,
+                ...array_map(
+                    static fn (string $owner): ReferenceTarget => ReferenceTarget::method($owner, $originalName),
+                    array_values(array_unique(array_map(static fn (ResolvedMethod $method): string => $method->owner->fqn, $family))),
+                ),
+            ),
         );
     }
 
