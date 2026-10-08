@@ -90,6 +90,53 @@ final class AgentGraphIntegrationTest extends TestCase
         self::assertSame($before, hash_file('sha256', $graphFile));
     }
 
+    public function testLegacyVersionOneGraphIsReadOnlyFailClosedAndRecoversOnRebuild(): void
+    {
+        $map = $this->map();
+        $indexFile = $this->root . '/php-symbols.json';
+        (new IndexWriter())->write($map, $indexFile, 'json');
+        $graphFile = MapArtifactPaths::graphDatabaseFor($indexFile);
+        self::assertTrue(unlink($graphFile));
+
+        // Recreate an actual v1 relation/target schema alongside the current map artifacts.
+        $pdo = new PDO('sqlite:' . $graphFile, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $pdo->exec('CREATE TABLE graph_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+        $pdo->exec('CREATE TABLE graph_relations (
+            relation_id TEXT PRIMARY KEY, relation_position INTEGER NOT NULL UNIQUE,
+            source_id TEXT NOT NULL, kind TEXT NOT NULL
+        )');
+        $pdo->exec('CREATE TABLE graph_relation_targets (
+            relation_id TEXT NOT NULL, target_id TEXT NOT NULL, target_position INTEGER NOT NULL,
+            PRIMARY KEY (relation_id, target_position), UNIQUE (relation_id, target_id),
+            FOREIGN KEY (relation_id) REFERENCES graph_relations(relation_id) ON DELETE CASCADE
+        )');
+        $pdo->exec("INSERT INTO graph_meta (key, value) VALUES ('schema_version', '1')");
+        $pdo->exec("INSERT INTO graph_relations VALUES ('legacy', 0, 'source', 'calls')");
+        $pdo->exec("INSERT INTO graph_relation_targets VALUES ('legacy', 'target-a', 0)");
+        unset($pdo);
+
+        $before = hash_file('sha256', $graphFile);
+        self::assertIsString($before);
+
+        $graphIndex = new MapGraphIndex();
+        try {
+            $graphIndex->openCurrent($indexFile);
+            self::fail('A version 1 derived graph must not be upgraded by a read-only open.');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('rebuild the agent-map index', $exception->getMessage());
+            self::assertStringContainsString('schema version is incompatible', $exception->getMessage());
+            self::assertNotNull($exception->getPrevious());
+        }
+
+        self::assertSame($before, hash_file('sha256', $graphFile));
+
+        // Owners rebuild their disposable derived graph; no read-only migration is attempted.
+        $graphIndex->rebuild($map, $indexFile);
+        $upgraded = $graphIndex->verifyCurrent($indexFile);
+        self::assertSame(['r2', 'r1', 'r3'], $this->graphIds($upgraded->incoming('target-a')));
+        self::assertSame([], $upgraded->integrityFailures());
+    }
+
     public function testGenerationMarkerChangeMakesOlderGraphFailClosed(): void
     {
         $indexFile = $this->root . '/php-symbols.json';
