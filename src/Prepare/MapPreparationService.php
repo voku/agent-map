@@ -35,7 +35,7 @@ final readonly class MapPreparationService
     public function prepare(MapPreparationRequest $request): MapPreparationResult
     {
         if (!is_file($request->indexPath)) {
-            return $this->buildMissing($request);
+            return $this->rebuild($request);
         }
 
         try {
@@ -110,6 +110,20 @@ final readonly class MapPreparationService
         $semanticInputsChanged = $phpStanRefresh
             && $this->semanticInputsChanged($index, $request, $semanticScope);
         if ($changed === [] && $removed === 0 && !$semanticInputsChanged) {
+            if ($this->outputDiffersFrom($request)) {
+                // A separate output is a promise that the caller gets a complete, readable index
+                // there. An up-to-date source still has to be materialized, with its companions.
+                $this->writer->write($index, $request->outputPath, $request->format);
+
+                return new MapPreparationResult(
+                    index: $index,
+                    mutated: true,
+                    changedFiles: 0,
+                    removedFiles: 0,
+                    message: 'Index is up to date: ' . $request->indexPath . '; wrote it to ' . $request->outputPath,
+                );
+            }
+
             return new MapPreparationResult(
                 index: $index,
                 mutated: false,
@@ -195,7 +209,16 @@ final readonly class MapPreparationService
         );
     }
 
-    private function buildMissing(MapPreparationRequest $request): MapPreparationResult
+    /**
+     * Build the requested scope from scratch and publish it to the output path.
+     *
+     * Nothing is read from an existing map: this is the owner's full-rebuild operation for a missing
+     * map or an explicit rebuild request. The map is built completely before the writer is touched,
+     * so a build failure leaves any existing artifact exactly as it was. Publication itself is
+     * `IndexWriter`'s per-file temp-and-rename; it is not a transaction across the index and its
+     * relations companion.
+     */
+    public function rebuild(MapPreparationRequest $request): MapPreparationResult
     {
         try {
             $structural = $request->backend === 'structural';
@@ -214,7 +237,7 @@ final readonly class MapPreparationService
             throw new MapPreparationException(
                 reason: 'build_failed',
                 recoveryCommand: $this->fullBuildCommand($request),
-                message: 'Cannot prepare missing map ' . $request->outputPath . ': ' . $exception->getMessage(),
+                message: 'Cannot build map ' . $request->outputPath . ': ' . $exception->getMessage(),
                 previous: $exception,
             );
         }
@@ -226,6 +249,21 @@ final readonly class MapPreparationService
             removedFiles: 0,
             message: 'Built ' . count($index->files) . ' file(s) in ' . $request->outputPath,
         );
+    }
+
+    private function outputDiffersFrom(MapPreparationRequest $request): bool
+    {
+        return self::fileIdentity($request->outputPath) !== self::fileIdentity($request->indexPath);
+    }
+
+    /**
+     * `map.json` and `./map.json`, or a path through a symlinked directory, name the same file.
+     */
+    private static function fileIdentity(string $path): string
+    {
+        $directory = realpath(dirname($path));
+
+        return ($directory === false ? dirname($path) : $directory) . '/' . basename($path);
     }
 
     private function requestForExistingBackend(

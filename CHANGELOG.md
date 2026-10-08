@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Added
+
+- `MapPreparationService::rebuild()`: the owner's full-rebuild operation. It builds the requested scope from scratch and publishes it only after the build succeeded, so a build failure leaves an existing map and its relations companion untouched (`build_failed` with a recovery command; publication is `IndexWriter`'s per-file atomic rename, not a transaction across both files). `prepare()` uses it for a missing map. Consumers that need an explicit rebuild no longer have to construct `AgentMapBuilder` and `IndexWriter`.
+
+### Changed
+
+- `MapPreparationService::refresh()` and `agent-map refresh --out` now materialize an up-to-date source index into a separate output path, including its relations companion, instead of leaving the output absent. The source index is never rewritten. This lets a consumer that verifies into a bundle-local copy rely on one owner call instead of copying `php-symbols.json` alone.
+
 ## 0.22.0 - 2026-10-08
 
 ### Changed

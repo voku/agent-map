@@ -203,9 +203,135 @@ final class MapPreparationServiceTest extends TestCase
         }
     }
 
+    public function testRebuildIgnoresTheExistingMapAndPicksUpAddedAndRemovedFiles(): void
+    {
+        file_put_contents($this->root . '/src/Bar.php', $this->source('Bar', 'added'));
+        unlink($this->root . '/src/Foo.php');
+
+        $result = (new MapPreparationService())->rebuild($this->request());
+
+        self::assertTrue($result->mutated);
+        $index = (new IndexReader())->read($this->index);
+        self::assertNull($index->file('src/Foo.php'));
+        self::assertNotNull($index->file('src/Bar.php'));
+        self::assertSame([], $index->staleEntries());
+    }
+
+    public function testRebuildPublishesAMapEvenWhenTheExistingOneIsCurrent(): void
+    {
+        $result = (new MapPreparationService())->rebuild($this->request());
+
+        self::assertTrue($result->mutated);
+        self::assertNotNull((new IndexReader())->read($this->index)->file('src/Foo.php'));
+    }
+
+    public function testFailedRebuildLeavesTheExistingMapAndItsCompanionUntouched(): void
+    {
+        $before = (string) file_get_contents($this->index);
+        $relationsBefore = (string) file_get_contents(MapArtifactPaths::relationsFileFor($this->index));
+        $request = new MapPreparationRequest(
+            root: $this->root . '/does-not-exist',
+            indexPath: $this->index,
+            outputPath: $this->index,
+            format: 'json',
+            paths: ['src'],
+            pathsProvided: true,
+            scanPaths: [],
+            scanPathsProvided: false,
+            excludes: [],
+            excludesProvided: false,
+            backend: 'structural',
+            phpStanConfig: null,
+            phpStanMemoryLimit: null,
+            artifacts: $this->artifacts,
+        );
+
+        try {
+            (new MapPreparationService())->rebuild($request);
+            self::fail('Expected a build failure.');
+        } catch (MapPreparationException $exception) {
+            self::assertSame('build_failed', $exception->reason);
+            self::assertStringContainsString('agent-map build', $exception->recoveryCommand);
+        }
+
+        self::assertSame($before, (string) file_get_contents($this->index));
+        self::assertSame($relationsBefore, (string) file_get_contents(MapArtifactPaths::relationsFileFor($this->index)));
+    }
+
+    public function testCurrentMapIsMaterializedIntoASeparateOutputWithItsCompanion(): void
+    {
+        $output = $this->root . '/bundle/post-edit-map.json';
+        $before = (string) file_get_contents($this->index);
+
+        $result = (new MapPreparationService())->refresh($this->requestWithOutput($output));
+
+        self::assertTrue($result->mutated, 'the output was written even though nothing changed');
+        self::assertFileExists($output);
+        self::assertFileExists(MapArtifactPaths::relationsFileFor($output));
+        self::assertNotNull((new IndexReader())->read($output)->file('src/Foo.php'));
+        self::assertSame($before, (string) file_get_contents($this->index), 'the source index is never rewritten');
+    }
+
+    public function testChangesAreRefreshedIntoASeparateOutputAndNeverIntoTheSource(): void
+    {
+        $output = $this->root . '/bundle/post-edit-map.json';
+        $before = (string) file_get_contents($this->index);
+        unlink($this->root . '/src/Foo.php');
+        file_put_contents($this->root . '/src/Bar.php', $this->source('Bar', 'added'));
+
+        (new MapPreparationService())->refresh($this->requestWithOutput($output));
+
+        $refreshed = (new IndexReader())->read($output);
+        self::assertNull($refreshed->file('src/Foo.php'), 'a deleted file is pruned from the output');
+        self::assertNotNull($refreshed->file('src/Bar.php'));
+        self::assertSame($before, (string) file_get_contents($this->index));
+    }
+
+    public function testAnAliasOfTheSourcePathIsNotTreatedAsASeparateOutput(): void
+    {
+        $alias = $this->root . '/./map.json';
+
+        $result = (new MapPreparationService())->refresh($this->requestWithOutput($alias));
+
+        self::assertFalse($result->mutated);
+        self::assertStringContainsString('Index is up to date', $result->message);
+    }
+
+    public function testAStaleSeparateOutputIsReplacedByTheCurrentSource(): void
+    {
+        $output = $this->root . '/bundle/post-edit-map.json';
+        (new MapPreparationService())->refresh($this->requestWithOutput($output));
+        file_put_contents($this->root . '/src/Foo.php', $this->source('Foo', 'changed'));
+        (new MapPreparationService())->refresh($this->request());
+
+        (new MapPreparationService())->refresh($this->requestWithOutput($output, index: $this->index));
+
+        self::assertSame([], (new IndexReader())->read($output)->staleEntries());
+    }
+
     private function request(): MapPreparationRequest
     {
         return $this->requestWith();
+    }
+
+    private function requestWithOutput(string $output, ?string $index = null): MapPreparationRequest
+    {
+        return new MapPreparationRequest(
+            root: $this->root,
+            indexPath: $index ?? $this->index,
+            outputPath: $output,
+            format: 'json',
+            paths: ['src'],
+            pathsProvided: true,
+            scanPaths: [],
+            scanPathsProvided: false,
+            excludes: [],
+            excludesProvided: false,
+            backend: 'structural',
+            phpStanConfig: null,
+            phpStanMemoryLimit: null,
+            artifacts: $this->artifacts,
+        );
     }
 
     /** @param 'auto'|'phpstan'|'structural' $backend */
