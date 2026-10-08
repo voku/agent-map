@@ -73,10 +73,6 @@ final readonly class MapWatcher
 
             // Debounce: wait until the file set stops moving before paying for a refresh.
             for ($settle = 0; $settle < 20; ++$settle) {
-                if ($shouldStop()) {
-                    break;
-                }
-
                 ($this->sleepMilliseconds)($intervalMilliseconds);
                 $next = $this->signature($request);
                 if ($next === $current) {
