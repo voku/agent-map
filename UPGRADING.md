@@ -1,5 +1,19 @@
 # Upgrading
 
+## agent-graph 0.3.0 and Simple-PHP-Code-Parser 0.22.13
+
+agent-map now requires `voku/agent-graph ^0.3.0` (SQLite relation schema v2) and
+`voku/simple-php-code-parser ^0.22.13` (PHPDoc memoization and reduced AST traversal).
+The graph parser and graph store are independent; the version bumps are kept together
+for the measured index/retrieval performance improvements.
+
+A derived `.graph.sqlite` file created with agent-graph 0.2.x (schema v1) cannot
+be opened read-only by agent-graph 0.3.0. The query path **fails closed** and reports
+that the agent-map index must be rebuilt. Regenerate the map/derived graph using
+the same original build inputs and output path, or let the owning writable graph
+rebuild upgrade v1 to v2. Reading the old graph does not modify it. Keep the
+canonical map and relation artifacts; deleting the graph is not deleting source evidence.
+
 See [docs/stability.md](docs/stability.md) for the tier of every public surface and for what 1.0
 freezes. Anything classified there as *experimental* or *subtraction candidate* may still change in a
 0.9.x release.
