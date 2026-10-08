@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.22.0 - 2026-10-08
 
 ### Added
 
@@ -12,15 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- `MapPreparationService::refresh()` and `agent-map refresh --out` now materialize an up-to-date source index into a separate output path, including its relations companion, instead of leaving the output absent. The source index is never rewritten. This lets a consumer that verifies into a bundle-local copy rely on one owner call instead of copying `php-symbols.json` alone.
-
-## 0.22.0 - 2026-10-08
-
-### Changed
-
 - Require `voku/agent-graph ^0.3.0` for the SQLite schema-v2, graph-read, traversal and rebuild performance improvements, and `voku/simple-php-code-parser ^0.22.13` for PHPDoc memoization and fewer AST traversals.
 - Preserve fail-closed read-only graph access: legacy schema-v1 graphs require an explicit owner rebuild (or writable upgrade) before read-only inspection. The open path now reports actionable rebuild guidance with the original error as its cause. See `UPGRADING.md`.
 - Add an installed-consumer regression proving a real schema-v1 graph remains byte-for-byte unchanged on read rejection, then recovers through the owning graph rebuild with canonical query order and integrity preserved.
+- `MapPreparationService::refresh()` and `agent-map refresh --out` now materialize an up-to-date source index into a separate output path, including its relations companion, instead of leaving the output absent. The source index is never rewritten. This lets a consumer that verifies into a bundle-local copy rely on one owner call instead of copying `php-symbols.json` alone.
 
 ## 0.21.0 - 2026-10-08
 
