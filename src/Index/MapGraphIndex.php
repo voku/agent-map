@@ -42,7 +42,16 @@ final readonly class MapGraphIndex
         }
 
         $expectedRevision = $this->generationRevision($indexFile);
-        $store = GraphStore::openReadOnly($database);
+        try {
+            $store = GraphStore::openReadOnly($database);
+        } catch (RuntimeException $exception) {
+            throw new RuntimeException(
+                'Derived graph index cannot be opened; rebuild the agent-map index: ' . $database
+                . ' (' . $exception->getMessage() . ')',
+                previous: $exception,
+            );
+        }
+
         $actualRevision = $store->sourceRevision();
         if ($actualRevision === null || !hash_equals($expectedRevision, $actualRevision)) {
             throw new RuntimeException('Derived graph index is stale; rebuild the agent-map index: ' . $database);
