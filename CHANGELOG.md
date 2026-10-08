@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- `agent-map watch`: a long-running refresh that builds a missing map and then keeps it current. It polls file mtimes and sizes every `--interval` milliseconds (default 500, minimum 50), waits for a save burst to settle, and runs the normal `refresh` once; a failing refresh (for example a half-typed file) is reported and retried on the next change. Polling works the same on native Linux paths, WSL2 `/mnt/c` and containers. The owner is `MapWatcher`, on top of `MapPreparationService`.
+
 ## 0.18.4 - 2026-10-05
 
 ### Changed

@@ -396,7 +396,15 @@ cache and lets PHPStan's dependency-aware result cache select changed files and 
 vendor/bin/agent-map refresh --root=. --index=.agent-map/php-symbols.json
 ```
 
-It reports `Index is up to date` and skips the analysis entirely when nothing changed. Without an
+To keep the map current while you edit, run `watch` instead. It stays in memory (no PHP start-up or
+autoload per change), polls file mtimes and sizes, and refreshes once a save burst settles. Run it
+with `XDEBUG_MODE=off`: Xdebug alone makes parsing about four times slower.
+
+```bash
+XDEBUG_MODE=off vendor/bin/agent-map watch --root=. --paths=src,tests --interval=500
+```
+
+`refresh` reports `Index is up to date` and skips the analysis entirely when nothing changed. Without an
 explicit `--paths`, new files are looked for in the directories the map already covers.
 
 An incremental build refuses to mix semantic backends. If PHPStan availability changed since the existing map was built, run a full `build` so every carried file and relation has one backend identity.

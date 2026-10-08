@@ -19,6 +19,7 @@ use voku\AgentMap\Index\SemanticScope;
 use voku\AgentMap\IO\PhpFileFinder;
 use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Prepare\MapPreparationRequest;
+use voku\AgentMap\Prepare\MapWatcher;
 use voku\AgentMap\Prepare\MapPreparationService;
 use voku\AgentMap\Search\ChunkExtractor;
 use voku\AgentMap\Search\HybridSearch;
@@ -55,6 +56,7 @@ final readonly class AgentMapApplication
             return match ($options->command) {
                 'build' => $this->build($options),
                 'refresh' => $this->refresh($options),
+                'watch' => $this->watch($options),
                 'search-index' => $this->searchIndex($options),
                 'search' => $this->search($options),
                 'query' => $this->query($options),
@@ -129,6 +131,58 @@ final readonly class AgentMapApplication
         ));
 
         echo $result->message . "\n";
+
+        return 0;
+    }
+
+    /**
+     * Long-running refresh: keeps the map current after every file change.
+     */
+    private function watch(CliOptions $options): int
+    {
+        $format = match ($options->format) {
+            'json' => 'json',
+            'toon' => 'toon',
+            default => throw new RuntimeException('Map watch requires json or toon output.'),
+        };
+
+        $stop = false;
+        if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
+            pcntl_async_signals(true);
+            $handler = static function () use (&$stop): void {
+                $stop = true;
+            };
+            pcntl_signal(SIGINT, $handler);
+            pcntl_signal(SIGTERM, $handler);
+        }
+
+        fwrite(STDERR, 'Watching ' . $options->root . ' every ' . $options->watchIntervalMilliseconds . " ms. Ctrl-C to stop.\n");
+
+        (new MapWatcher())->watch(
+            new MapPreparationRequest(
+                root: $options->root,
+                indexPath: $options->index,
+                outputPath: $options->out,
+                format: $format,
+                paths: $options->paths,
+                pathsProvided: $options->pathsProvided,
+                scanPaths: $options->scanPaths,
+                scanPathsProvided: $options->scanPathsProvided,
+                excludes: $options->excludes,
+                excludesProvided: $options->excludesProvided,
+                backend: $options->backend,
+                phpStanConfig: $options->phpStanConfig,
+                phpStanMemoryLimit: $options->phpStanMemoryLimit,
+                artifacts: $options->artifacts,
+            ),
+            $options->watchIntervalMilliseconds,
+            static function (string $line): void {
+                echo '[' . date('H:i:s') . '] ' . $line . "\n";
+            },
+            static function () use (&$stop): bool {
+                return $stop;
+            },
+        );
 
         return 0;
     }
@@ -1126,11 +1180,15 @@ final readonly class AgentMapApplication
 
     private function help(string $command): string
     {
-        if ($command === 'build' || $command === 'refresh') {
+        if ($command === 'build' || $command === 'refresh' || $command === 'watch') {
             return <<<'TXT'
             Usage:
               agent-map build [--root=.] [--paths=src,tests] [--scan=vendor/acme] [--out=.agent-map/php-symbols.json] [--format=json|toon] [--backend=auto|structural|phpstan] [--phpstan-config=phpstan.neon] [--phpstan-memory-limit=512M] [--exclude=REGEX] [--merge]
               agent-map refresh [--root=.] [--index=.agent-map/php-symbols.json] [--out=.agent-map/php-symbols.json] [--backend=auto|structural|phpstan]
+              agent-map watch [--root=.] [--index=...] [--paths=src] [--interval=500] [--backend=...]
+
+            watch builds a missing map, then keeps it current: it polls file mtimes/sizes every --interval
+            milliseconds (minimum 50) and runs a refresh once the changes settle. Stop with Ctrl-C.
 
             Build a repository map. auto uses PHPStan when available and otherwise structural analysis; structural never executes PHPStan; phpstan explicitly requires the semantic backend. JSON is the default; TOON is optional. --exclude is repeatable.
 
@@ -1153,6 +1211,7 @@ final readonly class AgentMapApplication
         Usage:
           agent-map build --root=. --paths=src,tests --out=.agent-map/php-symbols.json
           agent-map refresh --root=. --index=.agent-map/php-symbols.json
+          agent-map watch --root=. --index=.agent-map/php-symbols.json [--interval=500]
           agent-map query EvidenceValidator --index=.agent-map/php-symbols.json
           agent-map file src/EvidenceValidator.php --index=.agent-map/php-symbols.json
           agent-map stale --index=.agent-map/php-symbols.json
