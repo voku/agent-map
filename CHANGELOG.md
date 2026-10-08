@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- `MapPreparationService::rebuild()`: the owner's full-rebuild operation. It builds the requested scope from scratch and publishes it only after the build succeeded, so a failure leaves an existing map and its relations companion untouched (`build_failed` with a recovery command). `prepare()` uses it for a missing map. Consumers that need an explicit rebuild no longer have to construct `AgentMapBuilder` and `IndexWriter`.
+- `MapPreparationService::rebuild()`: the owner's full-rebuild operation. It builds the requested scope from scratch and publishes it only after the build succeeded, so a build failure leaves an existing map and its relations companion untouched (`build_failed` with a recovery command; publication is `IndexWriter`'s per-file atomic rename, not a transaction across both files). `prepare()` uses it for a missing map. Consumers that need an explicit rebuild no longer have to construct `AgentMapBuilder` and `IndexWriter`.
 
 ### Changed
 

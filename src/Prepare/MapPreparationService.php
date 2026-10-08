@@ -214,7 +214,9 @@ final readonly class MapPreparationService
      *
      * Nothing is read from an existing map: this is the owner's full-rebuild operation for a missing
      * map or an explicit rebuild request. The map is built completely before the writer is touched,
-     * so a refusal or failure leaves any existing artifact exactly as it was.
+     * so a build failure leaves any existing artifact exactly as it was. Publication itself is
+     * `IndexWriter`'s per-file temp-and-rename; it is not a transaction across the index and its
+     * relations companion.
      */
     public function rebuild(MapPreparationRequest $request): MapPreparationResult
     {
@@ -251,7 +253,17 @@ final readonly class MapPreparationService
 
     private function outputDiffersFrom(MapPreparationRequest $request): bool
     {
-        return $request->outputPath !== $request->indexPath;
+        return self::fileIdentity($request->outputPath) !== self::fileIdentity($request->indexPath);
+    }
+
+    /**
+     * `map.json` and `./map.json`, or a path through a symlinked directory, name the same file.
+     */
+    private static function fileIdentity(string $path): string
+    {
+        $directory = realpath(dirname($path));
+
+        return ($directory === false ? dirname($path) : $directory) . '/' . basename($path);
     }
 
     private function requestForExistingBackend(

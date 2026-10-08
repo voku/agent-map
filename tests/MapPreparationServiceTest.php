@@ -287,6 +287,16 @@ final class MapPreparationServiceTest extends TestCase
         self::assertSame($before, (string) file_get_contents($this->index));
     }
 
+    public function testAnAliasOfTheSourcePathIsNotTreatedAsASeparateOutput(): void
+    {
+        $alias = $this->root . '/./map.json';
+
+        $result = (new MapPreparationService())->refresh($this->requestWithOutput($alias));
+
+        self::assertFalse($result->mutated);
+        self::assertStringContainsString('Index is up to date', $result->message);
+    }
+
     public function testAStaleSeparateOutputIsReplacedByTheCurrentSource(): void
     {
         $output = $this->root . '/bundle/post-edit-map.json';
