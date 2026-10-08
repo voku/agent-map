@@ -162,6 +162,10 @@ final readonly class CliOptions
                 self::artifactRootFrom($artifactSource),
             );
         }
+        // A watcher that builds --out must keep refreshing that same file, not the default index.
+        if ($command === 'watch' && $values['index'] === '' && $values['out'] !== '') {
+            $values['index'] = $values['out'];
+        }
         if (in_array($command, ['build', 'refresh', 'watch'], true)) {
             if (!$formatProvided && $values['out'] !== '' && str_ends_with(strtolower($values['out']), '.toon')) {
                 $values['format'] = 'toon';

@@ -114,6 +114,48 @@ final class MapWatcherTest extends TestCase
         CliOptions::parse(['watch', '--interval=10']);
     }
 
+    public function testSameSizeEditWithinTheSameSecondIsDetected(): void
+    {
+        $options = CliOptions::parse(['watch', '--root=' . $this->root, '--paths=src', '--backend=structural']);
+        $request = new MapPreparationRequest(
+            $options->root, $options->index, $options->out, 'json', $options->paths, true, [], false, [], false,
+            'structural', null, null, $options->artifacts,
+        );
+
+        $file = $this->root . '/src/A.php';
+        $mtime = time();
+        touch($file, $mtime);
+        $sleeps = 0;
+        $watcher = new MapWatcher(sleepMilliseconds: static function () use (&$sleeps, $file, $mtime): void {
+            if (++$sleeps === 1) {
+                // Same length, same mtime second: only the content differs.
+                file_put_contents($file, "<?php\nfinal class A { public function two(): int { return 1; } }\n");
+                touch($file, $mtime);
+            }
+        });
+
+        $log = [];
+        $refreshes = $watcher->watch(
+            $request,
+            50,
+            static function (string $line) use (&$log): void {
+                $log[] = $line;
+            },
+            static fn (): bool => false,
+            maxCycles: 4,
+        );
+
+        self::assertSame(2, $refreshes, implode("\n", $log));
+        self::assertStringContainsString('"name":"two"', (string) file_get_contents($options->out));
+    }
+
+    public function testWatchBuildingToonKeepsRefreshingThatFile(): void
+    {
+        $options = CliOptions::parse(['watch', '--root=.', '--out=map.toon']);
+        self::assertSame($options->out, $options->index);
+        self::assertSame('toon', $options->format);
+    }
+
     /**
      * End to end through bin/agent-map: build, react to an added file, react
      * to a removed file, refuse a second watcher, stop cleanly on SIGTERM.

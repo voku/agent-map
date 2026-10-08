@@ -147,13 +147,13 @@ final readonly class AgentMapApplication
         };
 
         // One watcher per index: two would only duplicate the work and interleave logs.
-        $directory = dirname($options->out);
+        $directory = dirname($options->index);
         if (!is_dir($directory) && !mkdir($directory, 0o775, true) && !is_dir($directory)) {
             throw new RuntimeException('Unable to create index directory: ' . $directory);
         }
-        $watchLock = fopen($options->out . '.watch.lock', 'c');
+        $watchLock = fopen($options->index . '.watch.lock', 'c');
         if ($watchLock === false || !flock($watchLock, LOCK_EX | LOCK_NB)) {
-            throw new RuntimeException('Another agent-map watch is already running for ' . $options->out . '.');
+            throw new RuntimeException('Another agent-map watch is already running for ' . $options->index . '.');
         }
 
         $stop = false;

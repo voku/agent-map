@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Prepare;
 
 use Throwable;
+use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\IO\PhpFileFinder;
 
 /**
@@ -75,7 +76,11 @@ final readonly class MapWatcher
             for ($settle = 0; $settle < 20; ++$settle) {
                 ($this->sleepMilliseconds)($intervalMilliseconds);
                 $next = $this->signature($request);
-                if ($next === null || $next === $current) {
+                if ($next === null) {
+                    // Tree vanished while settling: keep $seen so the change is retried.
+                    continue 2;
+                }
+                if ($next === $current) {
                     break;
                 }
                 $current = $next;
@@ -98,7 +103,10 @@ final readonly class MapWatcher
     {
         $started = hrtime(true);
         try {
-            $result = $initial ? $this->service->prepare($request) : $this->service->refresh($request);
+            // prepare() builds a map that does not exist yet (an earlier build may have failed).
+            $result = ($initial || !is_file($request->indexPath))
+                ? $this->service->prepare($request)
+                : $this->service->refresh($request);
         } catch (Throwable $throwable) {
             // Parser failures carry a stack trace; the first line is the actionable part.
             $message = trim(strtok($throwable->getMessage(), "\n") ?: $throwable::class);
@@ -140,7 +148,10 @@ final readonly class MapWatcher
         }
 
         // Inputs of the semantic backend that are not PHP files in scope.
-        foreach (['composer.lock', $request->phpStanConfig ?? ''] as $input) {
+        $configuration = $request->backend === 'structural'
+            ? null
+            : AgentMapBuilder::resolvePhpStanConfiguration($real, $request->phpStanConfig);
+        foreach (['composer.lock', $configuration ?? ''] as $input) {
             if ($input === '') {
                 continue;
             }
@@ -156,6 +167,16 @@ final readonly class MapWatcher
         $mtime = @filemtime($path);
         $size = @filesize($path);
 
-        return ($mtime === false ? 'x' : $mtime) . '-' . ($size === false ? 'x' : $size);
+        $stamp = ($mtime === false ? 'x' : $mtime) . '-' . ($size === false ? 'x' : $size);
+
+        // mtime has one-second resolution: a same-size edit within the same second
+        // as the previous stamp would be invisible. Files modified this recently
+        // are fingerprinted by content (like git's "racily clean" handling).
+        if ($mtime !== false && abs(time() - $mtime) <= 2) {
+            $hash = @hash_file('xxh3', $path);
+            $stamp .= '-' . ($hash === false ? 'x' : $hash);
+        }
+
+        return $stamp;
     }
 }
