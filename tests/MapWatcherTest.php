@@ -113,4 +113,61 @@ final class MapWatcherTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         CliOptions::parse(['watch', '--interval=10']);
     }
+
+    /**
+     * End to end through bin/agent-map: build, react to an added file, react
+     * to a removed file, refuse a second watcher, stop cleanly on SIGTERM.
+     */
+    public function testWatchProcessEndToEnd(): void
+    {
+        if (!function_exists('proc_open') || !function_exists('posix_kill')) {
+            self::markTestSkipped('proc_open/posix required');
+        }
+
+        $bin = dirname(__DIR__) . '/bin/agent-map';
+        $command = [PHP_BINARY, '-d', 'xdebug.mode=off', $bin, 'watch', '--root=' . $this->root, '--paths=src', '--backend=structural', '--interval=50'];
+        $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        self::assertIsResource($process);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+
+        $index = $this->root . '/.agent-map/php-symbols.json';
+        try {
+            $this->waitFor(static fn (): bool => is_file($index), 'initial build');
+
+            file_put_contents($this->root . '/src/C.php', "<?php\nfinal class C {}\n");
+            $this->waitFor(static fn (): bool => str_contains((string) file_get_contents($index), '"fqn":"C"'), 'added file indexed');
+
+            unlink($this->root . '/src/C.php');
+            $this->waitFor(static fn (): bool => !str_contains((string) file_get_contents($index), '"fqn":"C"'), 'removed file dropped');
+
+            $second = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $secondPipes);
+            self::assertIsResource($second);
+            $secondError = stream_get_contents($secondPipes[2]);
+            self::assertSame(1, proc_close($second));
+            self::assertStringContainsString('already running', (string) $secondError);
+        } finally {
+            $status = proc_get_status($process);
+            posix_kill($status['pid'], SIGTERM);
+            $deadline = microtime(true) + 5;
+            while (proc_get_status($process)['running'] && microtime(true) < $deadline) {
+                usleep(20_000);
+            }
+            self::assertFalse(proc_get_status($process)['running'], 'watch must stop on SIGTERM');
+            proc_close($process);
+        }
+    }
+
+    private function waitFor(callable $condition, string $what): void
+    {
+        $deadline = microtime(true) + 15;
+        while (microtime(true) < $deadline) {
+            clearstatcache();
+            if ($condition()) {
+                return;
+            }
+            usleep(50_000);
+        }
+        self::fail('Timed out waiting for: ' . $what);
+    }
 }

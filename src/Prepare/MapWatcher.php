@@ -56,7 +56,7 @@ final readonly class MapWatcher
         ?int $maxCycles = null,
     ): int {
         $refreshes = 0;
-        $seen = $this->signature($request);
+        $seen = $this->signature($request) ?? [];
 
         $refreshes += $this->refreshOnce($request, $log, true) ? 1 : 0;
 
@@ -67,7 +67,7 @@ final readonly class MapWatcher
 
             ($this->sleepMilliseconds)($intervalMilliseconds);
             $current = $this->signature($request);
-            if ($current === $seen) {
+            if ($current === null || $current === $seen) {
                 continue;
             }
 
@@ -75,7 +75,7 @@ final readonly class MapWatcher
             for ($settle = 0; $settle < 20; ++$settle) {
                 ($this->sleepMilliseconds)($intervalMilliseconds);
                 $next = $this->signature($request);
-                if ($next === $current) {
+                if ($next === null || $next === $current) {
                     break;
                 }
                 $current = $next;
@@ -100,7 +100,9 @@ final readonly class MapWatcher
         try {
             $result = $initial ? $this->service->prepare($request) : $this->service->refresh($request);
         } catch (Throwable $throwable) {
-            $log('refresh failed: ' . $throwable->getMessage());
+            // Parser failures carry a stack trace; the first line is the actionable part.
+            $message = trim(strtok($throwable->getMessage(), "\n") ?: $throwable::class);
+            $log('refresh failed, will retry on the next change: ' . mb_strimwidth($message, 0, 300, '...'));
 
             return false;
         }
@@ -111,26 +113,49 @@ final readonly class MapWatcher
     }
 
     /**
-     * @return array<string, string> relative path => "mtime-size"
+     * Null when the tree cannot be read right now (root unmounted, mid branch
+     * switch): that cycle is skipped instead of being mistaken for "every file
+     * was deleted".
+     *
+     * @return array<string, string>|null relative path => "mtime-size"
      */
-    private function signature(MapPreparationRequest $request): array
+    private function signature(MapPreparationRequest $request): ?array
     {
         clearstatcache();
-        $signature = [];
+        $real = realpath($request->root);
+        if ($real === false) {
+            return null;
+        }
+
         try {
             $files = $this->finder->find($request->root, $request->paths, $request->excludes);
         } catch (Throwable) {
-            return $signature;
+            return null;
         }
 
-        $root = rtrim(str_replace('\\', '/', (string) realpath($request->root)), '/');
+        $root = rtrim(str_replace('\\', '/', $real), '/');
+        $signature = [];
         foreach ($files as $relative) {
-            $path = $root . '/' . $relative;
-            $mtime = @filemtime($path);
-            $size = @filesize($path);
-            $signature[$relative] = $mtime . '-' . $size;
+            $signature[$relative] = $this->stamp($root . '/' . $relative);
+        }
+
+        // Inputs of the semantic backend that are not PHP files in scope.
+        foreach (['composer.lock', $request->phpStanConfig ?? ''] as $input) {
+            if ($input === '') {
+                continue;
+            }
+            $path = str_starts_with($input, '/') ? $input : $root . '/' . $input;
+            $signature['@' . $input] = $this->stamp($path);
         }
 
         return $signature;
+    }
+
+    private function stamp(string $path): string
+    {
+        $mtime = @filemtime($path);
+        $size = @filesize($path);
+
+        return ($mtime === false ? 'x' : $mtime) . '-' . ($size === false ? 'x' : $size);
     }
 }

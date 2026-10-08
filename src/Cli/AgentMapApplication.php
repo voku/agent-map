@@ -146,6 +146,16 @@ final readonly class AgentMapApplication
             default => throw new RuntimeException('Map watch requires json or toon output.'),
         };
 
+        // One watcher per index: two would only duplicate the work and interleave logs.
+        $directory = dirname($options->out);
+        if (!is_dir($directory) && !mkdir($directory, 0o775, true) && !is_dir($directory)) {
+            throw new RuntimeException('Unable to create index directory: ' . $directory);
+        }
+        $watchLock = fopen($options->out . '.watch.lock', 'c');
+        if ($watchLock === false || !flock($watchLock, LOCK_EX | LOCK_NB)) {
+            throw new RuntimeException('Another agent-map watch is already running for ' . $options->out . '.');
+        }
+
         $stop = false;
         if (function_exists('pcntl_async_signals') && function_exists('pcntl_signal')) {
             pcntl_async_signals(true);
