@@ -47,6 +47,7 @@ final readonly class CliOptions
         public int $maxCallees,
         public int $maxTests,
         public int $maxTypeDefinitions,
+        public int $watchIntervalMilliseconds,
         public MapArtifactPaths $artifacts,
     ) {
     }
@@ -64,7 +65,7 @@ final readonly class CliOptions
         if (in_array($command, ['-h', '--help'], true)) {
             $command = 'help';
         }
-        $commands = ['help', 'build', 'refresh', 'query', 'file', 'stale', 'summary', 'changed', 'related', 'stats', 'scope', 'callers', 'callees', 'context', 'search-index', 'search', 'extract-worker'];
+        $commands = ['help', 'build', 'refresh', 'watch', 'query', 'file', 'stale', 'summary', 'changed', 'related', 'stats', 'scope', 'callers', 'callees', 'context', 'search-index', 'search', 'extract-worker'];
         if (!in_array($command, $commands, true)) {
             throw new InvalidArgumentException('Unknown command: ' . $command);
         }
@@ -77,7 +78,7 @@ final readonly class CliOptions
             'index' => '',
             'database' => '',
             'cases' => 'tests/fixtures/search-cases.json',
-            'format' => in_array($command, ['build', 'refresh'], true) ? 'json' : 'text',
+            'format' => in_array($command, ['build', 'refresh', 'watch'], true) ? 'json' : 'text',
             'limit' => $command === 'scope' ? '10' : '20',
             'symbol-limit' => '10',
             'method-limit' => '10',
@@ -91,6 +92,7 @@ final readonly class CliOptions
             'max-callees' => '10',
             'max-tests' => '10',
             'max-type-definitions' => '10',
+            'interval' => '500',
         ];
         $excludes = [];
         $argument = null;
@@ -152,7 +154,7 @@ final readonly class CliOptions
         // location, and a checkout or worktree without that location paid a full
         // semantic analysis again instead of reusing the cache it just built.
         if ($artifacts === null) {
-            $artifactSource = $command === 'refresh' && $values['index'] !== ''
+            $artifactSource = in_array($command, ['refresh', 'watch'], true) && $values['index'] !== ''
                 ? $values['index']
                 : ($values['out'] !== '' ? $values['out'] : $values['index']);
             $artifacts = MapArtifactPaths::forProject(
@@ -160,7 +162,11 @@ final readonly class CliOptions
                 self::artifactRootFrom($artifactSource),
             );
         }
-        if ($command === 'build' || $command === 'refresh') {
+        // A watcher that builds --out must keep refreshing that same file, not the default index.
+        if ($command === 'watch' && $values['index'] === '' && $values['out'] !== '') {
+            $values['index'] = $values['out'];
+        }
+        if (in_array($command, ['build', 'refresh', 'watch'], true)) {
             if (!$formatProvided && $values['out'] !== '' && str_ends_with(strtolower($values['out']), '.toon')) {
                 $values['format'] = 'toon';
             }
@@ -169,7 +175,7 @@ final readonly class CliOptions
             // file and left the named index stale for every later run, so
             // `refresh --index=map.json` reported success while map.json never
             // changed.
-            if ($command === 'refresh' && $values['out'] === '' && $values['index'] !== '') {
+            if (in_array($command, ['refresh', 'watch'], true) && $values['out'] === '' && $values['index'] !== '') {
                 $values['out'] = $values['index'];
                 if (!$formatProvided && str_ends_with(strtolower($values['out']), '.toon')) {
                     $values['format'] = 'toon';
@@ -182,7 +188,7 @@ final readonly class CliOptions
         $values['index'] = $values['index'] !== '' ? $values['index'] : $artifacts->indexJson();
         $values['database'] = $values['database'] !== '' ? $values['database'] : $artifacts->searchDatabase();
 
-        $allowedFormats = in_array($command, ['build', 'refresh'], true) ? ['json', 'toon'] : ['text', 'json', 'markdown', 'toon'];
+        $allowedFormats = in_array($command, ['build', 'refresh', 'watch'], true) ? ['json', 'toon'] : ['text', 'json', 'markdown', 'toon'];
         if (!in_array($values['format'], $allowedFormats, true)) {
             throw new InvalidArgumentException('Unknown format for ' . $command . ': ' . $values['format']);
         }
@@ -221,6 +227,7 @@ final readonly class CliOptions
             maxCallees: self::positiveInt('max-callees', $values['max-callees'], 0),
             maxTests: self::positiveInt('max-tests', $values['max-tests'], 0),
             maxTypeDefinitions: self::positiveInt('max-type-definitions', $values['max-type-definitions'], 0),
+            watchIntervalMilliseconds: self::positiveInt('interval', $values['interval'], 50),
             artifacts: $artifacts,
         );
     }
