@@ -9,7 +9,9 @@ use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\NodeFinder;
 use RuntimeException;
+use voku\SimplePhpParser\Parsers\Helper\AstDeclarationFinder;
 use voku\SimplePhpParser\Parsers\Helper\AstNodeInspector;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
@@ -24,10 +26,7 @@ final readonly class MethodNodeRemover
     public function locate(string $path, int $lineStart, int $lineEnd, string $name): array
     {
         $source = $this->source($path);
-        $matches = [];
-        foreach (PhpCodeParser::getAstFromString($source) as $node) {
-            $this->collect($node, $matches, $lineStart, $lineEnd, $name);
-        }
+        $matches = AstDeclarationFinder::methods(PhpCodeParser::getAstFromString($source), $name, $lineStart, $lineEnd);
         if (count($matches) !== 1) {
             throw new RuntimeException(sprintf('Cannot map method removal to exactly one declaration at %s:%d-%d; found %d candidate(s).', $path, $lineStart, $lineEnd, count($matches)));
         }
@@ -71,30 +70,10 @@ final readonly class MethodNodeRemover
     /** Detect static calls such as self::class::method() that the semantic collector cannot resolve. */
     public function hasClassStringStaticCall(string $path, string $name): bool
     {
-        foreach (PhpCodeParser::getAstFromString($this->source($path)) as $node) {
-            if ($this->containsClassStringStaticCall($node, $name)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /** @param list<ClassMethod> $matches */
-    private function collect(Node $node, array &$matches, int $lineStart, int $lineEnd, string $name): void
-    {
-        if ($node instanceof ClassMethod && strcasecmp($node->name->toString(), $name) === 0
-            && $node->getStartLine() === $lineStart && $node->getEndLine() === $lineEnd) {
-            $matches[] = $node;
-        }
-        foreach ($node->getSubNodeNames() as $subNodeName) {
-            $child = $node->{$subNodeName};
-            foreach ($child instanceof Node ? [$child] : (is_array($child) ? $child : []) as $item) {
-                if ($item instanceof Node) {
-                    $this->collect($item, $matches, $lineStart, $lineEnd, $name);
-                }
-            }
-        }
+        return (new NodeFinder())->findFirst(
+            PhpCodeParser::getAstFromString($this->source($path)),
+            fn (Node $node): bool => $this->isClassStringStaticCall($node, $name),
+        ) !== null;
     }
 
     /**
@@ -109,16 +88,13 @@ final readonly class MethodNodeRemover
      */
     public function hasCallableReference(string $path, string $name): bool
     {
-        foreach (PhpCodeParser::getAstFromString($this->source($path)) as $node) {
-            if ($this->containsCallableReference($node, $name)) {
-                return true;
-            }
-        }
-
-        return false;
+        return (new NodeFinder())->findFirst(
+            PhpCodeParser::getAstFromString($this->source($path)),
+            fn (Node $node): bool => $this->isCallableReference($node, $name),
+        ) !== null;
     }
 
-    private function containsCallableReference(Node $node, string $name): bool
+    private function isCallableReference(Node $node, string $name): bool
     {
         // Only genuine callable shapes, not any string that happens to share the
         // name. `$name = 'oldName'; $obj->{$name}()` is dynamic dispatch the
@@ -142,14 +118,6 @@ final readonly class MethodNodeRemover
             return true;
         }
 
-        foreach ($node->getSubNodeNames() as $subNodeName) {
-            $child = $node->{$subNodeName};
-            foreach ($child instanceof Node ? [$child] : (is_array($child) ? $child : []) as $item) {
-                if ($item instanceof Node && $this->containsCallableReference($item, $name)) {
-                    return true;
-                }
-            }
-        }
 
         return false;
     }
@@ -174,7 +142,7 @@ final readonly class MethodNodeRemover
         return $separator !== false && strcasecmp(substr($value, $separator + 2), $name) === 0;
     }
 
-    private function containsClassStringStaticCall(Node $node, string $name): bool
+    private function isClassStringStaticCall(Node $node, string $name): bool
     {
         if ($node instanceof StaticCall
             && $node->class instanceof ClassConstFetch
@@ -185,14 +153,6 @@ final readonly class MethodNodeRemover
             return true;
         }
 
-        foreach ($node->getSubNodeNames() as $subNodeName) {
-            $child = $node->{$subNodeName};
-            foreach ($child instanceof Node ? [$child] : (is_array($child) ? $child : []) as $item) {
-                if ($item instanceof Node && $this->containsClassStringStaticCall($item, $name)) {
-                    return true;
-                }
-            }
-        }
 
         return false;
     }

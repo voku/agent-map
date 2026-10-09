@@ -8,7 +8,9 @@ use PhpParser\Node;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\NodeFinder;
 use RuntimeException;
+use voku\SimplePhpParser\Parsers\Helper\AstDeclarationFinder;
 use voku\SimplePhpParser\Parsers\Helper\ImportContext;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
@@ -196,17 +198,7 @@ final readonly class MethodMoveNodeLocator
 
     private function method(string $path, int $lineStart, int $lineEnd, string $name): ClassMethod
     {
-        $matches = [];
-        foreach (PhpCodeParser::getAstFromString($this->source($path)) as $node) {
-            $this->walk($node, static function (Node $candidate) use (&$matches, $lineStart, $lineEnd, $name): void {
-                if ($candidate instanceof ClassMethod
-                    && strcasecmp($candidate->name->toString(), $name) === 0
-                    && $candidate->getStartLine() === $lineStart
-                    && $candidate->getEndLine() === $lineEnd) {
-                    $matches[] = $candidate;
-                }
-            });
-        }
+        $matches = AstDeclarationFinder::methods(PhpCodeParser::getAstFromString($this->source($path)), $name, $lineStart, $lineEnd);
         if (count($matches) !== 1) {
             throw new RuntimeException(sprintf(
                 'Cannot map method move to exactly one declaration at %s:%d-%d; found %d candidate(s).',
@@ -223,15 +215,11 @@ final readonly class MethodMoveNodeLocator
     /** @param callable(Node): void $visitor */
     private function walk(Node $node, callable $visitor): void
     {
-        $visitor($node);
-        foreach ($node->getSubNodeNames() as $subNodeName) {
-            $child = $node->{$subNodeName};
-            foreach ($child instanceof Node ? [$child] : (is_array($child) ? $child : []) as $item) {
-                if ($item instanceof Node) {
-                    $this->walk($item, $visitor);
-                }
-            }
-        }
+        (new NodeFinder())->find([$node], static function (Node $visited) use ($visitor): bool {
+            $visitor($visited);
+
+            return false;
+        });
     }
 
     private function source(string $path): string

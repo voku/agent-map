@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace voku\AgentMap\Removal;
 
 use PhpParser\Node;
-use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\ClassConst;
-use PhpParser\Node\Stmt\ClassLike;
 use RuntimeException;
+use voku\SimplePhpParser\Parsers\Helper\AstDeclarationFinder;
 use voku\SimplePhpParser\Parsers\Helper\AstNodeInspector;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
@@ -23,10 +22,7 @@ final readonly class ClassConstantNodeRemover
     public function locate(string $path, string $ownerFqn, string $constantName): array
     {
         $source = $this->source($path);
-        $matches = [];
-        foreach (PhpCodeParser::getAstFromString($source) as $node) {
-            $this->collect($node, null, $ownerFqn, $constantName, $matches);
-        }
+        $matches = $this->declarations(PhpCodeParser::getAstFromString($source), $ownerFqn, $constantName);
         if (count($matches) !== 1) {
             throw new RuntimeException(sprintf('Cannot map class constant removal to exactly one declaration for %s::%s in %s; found %d candidate(s).', $ownerFqn, $constantName, $path, count($matches)));
         }
@@ -66,31 +62,27 @@ final readonly class ClassConstantNodeRemover
         ];
     }
 
-    /** @param list<ClassConst> $matches */
-    private function collect(Node $node, ?string $classFqn, string $ownerFqn, string $constantName, array &$matches): void
+    /**
+     * @param array<Node> $ast
+     * @return list<ClassConst>
+     */
+    private function declarations(array $ast, string $ownerFqn, string $constantName): array
     {
-        if ($node instanceof ClassLike) {
-            $name = $node->getAttribute('namespacedName');
-            if (!$name instanceof Name) {
-                $name = $node->namespacedName;
-            }
-            $classFqn = $name instanceof Name ? ltrim($name->toString(), '\\') : null;
-        }
-        if ($node instanceof ClassConst && strcasecmp($classFqn ?? '', $ownerFqn) === 0) {
-            foreach ($node->consts as $constant) {
-                if ($constant->name->toString() === $constantName) {
-                    $matches[] = $node;
+        $matches = [];
+        foreach (AstDeclarationFinder::classLikes($ast, $ownerFqn) as $class) {
+            foreach ($class->stmts as $statement) {
+                if (!$statement instanceof ClassConst) {
+                    continue;
+                }
+                foreach ($statement->consts as $constant) {
+                    if ($constant->name->toString() === $constantName) {
+                        $matches[] = $statement;
+                    }
                 }
             }
         }
-        foreach ($node->getSubNodeNames() as $key) {
-            $child = $node->{$key};
-            foreach ($child instanceof Node ? [$child] : (is_array($child) ? $child : []) as $item) {
-                if ($item instanceof Node) {
-                    $this->collect($item, $classFqn, $ownerFqn, $constantName, $matches);
-                }
-            }
-        }
+
+        return $matches;
     }
 
     private function source(string $path): string

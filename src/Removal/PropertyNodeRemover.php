@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace voku\AgentMap\Removal;
 
 use PhpParser\Node;
-use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\TraitUse;
 use RuntimeException;
+use voku\SimplePhpParser\Parsers\Helper\AstDeclarationFinder;
 use voku\SimplePhpParser\Parsers\Helper\AstNodeInspector;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
@@ -108,10 +108,7 @@ final readonly class PropertyNodeRemover
 
     private function classLike(string $path, string $ownerFqn, string $source): ClassLike
     {
-        $matches = [];
-        foreach (PhpCodeParser::getAstFromString($source) as $node) {
-            $this->collectClassLike($node, $matches, $ownerFqn);
-        }
+        $matches = AstDeclarationFinder::classLikes(PhpCodeParser::getAstFromString($source), $ownerFqn);
         if (count($matches) !== 1) {
             throw new RuntimeException(sprintf(
                 'Cannot map property-removal owner %s to exactly one class-like declaration in %s.',
@@ -121,27 +118,6 @@ final readonly class PropertyNodeRemover
         }
 
         return $matches[0];
-    }
-
-    /** @param list<ClassLike> $matches */
-    private function collectClassLike(Node $node, array &$matches, string $ownerFqn): void
-    {
-        if ($node instanceof ClassLike && $node->name !== null) {
-            $resolved = $node->namespacedName instanceof Name
-                ? ltrim($node->namespacedName->toString(), '\\')
-                : $node->name->toString();
-            if (strcasecmp($resolved, ltrim($ownerFqn, '\\')) === 0) {
-                $matches[] = $node;
-            }
-        }
-        foreach ($node->getSubNodeNames() as $subNodeName) {
-            $child = $node->{$subNodeName};
-            foreach ($child instanceof Node ? [$child] : (is_array($child) ? $child : []) as $item) {
-                if ($item instanceof Node) {
-                    $this->collectClassLike($item, $matches, $ownerFqn);
-                }
-            }
-        }
     }
 
     private function ownerUsesTrait(ClassLike $class): bool

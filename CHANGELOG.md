@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.22.2 - 2026-10-09
+
+### Changed
+
+- Replace six hand-rolled recursive AST walkers in the method, property and class-constant removers and the method-move locator with `PhpParser\NodeFinder` and the new `AstDeclarationFinder` (`voku/simple-php-code-parser ^0.22.15`); no behavior change. Remove the unused `UseStatementLocator::importedTypes()`.
+
 ## 0.22.1 - 2026-10-09
 
 ### Fixed
