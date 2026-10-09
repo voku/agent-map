@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.22.1 - 2026-10-09
+
+### Fixed
+
+- `method-move-plan` now blocks when the moved body uses a name (class, type or constant owner) that the destination file resolves differently from the source file because of its namespace or `use` imports. Previously such a plan was `safe` and produced a destination method that failed at runtime (for example `Class "Demo\Formatter" not found`). The plan still never invents an import; add the import to the destination first, then re-plan.
+
+### Changed
+
+- Require `voku/simple-php-code-parser ^0.22.14` (`ImportContext` now resolves written class names for the move planner) and `voku/agent-graph ^0.3.1` (a rejected read-only open of a legacy graph no longer leaves a lock that blocks the owner's writable upgrade; fixes `AgentGraphIntegrationTest::testLegacyVersionOneGraph…` on a clean install).
+
 ## 0.22.0 - 2026-10-08
 
 ### Added
