@@ -9,6 +9,7 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
 use RuntimeException;
+use voku\SimplePhpParser\Parsers\Helper\ImportContext;
 use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 /**
@@ -57,6 +58,48 @@ final readonly class MethodMoveNodeLocator
         ksort($found);
 
         return array_keys($found);
+    }
+
+    /**
+     * Names in the moved body that the destination file would resolve differently.
+     *
+     * A name written as `Formatter` means whatever the source file's namespace and `use` imports make it. The
+     * moved text keeps that spelling, so it silently changes meaning (or stops resolving) unless the destination
+     * file resolves the same spelling to the same class. A plan never invents an import, so such names are reported.
+     *
+     * @return list<string> spellings as written in the body, sorted
+     */
+    public function importDependencies(string $path, int $lineStart, int $lineEnd, string $name, string $destinationPath): array
+    {
+        $method = $this->method($path, $lineStart, $lineEnd, $name);
+        $destination = ImportContext::fromSource($this->source($destinationPath));
+        $found = [];
+        $globalFallback = [];
+        $this->walk($method, static function (Node $node) use (&$found, &$globalFallback, $destination): void {
+            // Unqualified function and constant names fall back to the global symbol in any namespace.
+            if (($node instanceof Node\Expr\FuncCall || $node instanceof Node\Expr\ConstFetch) && $node->name instanceof Node\Name) {
+                $globalFallback[spl_object_id($node->name)] = true;
+            }
+            if (!$node instanceof Node\Name\FullyQualified || isset($globalFallback[spl_object_id($node)])) {
+                return;
+            }
+            $original = $node->getAttribute('originalName');
+            if (!$original instanceof Node\Name || $original instanceof Node\Name\FullyQualified) {
+                return;
+            }
+            $written = $original->toString();
+            if (in_array(strtolower($written), ['self', 'static', 'parent'], true)) {
+                return;
+            }
+            $resolved = $destination->resolveClassName($written);
+            if (strcasecmp($resolved, $node->toString()) !== 0) {
+                $found[$written] = true;
+            }
+        });
+        $names = array_map('strval', array_keys($found));
+        sort($names);
+
+        return $names;
     }
 
     /**

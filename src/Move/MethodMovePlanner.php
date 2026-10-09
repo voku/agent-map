@@ -119,6 +119,27 @@ final readonly class MethodMovePlanner
             }
         }
 
+        if ($blockers === [] && $destinationFile !== null) {
+            try {
+                $importDependencies = $locator->importDependencies(
+                    $method->file->path,
+                    $method->method->lineStart,
+                    $method->method->lineEnd,
+                    $method->method->name,
+                    $destinationFile->path,
+                );
+            } catch (RuntimeException $exception) {
+                $importDependencies = [];
+                $blockers[] = $exception->getMessage();
+            }
+            if ($importDependencies !== []) {
+                $blockers[] = sprintf(
+                    'The method body uses names that the destination file resolves differently (%s); relocating the text would break or change them and a move never invents an import.',
+                    implode(', ', $importDependencies),
+                );
+            }
+        }
+
         $callSites = $this->callSites($map, $method->id, $method->owner->fqn, $blindSpots);
 
         // Relocating a non-public method changes who may reach it. Every call

@@ -51,8 +51,8 @@
     "composer-runtime-api": "^2.2",
     "helgesverre/toon": "^3.1",
     "nikic/php-parser": "^5.0",
-    "voku/agent-graph": "^0.3.0",
-    "voku/simple-php-code-parser": "^0.22.13",
+    "voku/agent-graph": "^0.3.1",
+    "voku/simple-php-code-parser": "^0.22.14",
     "voku/stop-words": "^2.0"
   },
   "require-dev": {

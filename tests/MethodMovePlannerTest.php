@@ -160,6 +160,45 @@ PHP;
         self::assertNotSame([], $plan->edits);
     }
 
+    public function testBodyNamesTheDestinationResolvesDifferentlyBlock(): void
+    {
+        $this->write('Imported.php', "<?php\nnamespace Lib;\nfinal class Imported\n{\n}\n");
+        $this->write('Lonely.php', <<<'PHP'
+<?php
+namespace App;
+
+use DateTimeImmutable;
+use Lib\Imported;
+
+final class Lonely
+{
+    private static function unusedHelper(): string
+    {
+        return (string) spl_object_id(new Imported()) . (new DateTimeImmutable('now'))->format('c');
+    }
+}
+PHP);
+        $this->write('Diff.php', "<?php\nnamespace App;\n\nfinal class Diff\n{\n}\n");
+
+        $plan = $this->plan('App\\Lonely::unusedHelper', 'App\\Diff');
+
+        self::assertSame(MethodMovePlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('DateTimeImmutable, Imported', implode("\n", $plan->blockers));
+    }
+
+    public function testBodyNamesTheDestinationResolvesIdenticallyStayPlannable(): void
+    {
+        $this->write('Imported.php', "<?php\nnamespace Lib;\nfinal class Imported\n{\n}\n");
+        $this->write('Lonely.php', "<?php\nnamespace App;\n\nuse Lib\\Imported;\n\nfinal class Lonely\n{\n    private static function unusedHelper(): string\n    {\n        return (string) spl_object_id(new Imported()) . strtoupper('x');\n    }\n}\n");
+        $this->write('Diff.php', "<?php\nnamespace Other;\n\nuse Lib\\Imported;\n\nfinal class Diff\n{\n}\n");
+
+        $plan = $this->plan('App\\Lonely::unusedHelper', 'Other\\Diff');
+
+        self::assertNotSame(MethodMovePlan::STATUS_BLOCKED, $plan->status, implode("\n", $plan->blockers));
+        self::assertNotSame([], $plan->edits);
+    }
+
     public function testDestinationCollisionBlocks(): void
     {
         $this->writeCronJob();
