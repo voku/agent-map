@@ -24,34 +24,6 @@ final readonly class UseStatementLocator
     }
 
     /**
-     * @return array<string, string> maps short class name => FQN
-     */
-    public function importedTypes(string $source): array
-    {
-        $imported = [];
-        $stmts = PhpCodeParser::getAstFromString($source);
-        foreach ($stmts as $stmt) {
-            if ($stmt instanceof Namespace_) {
-                foreach ($stmt->stmts as $inner) {
-                    if ($inner instanceof Use_) {
-                        foreach ($inner->uses as $use) {
-                            $shortName = $use->alias?->toString() ?? $use->name->getLast();
-                            $imported[$shortName] = $use->name->toString();
-                        }
-                    }
-                }
-            } elseif ($stmt instanceof Use_) {
-                foreach ($stmt->uses as $use) {
-                    $shortName = $use->alias?->toString() ?? $use->name->getLast();
-                    $imported[$shortName] = $use->name->toString();
-                }
-            }
-        }
-
-        return $imported;
-    }
-
-    /**
      * @return array{start: int, end: int, expected: string, insertion: string, line: int}|null
      */
     public function findUseInsertion(string $source, string $typeFqn): ?array
