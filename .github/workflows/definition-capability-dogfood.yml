@@ -24,7 +24,7 @@ concurrency:
 jobs:
   owner-report:
     name: Owner report matches real definition routing
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
 
     steps:
