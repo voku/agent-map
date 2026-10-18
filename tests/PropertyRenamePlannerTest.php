@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace voku\AgentMap\Tests;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -191,7 +192,7 @@ PHP);
         self::assertSame('hash', $plan->staleEvidence[0]->reason);
     }
 
-    /** @dataProvider unsupportedDeclarationProvider */
+    #[DataProvider('unsupportedDeclarationProvider')]
     public function testUnsupportedDeclarationSurfacesBlockWithZeroEdits(string $source, string $expected): void
     {
         $this->write($source);
