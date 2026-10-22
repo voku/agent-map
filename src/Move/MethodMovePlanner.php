@@ -14,6 +14,7 @@ use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Plan\PlanProvenance;
 use voku\AgentMap\Plan\PlanStaleEvidence;
 use voku\AgentMap\Removal\MethodNodeRemover;
+use voku\AgentMap\Scaffold\FileLayout;
 
 /**
  * Plans the relocation of one explicitly chosen method into one explicitly
@@ -310,7 +311,7 @@ final readonly class MethodMovePlanner
                 $anchor['line'],
                 $anchor['line'],
                 $anchor['expected_anchor'],
-                rtrim($range['expected'], "\n") . "\n" . $anchor['expected_anchor'],
+                FileLayout::withEol(rtrim($range['expected'], "\r\n") . "\n", $this->eolOf($map->root, $destinationFile->path)) . $anchor['expected_anchor'],
                 'method_declaration_insertion',
                 $destination->fqn . '::' . $method->method->name,
                 'phpstan_resolved',
@@ -337,6 +338,14 @@ final readonly class MethodMovePlanner
         }
 
         return $edits;
+    }
+
+    /** The destination file's line ending, so the moved text does not leave a CRLF file with bare LF breaks. */
+    private function eolOf(string $root, string $path): string
+    {
+        $source = @file_get_contents(rtrim(str_replace('\\', '/', $root), '/') . '/' . ltrim($path, '/'));
+
+        return is_string($source) ? FileLayout::eol($source) : "\n";
     }
 
     private function fileSha(AgentMapIndex $map, string $path): string

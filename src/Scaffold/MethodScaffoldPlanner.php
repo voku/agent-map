@@ -71,6 +71,8 @@ final readonly class MethodScaffoldPlanner
         if (!is_string($source)) {
             return $this->blockedPlan($symbol->fqn, $methodName, 'Could not read source file: ' . $file->path, $map);
         }
+        $eol = FileLayout::eol($source);
+        $unit = FileLayout::indentUnit($source);
 
         $locator = new MethodMoveNodeLocator($root);
         try {
@@ -110,7 +112,7 @@ final readonly class MethodScaffoldPlanner
                     $useInsertion['line'],
                     $useInsertion['line'],
                     $useInsertion['expected'],
-                    $useInsertion['insertion'],
+                    FileLayout::withEol($useInsertion['insertion'], $eol),
                     'use_statement_insertion',
                     'use:' . $typeFqn,
                     'scaffold_dependency',
@@ -119,18 +121,18 @@ final readonly class MethodScaffoldPlanner
         }
 
         // Build docblock
-        $docblock = $this->buildDocblock($docSummary ?? 'Scaffolded method.', $parameters, $returnType);
+        $docblock = $this->buildDocblock($docSummary ?? 'Scaffolded method.', $parameters, $returnType, $unit);
 
         // Build method body
         $methodBody = $body !== null ? trim($body) : $this->defaultBody($returnType, $methodName);
-        $indentedBody = implode("\n", array_map(static fn (string $l): string => '        ' . $l, explode("\n", $methodBody)));
+        $indentedBody = implode("\n", array_map(static fn (string $l): string => $unit . $unit . $l, explode("\n", str_replace(["\r\n", "\r"], "\n", $methodBody))));
 
         $visibility = in_array(strtolower($visibility), ['public', 'protected', 'private'], true) ? strtolower($visibility) : 'public';
         $staticModifier = $static ? 'static ' : '';
         $retTypeDeclaration = $returnType !== null ? ': ' . $returnType : '';
         $paramList = implode(', ', $parameters);
 
-        $methodCode = "    {$docblock}\n    {$visibility} {$staticModifier}function {$methodName}({$paramList}){$retTypeDeclaration}\n    {\n{$indentedBody}\n    }\n";
+        $methodCode = "{$unit}{$docblock}\n{$unit}{$visibility} {$staticModifier}function {$methodName}({$paramList}){$retTypeDeclaration}\n{$unit}{\n{$indentedBody}\n{$unit}}";
 
         $edits[] = new PlanEdit(
             $file->path,
@@ -140,7 +142,7 @@ final readonly class MethodScaffoldPlanner
             $anchor['line'],
             $anchor['line'],
             $anchor['expected_anchor'],
-            "\n" . $methodCode . "\n" . $anchor['expected_anchor'],
+            FileLayout::withEol("\n" . $methodCode . "\n", $eol) . $anchor['expected_anchor'],
             'method_declaration_insertion',
             $symbol->fqn . '::' . $methodName,
             'scaffold_declaration',
@@ -175,22 +177,22 @@ final readonly class MethodScaffoldPlanner
     /**
      * @param list<string> $parameters
      */
-    private function buildDocblock(string $summary, array $parameters, ?string $returnType): string
+    private function buildDocblock(string $summary, array $parameters, ?string $returnType, string $unit): string
     {
         $lines = ['/**'];
-        $lines[] = '     * ' . $summary;
+        $lines[] = $unit . ' * ' . $summary;
         if ($parameters !== [] || $returnType !== null) {
-            $lines[] = '     *';
+            $lines[] = $unit . ' *';
         }
         foreach ($parameters as $param) {
             if (preg_match('/^(\S+)\s+(\$\S+)/', trim($param), $matches) === 1) {
-                $lines[] = sprintf('     * @param %s %s', $matches[1], $matches[2]);
+                $lines[] = sprintf('%s * @param %s %s', $unit, $matches[1], $matches[2]);
             }
         }
         if ($returnType !== null && $returnType !== 'void') {
-            $lines[] = '     * @return ' . $returnType;
+            $lines[] = $unit . ' * @return ' . $returnType;
         }
-        $lines[] = '     */';
+        $lines[] = $unit . ' */';
 
         return implode("\n", $lines);
     }
