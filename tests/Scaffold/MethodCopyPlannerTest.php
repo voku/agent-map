@@ -377,6 +377,115 @@ PHP);
         self::assertSame([], $plan->blockers);
     }
 
+    public function testBlocksWhenBodyUsesAnImportedFunctionOrConstantTheDestinationLacks(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use function Lib\run as execute;
+use const Lib\LIMIT;
+
+final class Source
+{
+    public function go(): int
+    {
+        return execute(LIMIT) + strlen('x');
+    }
+}
+PHP);
+        $this->write('Dest.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Elsewhere;\n\nfinal class Dest\n{\n}\n");
+
+        $plan = $this->plan('App\Source::go', 'Elsewhere\Dest');
+
+        self::assertSame(PlanStatus::BLOCKED, $plan->status);
+        self::assertStringContainsString('resolves differently (LIMIT, execute)', $plan->blockers[0]);
+    }
+
+    public function testBlocksWhenDestinationImportsADifferentFunctionUnderTheSameAlias(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use function Lib\run;
+
+final class Source
+{
+    public function go(): int
+    {
+        return run();
+    }
+}
+PHP);
+        $this->write('Dest.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace Elsewhere;
+
+use function Other\run;
+
+final class Dest
+{
+}
+PHP);
+
+        $plan = $this->plan('App\Source::go', 'Elsewhere\Dest');
+
+        self::assertSame(PlanStatus::BLOCKED, $plan->status);
+        self::assertStringContainsString('resolves differently (run)', $plan->blockers[0]);
+    }
+
+    public function testStaysSafeWhenDestinationImportsTheSameFunctionAndConstant(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use function Lib\run;
+use const Lib\LIMIT;
+
+final class Source
+{
+    public function go(): int
+    {
+        return run(LIMIT) + strlen('x') + PHP_INT_SIZE;
+    }
+}
+PHP);
+        $this->write('Dest.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace Elsewhere;
+
+use Lib\{Unused};
+use function Lib\{run};
+use const Lib\{LIMIT};
+
+final class Dest
+{
+}
+PHP);
+
+        $plan = $this->plan('App\Source::go', 'Elsewhere\Dest');
+
+        self::assertSame(PlanStatus::SAFE, $plan->status);
+        self::assertSame([], $plan->blockers);
+    }
+
     private function plan(string $source, string $destination): MethodCopyPlan
     {
         $map = (new AgentMapBuilder())->build($this->root, ['src'], []);
