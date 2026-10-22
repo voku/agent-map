@@ -185,6 +185,34 @@ final readonly class MethodCopyPlanner
             }
         }
 
+        // The body is copied verbatim, so every name it spells must mean the same class in the destination file
+        // as in the source file. Judge the destination as it will look after the planned `use` insertions.
+        if ($isDifferentClass) {
+            try {
+                $importDependencies = $locator->importDependenciesAgainstSource(
+                    $method->file->path,
+                    $method->method->lineStart,
+                    $method->method->lineEnd,
+                    $method->method->name,
+                    $this->applyInsertions($destSource, $edits),
+                );
+            } catch (RuntimeException $e) {
+                return $this->blockedPlan($method->id, $destSymbol->fqn, $targetName, 'Could not compare name resolution in destination: ' . $e->getMessage(), $map);
+            }
+            if ($importDependencies !== []) {
+                return $this->blockedPlan(
+                    $method->id,
+                    $destSymbol->fqn,
+                    $targetName,
+                    sprintf(
+                        'The method body uses names that the destination file resolves differently (%s); copying the text would break or change them and a copy never invents an import.',
+                        implode(', ', $importDependencies),
+                    ),
+                    $map,
+                );
+            }
+        }
+
         // Add method declaration insertion edit
         $edits[] = new PlanEdit(
             $destFile->path,
@@ -228,6 +256,19 @@ final readonly class MethodCopyPlanner
             blockers: [],
             notObservable: self::NOT_OBSERVABLE,
         );
+    }
+
+    /**
+     * @param list<PlanEdit> $edits zero-length insertions planned so far
+     */
+    private function applyInsertions(string $source, array $edits): string
+    {
+        usort($edits, static fn (PlanEdit $a, PlanEdit $b): int => $b->startFilePos <=> $a->startFilePos);
+        foreach ($edits as $edit) {
+            $source = substr($source, 0, $edit->startFilePos) . $edit->replacement . substr($source, $edit->startFilePos + strlen($edit->expected));
+        }
+
+        return $source;
     }
 
     /**

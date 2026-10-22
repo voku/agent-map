@@ -73,8 +73,19 @@ final readonly class MethodMoveNodeLocator
      */
     public function importDependencies(string $path, int $lineStart, int $lineEnd, string $name, string $destinationPath): array
     {
+        return $this->importDependenciesAgainstSource($path, $lineStart, $lineEnd, $name, $this->source($destinationPath));
+    }
+
+    /**
+     * Same check as {@see importDependencies()}, but against destination source text that is not on disk yet,
+     * so a planner can judge the destination as it would look after its own planned `use` insertions.
+     *
+     * @return list<string> spellings as written in the body, sorted
+     */
+    public function importDependenciesAgainstSource(string $path, int $lineStart, int $lineEnd, string $name, string $destinationSource): array
+    {
         $method = $this->method($path, $lineStart, $lineEnd, $name);
-        $destination = ImportContext::fromSource($this->source($destinationPath));
+        $destination = ImportContext::fromSource($destinationSource);
         $found = [];
         $globalFallback = [];
         $this->walk($method, static function (Node $node) use (&$found, &$globalFallback, $destination): void {
