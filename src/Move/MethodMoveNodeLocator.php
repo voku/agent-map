@@ -73,16 +73,32 @@ final readonly class MethodMoveNodeLocator
      */
     public function importDependencies(string $path, int $lineStart, int $lineEnd, string $name, string $destinationPath): array
     {
+        return $this->importDependenciesAgainstSource($path, $lineStart, $lineEnd, $name, $this->source($destinationPath));
+    }
+
+    /**
+     * Same check as {@see importDependencies()}, but against destination source text that is not on disk yet,
+     * so a planner can judge the destination as it would look after its own planned `use` insertions.
+     *
+     * @return list<string> spellings as written in the body, sorted
+     */
+    public function importDependenciesAgainstSource(string $path, int $lineStart, int $lineEnd, string $name, string $destinationSource): array
+    {
         $method = $this->method($path, $lineStart, $lineEnd, $name);
-        $destination = ImportContext::fromSource($this->source($destinationPath));
+        $destination = ImportContext::fromSource($destinationSource);
+        [$destinationFunctions, $destinationConstants] = $this->functionAndConstantImports($destinationSource);
         $found = [];
-        $globalFallback = [];
-        $this->walk($method, static function (Node $node) use (&$found, &$globalFallback, $destination): void {
-            // Unqualified function and constant names fall back to the global symbol in any namespace.
-            if (($node instanceof Node\Expr\FuncCall || $node instanceof Node\Expr\ConstFetch) && $node->name instanceof Node\Name) {
-                $globalFallback[spl_object_id($node->name)] = true;
+        $symbolKind = [];
+        $this->walk($method, static function (Node $node) use (&$found, &$symbolKind, $destination, $destinationFunctions, $destinationConstants): void {
+            // An unqualified function or constant name that is not imported falls back to the global symbol in any
+            // namespace, so only an explicit `use function` / `use const` import (resolved to a fully qualified name
+            // by the parser) can mean something else in the destination file.
+            if ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name) {
+                $symbolKind[spl_object_id($node->name)] = 'function';
+            } elseif ($node instanceof Node\Expr\ConstFetch) {
+                $symbolKind[spl_object_id($node->name)] = 'const';
             }
-            if (!$node instanceof Node\Name\FullyQualified || isset($globalFallback[spl_object_id($node)])) {
+            if (!$node instanceof Node\Name\FullyQualified) {
                 return;
             }
             $original = $node->getAttribute('originalName');
@@ -90,6 +106,20 @@ final readonly class MethodMoveNodeLocator
                 return;
             }
             $written = $original->toString();
+            $kind = $symbolKind[spl_object_id($node)] ?? null;
+            if ($kind === 'function' || $kind === 'const') {
+                $imports = $kind === 'function' ? $destinationFunctions : $destinationConstants;
+                $key = $kind === 'function' ? strtolower($written) : $written;
+                $resolved = $imports[$key] ?? null;
+                $same = $resolved !== null
+                    ? ($kind === 'function' ? strcasecmp($resolved, $node->toString()) === 0 : $resolved === $node->toString())
+                    : !str_contains($node->toString(), '\\');
+                if (!$same) {
+                    $found[$written] = true;
+                }
+
+                return;
+            }
             if (in_array(strtolower($written), ['self', 'static', 'parent'], true)) {
                 return;
             }
@@ -102,6 +132,51 @@ final readonly class MethodMoveNodeLocator
         sort($names);
 
         return $names;
+    }
+
+    /**
+     * `use function` / `use const` imports of a file, keyed by alias (lower-cased for functions, as PHP matches
+     * function names case-insensitively and constants case-sensitively).
+     *
+     * @return array{array<string, string>, array<string, string>}
+     */
+    private function functionAndConstantImports(string $source): array
+    {
+        $functions = [];
+        $constants = [];
+        $collect = static function (array $statements) use (&$functions, &$constants): void {
+            foreach ($statements as $statement) {
+                if ($statement instanceof Node\Stmt\Use_) {
+                    $prefix = '';
+                    $groupType = $statement->type;
+                    $uses = $statement->uses;
+                } elseif ($statement instanceof Node\Stmt\GroupUse) {
+                    $prefix = $statement->prefix->toString() . '\\';
+                    $groupType = $statement->type;
+                    $uses = $statement->uses;
+                } else {
+                    continue;
+                }
+                foreach ($uses as $use) {
+                    $type = $use->type !== Node\Stmt\Use_::TYPE_UNKNOWN ? $use->type : $groupType;
+                    $alias = $use->getAlias()->toString();
+                    if ($type === Node\Stmt\Use_::TYPE_FUNCTION) {
+                        $functions[strtolower($alias)] = $prefix . $use->name->toString();
+                    } elseif ($type === Node\Stmt\Use_::TYPE_CONSTANT) {
+                        $constants[$alias] = $prefix . $use->name->toString();
+                    }
+                }
+            }
+        };
+        $ast = PhpCodeParser::getAstFromString($source);
+        foreach ($ast as $statement) {
+            if ($statement instanceof Node\Stmt\Namespace_) {
+                $collect($statement->stmts);
+            }
+        }
+        $collect($ast);
+
+        return [$functions, $constants];
     }
 
     /**

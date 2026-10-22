@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Unreleased
+
+### Fixed
+
+- `method-copy-plan` now blocks when the copied body uses a name (an alias such as `Fmt` from `use Lib\Formatter as Fmt`, an unimported class, or a same-named class from a different import) that the destination file resolves differently, judged against the destination as it will look after the plan's own `use` insertions. Previously such a plan was `safe` and produced a method that failed at runtime or changed meaning; the planner only imported parameter and return types, and under their real name. The check also covers explicit `use function` / `use const` imports (including aliases and group imports), which the shared name-resolution check used to skip, so `method-move-plan` benefits too. A same-class copy is unaffected, and type-only imports the plan inserts stay `safe` ([#158](https://github.com/voku/agent-map/issues/158)).
+
 ## 0.22.2 - 2026-10-09
 
 ### Changed

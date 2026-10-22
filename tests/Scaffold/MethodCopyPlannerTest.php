@@ -9,6 +9,7 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Plan\PlanStatus;
+use voku\AgentMap\Scaffold\MethodCopyPlan;
 use voku\AgentMap\Scaffold\MethodCopyPlanner;
 
 final class MethodCopyPlannerTest extends TestCase
@@ -159,6 +160,337 @@ PHP);
         $plan = $planner->plan($map, 'Source::foo', 'Dest');
         self::assertSame(PlanStatus::BLOCKED, $plan->status);
         self::assertStringContainsString('already exists on destination class Dest', $plan->blockers[0]);
+    }
+
+    public function testBlocksWhenBodyUsesAnAliasTheDestinationDoesNotImport(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use Lib\Formatter as Fmt;
+
+final class Source
+{
+    public function format(string $v): string
+    {
+        return Fmt::apply($v);
+    }
+}
+PHP);
+        $this->write('Dest.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace App;\n\nfinal class Dest\n{\n}\n");
+
+        $plan = $this->plan('App\Source::format', 'App\Dest');
+
+        self::assertSame(PlanStatus::BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('resolves differently (Fmt)', $plan->blockers[0]);
+    }
+
+    public function testBlocksWhenBodyUsesAnImportedClassTheDestinationLacks(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use Lib\Formatter;
+
+final class Source
+{
+    public function format(string $v): string
+    {
+        return Formatter::apply($v);
+    }
+}
+PHP);
+        $this->write('Dest.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\Other;\n\nfinal class Dest\n{\n}\n");
+
+        $plan = $this->plan('App\Source::format', 'App\Other\Dest');
+
+        self::assertSame(PlanStatus::BLOCKED, $plan->status);
+        self::assertStringContainsString('resolves differently (Formatter)', $plan->blockers[0]);
+    }
+
+    public function testBlocksWhenDestinationImportsADifferentClassUnderTheSameName(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use Lib\Formatter;
+
+final class Source
+{
+    public function format(string $v): string
+    {
+        return Formatter::apply($v);
+    }
+}
+PHP);
+        $this->write('Dest.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use Other\Formatter;
+
+final class Dest
+{
+}
+PHP);
+
+        $plan = $this->plan('App\Source::format', 'App\Dest');
+
+        self::assertSame(PlanStatus::BLOCKED, $plan->status);
+        self::assertStringContainsString('resolves differently (Formatter)', $plan->blockers[0]);
+    }
+
+    public function testStaysSafeWhenDestinationImportsTheSameClassOrAlias(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use Lib\Formatter as Fmt;
+
+final class Source
+{
+    public function format(string $v): string
+    {
+        return Fmt::apply($v);
+    }
+}
+PHP);
+        $this->write('Dest.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace Elsewhere;
+
+use Lib\Formatter as Fmt;
+
+final class Dest
+{
+}
+PHP);
+
+        $plan = $this->plan('App\Source::format', 'Elsewhere\Dest');
+
+        self::assertSame(PlanStatus::SAFE, $plan->status);
+        self::assertSame([], $plan->blockers);
+    }
+
+    public function testStaysSafeWhenOnlyTheSignatureNeedsAnImportThePlanInserts(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use Lib\Formatter;
+
+final class Source
+{
+    public function format(Formatter $formatter): string
+    {
+        return $formatter->name();
+    }
+}
+PHP);
+        $this->write('Dest.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Elsewhere;\n\nuse Lib\\Other;\n\nfinal class Dest\n{\n}\n");
+
+        $plan = $this->plan('App\Source::format', 'Elsewhere\Dest');
+
+        self::assertSame(PlanStatus::SAFE, $plan->status);
+        self::assertSame([], $plan->blockers);
+        self::assertContains('use_statement_insertion', array_map(static fn ($edit): string => $edit->role, $plan->edits));
+    }
+
+    public function testBlocksAnAliasedSignatureTypeBecauseThePlannedImportDropsTheAlias(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use Lib\Formatter as Fmt;
+
+final class Source
+{
+    public function format(Fmt $formatter): string
+    {
+        return $formatter->name();
+    }
+}
+PHP);
+        $this->write('Dest.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Elsewhere;\n\nfinal class Dest\n{\n}\n");
+
+        $plan = $this->plan('App\Source::format', 'Elsewhere\Dest');
+
+        self::assertSame(PlanStatus::BLOCKED, $plan->status);
+        self::assertStringContainsString('resolves differently (Fmt)', $plan->blockers[0]);
+    }
+
+    public function testCopyWithinTheSameClassIgnoresImportResolution(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use Lib\Formatter as Fmt;
+
+final class Source
+{
+    public function format(string $v): string
+    {
+        return Fmt::apply($v);
+    }
+}
+PHP);
+
+        $map = (new AgentMapBuilder())->build($this->root, ['src'], []);
+        $plan = (new MethodCopyPlanner($this->root))->plan($map, 'App\Source::format', null, 'formatAgain');
+
+        self::assertSame(PlanStatus::SAFE, $plan->status);
+        self::assertSame([], $plan->blockers);
+    }
+
+    public function testBlocksWhenBodyUsesAnImportedFunctionOrConstantTheDestinationLacks(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use function Lib\run as execute;
+use const Lib\LIMIT;
+
+final class Source
+{
+    public function go(): int
+    {
+        return execute(LIMIT) + strlen('x');
+    }
+}
+PHP);
+        $this->write('Dest.php', "<?php\n\ndeclare(strict_types=1);\n\nnamespace Elsewhere;\n\nfinal class Dest\n{\n}\n");
+
+        $plan = $this->plan('App\Source::go', 'Elsewhere\Dest');
+
+        self::assertSame(PlanStatus::BLOCKED, $plan->status);
+        self::assertStringContainsString('resolves differently (LIMIT, execute)', $plan->blockers[0]);
+    }
+
+    public function testBlocksWhenDestinationImportsADifferentFunctionUnderTheSameAlias(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use function Lib\run;
+
+final class Source
+{
+    public function go(): int
+    {
+        return run();
+    }
+}
+PHP);
+        $this->write('Dest.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace Elsewhere;
+
+use function Other\run;
+
+final class Dest
+{
+}
+PHP);
+
+        $plan = $this->plan('App\Source::go', 'Elsewhere\Dest');
+
+        self::assertSame(PlanStatus::BLOCKED, $plan->status);
+        self::assertStringContainsString('resolves differently (run)', $plan->blockers[0]);
+    }
+
+    public function testStaysSafeWhenDestinationImportsTheSameFunctionAndConstant(): void
+    {
+        $this->write('Source.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App;
+
+use function Lib\run;
+use const Lib\LIMIT;
+
+final class Source
+{
+    public function go(): int
+    {
+        return run(LIMIT) + strlen('x') + PHP_INT_SIZE;
+    }
+}
+PHP);
+        $this->write('Dest.php', <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace Elsewhere;
+
+use Lib\{Unused};
+use function Lib\{run};
+use const Lib\{LIMIT};
+
+final class Dest
+{
+}
+PHP);
+
+        $plan = $this->plan('App\Source::go', 'Elsewhere\Dest');
+
+        self::assertSame(PlanStatus::SAFE, $plan->status);
+        self::assertSame([], $plan->blockers);
+    }
+
+    private function plan(string $source, string $destination): MethodCopyPlan
+    {
+        $map = (new AgentMapBuilder())->build($this->root, ['src'], []);
+
+        return (new MethodCopyPlanner($this->root))->plan($map, $source, $destination);
     }
 
     private function write(string $name, string $source): void
