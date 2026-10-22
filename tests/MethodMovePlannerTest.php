@@ -199,6 +199,29 @@ PHP);
         self::assertNotSame([], $plan->edits);
     }
 
+    public function testBodyFunctionAndConstantImportsTheDestinationLacksBlock(): void
+    {
+        $this->write('Lonely.php', "<?php\nnamespace App;\n\nuse function Lib\\run as execute;\nuse const Lib\\LIMIT;\n\nfinal class Lonely\n{\n    private static function unusedHelper(): int\n    {\n        return execute(LIMIT) + strlen('x');\n    }\n}\n");
+        $this->write('Diff.php', "<?php\nnamespace Other;\n\nfinal class Diff\n{\n}\n");
+
+        $plan = $this->plan('App\\Lonely::unusedHelper', 'Other\\Diff');
+
+        self::assertSame(MethodMovePlan::STATUS_BLOCKED, $plan->status);
+        self::assertSame([], $plan->edits);
+        self::assertStringContainsString('LIMIT, execute', implode("\n", $plan->blockers));
+    }
+
+    public function testBodyFunctionAndConstantImportsTheDestinationSharesStayPlannable(): void
+    {
+        $this->write('Lonely.php', "<?php\nnamespace App;\n\nuse function Lib\\run;\nuse const Lib\\LIMIT;\n\nfinal class Lonely\n{\n    private static function unusedHelper(): int\n    {\n        return run(LIMIT) + strlen('x');\n    }\n}\n");
+        $this->write('Diff.php', "<?php\nnamespace Other;\n\nuse function Lib\\run;\nuse const Lib\\LIMIT;\n\nfinal class Diff\n{\n}\n");
+
+        $plan = $this->plan('App\\Lonely::unusedHelper', 'Other\\Diff');
+
+        self::assertNotSame(MethodMovePlan::STATUS_BLOCKED, $plan->status, implode("\n", $plan->blockers));
+        self::assertNotSame([], $plan->edits);
+    }
+
     public function testDestinationCollisionBlocks(): void
     {
         $this->writeCronJob();
