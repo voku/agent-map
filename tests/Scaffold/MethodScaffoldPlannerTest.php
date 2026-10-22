@@ -153,6 +153,82 @@ PHP);
         self::assertStringContainsString('Target class not found in index', $plan->blockers[0]);
     }
 
+    public function testGeneratedMethodFollowsALfSpaceFileExactlyWithoutABlankLineBeforeTheClosingBrace(): void
+    {
+        $source = "<?php\n\nfinal class Box\n{\n    public function one(): int\n    {\n        return 1;\n    }\n}\n";
+
+        self::assertSame(
+            "<?php\n\nfinal class Box\n{\n    public function one(): int\n    {\n        return 1;\n    }\n\n    /**\n     * Doubles.\n     *\n     * @param int \$x\n     * @return int\n     */\n    public function double(int \$x): int\n    {\n        return \$x * 2;\n    }\n}\n",
+            $this->scaffold($source),
+        );
+    }
+
+    public function testGeneratedMethodUsesCrlfInACrlfFile(): void
+    {
+        $source = "<?php\r\n\r\nfinal class Box\r\n{\r\n    public function one(): int\r\n    {\r\n        return 1;\r\n    }\r\n}\r\n";
+
+        $result = $this->scaffold($source);
+
+        self::assertSame(substr_count($result, "\n"), substr_count($result, "\r\n"), 'every line break is CRLF');
+        self::assertStringContainsString("    }\r\n\r\n    /**\r\n     * Doubles.\r\n", $result);
+    }
+
+    public function testGeneratedMethodUsesTabsInATabIndentedFile(): void
+    {
+        $source = "<?php\n\nfinal class Box\n{\n\tpublic function one(): int\n\t{\n\t\treturn 1;\n\t}\n}\n";
+
+        self::assertSame(
+            "<?php\n\nfinal class Box\n{\n\tpublic function one(): int\n\t{\n\t\treturn 1;\n\t}\n\n\t/**\n\t * Doubles.\n\t *\n\t * @param int \$x\n\t * @return int\n\t */\n\tpublic function double(int \$x): int\n\t{\n\t\treturn \$x * 2;\n\t}\n}\n",
+            $this->scaffold($source),
+        );
+    }
+
+    public function testAnImportedTypeIsInsertedWithTheFilesLineEnding(): void
+    {
+        $source = "<?php\r\n\r\nnamespace App;\r\n\r\nuse Foo\\Bar;\r\n\r\nfinal class Box\r\n{\r\n}\r\n";
+        $this->write('Box.php', $source);
+
+        $plan = (new MethodScaffoldPlanner($this->root))->plan(
+            (new AgentMapBuilder())->build($this->root, ['src'], []),
+            'App\\Box::make',
+            parameters: ['\\Other\\Thing $thing'],
+        );
+
+        self::assertSame(PlanStatus::SAFE, $plan->status, implode("\n", $plan->blockers));
+        $result = $this->applyEdits($source, $plan->edits);
+        self::assertSame(substr_count($result, "\n"), substr_count($result, "\r\n"));
+        self::assertStringContainsString("use Foo\\Bar;\r\nuse Other\\Thing;\r\n", $result);
+    }
+
+    /** Scaffolds `double(int $x): int` on Box and returns the destination file after applying the planned edits. */
+    private function scaffold(string $source): string
+    {
+        $this->write('Box.php', $source);
+        $plan = (new MethodScaffoldPlanner($this->root))->plan(
+            (new AgentMapBuilder())->build($this->root, ['src'], []),
+            'Box::double',
+            parameters: ['int $x'],
+            returnType: 'int',
+            docSummary: 'Doubles.',
+            body: 'return $x * 2;',
+        );
+        self::assertSame(PlanStatus::SAFE, $plan->status, implode("\n", $plan->blockers));
+
+        return $this->applyEdits($source, $plan->edits);
+    }
+
+    /** @param list<\voku\AgentMap\Plan\PlanEdit> $edits */
+    private function applyEdits(string $source, array $edits): string
+    {
+        usort($edits, static fn ($a, $b): int => $b->startFilePos <=> $a->startFilePos);
+        foreach ($edits as $edit) {
+            self::assertSame($edit->expected, substr($source, $edit->startFilePos, strlen($edit->expected)));
+            $source = substr($source, 0, $edit->startFilePos) . $edit->replacement . substr($source, $edit->startFilePos + strlen($edit->expected));
+        }
+
+        return $source;
+    }
+
     private function write(string $name, string $source): void
     {
         file_put_contents($this->root . '/src/' . $name, $source);

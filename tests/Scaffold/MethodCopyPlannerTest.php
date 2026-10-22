@@ -486,6 +486,45 @@ PHP);
         self::assertSame([], $plan->blockers);
     }
 
+    public function testCopyIntoACrlfFileKeepsEveryLineBreakCrlfWhateverTheSourceUses(): void
+    {
+        $this->write('Source.php', "<?php\n\nnamespace App;\n\nuse DateTimeImmutable;\n\nfinal class Source\n{\n    public static function stamp(): DateTimeImmutable\n    {\n        return new DateTimeImmutable('now');\n    }\n}\n");
+        $dest = "<?php\r\n\r\nnamespace Elsewhere;\r\n\r\nuse Foo\\Bar;\r\n\r\nfinal class Dest\r\n{\r\n    public const X = 1;\r\n}\r\n";
+        $this->write('Dest.php', $dest);
+
+        $plan = $this->plan('App\\Source::stamp', 'Elsewhere\\Dest');
+
+        self::assertSame(PlanStatus::SAFE, $plan->status, implode("\n", $plan->blockers));
+        $result = $this->applyEdits($dest, $plan->edits);
+        self::assertSame(substr_count($result, "\n"), substr_count($result, "\r\n"), 'no bare LF');
+        self::assertStringContainsString("use Foo\\Bar;\r\nuse DateTimeImmutable;\r\n", $result);
+        self::assertStringContainsString("    public const X = 1;\r\n\r\n    public static function stamp(): DateTimeImmutable\r\n    {\r\n", $result);
+    }
+
+    public function testCopyFromACrlfSourceIntoAnLfFileLeavesNoCarriageReturn(): void
+    {
+        $this->write('Source.php', "<?php\r\n\r\nnamespace App;\r\n\r\nfinal class Source\r\n{\r\n    public static function one(): int\r\n    {\r\n        return 1;\r\n    }\r\n}\r\n");
+        $dest = "<?php\n\nnamespace Elsewhere;\n\nfinal class Dest\n{\n    public const X = 1;\n}\n";
+        $this->write('Dest.php', $dest);
+
+        $plan = $this->plan('App\\Source::one', 'Elsewhere\\Dest');
+
+        self::assertSame(PlanStatus::SAFE, $plan->status, implode("\n", $plan->blockers));
+        self::assertStringNotContainsString("\r", $this->applyEdits($dest, $plan->edits));
+    }
+
+    /** @param list<\voku\AgentMap\Plan\PlanEdit> $edits */
+    private function applyEdits(string $source, array $edits): string
+    {
+        usort($edits, static fn ($a, $b): int => $b->startFilePos <=> $a->startFilePos);
+        foreach ($edits as $edit) {
+            self::assertSame($edit->expected, substr($source, $edit->startFilePos, strlen($edit->expected)));
+            $source = substr($source, 0, $edit->startFilePos) . $edit->replacement . substr($source, $edit->startFilePos + strlen($edit->expected));
+        }
+
+        return $source;
+    }
+
     private function plan(string $source, string $destination): MethodCopyPlan
     {
         $map = (new AgentMapBuilder())->build($this->root, ['src'], []);

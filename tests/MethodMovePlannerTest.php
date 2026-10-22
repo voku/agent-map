@@ -222,6 +222,25 @@ PHP);
         self::assertNotSame([], $plan->edits);
     }
 
+    public function testMoveIntoACrlfFileKeepsEveryLineBreakCrlf(): void
+    {
+        $this->write('Lonely.php', "<?php\nnamespace App;\n\nfinal class Lonely\n{\n    private static function unusedHelper(): int\n    {\n        return strlen('x');\n    }\n}\n");
+        $dest = "<?php\r\nnamespace Other;\r\n\r\nfinal class Diff\r\n{\r\n}\r\n";
+        $this->write('Diff.php', $dest);
+
+        $plan = $this->plan('App\\Lonely::unusedHelper', 'Other\\Diff');
+
+        self::assertNotSame(MethodMovePlan::STATUS_BLOCKED, $plan->status, implode("\n", $plan->blockers));
+        $insertion = null;
+        foreach ($plan->edits as $edit) {
+            if ($edit->role === 'method_declaration_insertion') {
+                $insertion = $edit;
+            }
+        }
+        self::assertNotNull($insertion);
+        self::assertSame(substr_count($insertion->replacement, "\n"), substr_count($insertion->replacement, "\r\n"), 'no bare LF in the inserted text');
+    }
+
     public function testDestinationCollisionBlocks(): void
     {
         $this->writeCronJob();

@@ -124,6 +124,7 @@ final readonly class MethodCopyPlanner
             return $this->blockedPlan($method->id, $destSymbol->fqn, $targetName, 'Could not locate insertion anchor: ' . $e->getMessage(), $map);
         }
 
+        $eol = FileLayout::eol($destSource);
         $edits = [];
         $blindSpots = [];
         $useLocator = new UseStatementLocator();
@@ -177,7 +178,7 @@ final readonly class MethodCopyPlanner
                     $useInsertion['line'],
                     $useInsertion['line'],
                     $useInsertion['expected'],
-                    $useInsertion['insertion'],
+                    FileLayout::withEol($useInsertion['insertion'], $eol),
                     'use_statement_insertion',
                     'use:' . $typeFqn,
                     'copy_dependency',
@@ -222,7 +223,7 @@ final readonly class MethodCopyPlanner
             $anchor['line'],
             $anchor['line'],
             $anchor['expected_anchor'],
-            "\n" . rtrim($adaptedText, "\n") . "\n" . $anchor['expected_anchor'],
+            FileLayout::withEol("\n" . rtrim($adaptedText, "\r\n") . "\n", $eol) . $anchor['expected_anchor'],
             'method_declaration_insertion',
             $destSymbol->fqn . '::' . $targetName,
             'copy_declaration',
