@@ -142,12 +142,11 @@ not configured properly`, which silently costs call edges:
 vendor/bin/agent-map build --paths=src --scan=lib,vendor/acme
 ```
 
-Configuration discovery uses:
+PHPStan configuration is executable project input: it can load bootstrap files and extensions. A build uses a generated level-0 configuration by default. Select a project configuration explicitly with `--phpstan-config` when you trust it:
 
-1. `--phpstan-config`;
-2. `phpstan.neon`;
-3. `phpstan.neon.dist`;
-4. a generated level-0 configuration.
+```bash
+vendor/bin/agent-map build --paths=src --phpstan-config=phpstan.neon
+```
 
 Project PHPStan findings are stored as diagnostics when the semantic export itself succeeds. Parse failures, internal PHPStan failures, or a missing semantic export fail the build.
 

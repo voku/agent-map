@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
+use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
 use voku\AgentMap\Build\SemanticAnalysisResult;
 use voku\AgentMap\Build\SemanticAnalyzer;
 use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
@@ -107,7 +108,7 @@ final class AgentMapBuilderTest extends TestCase
         throw new RuntimeException('File missing from index: ' . $path);
     }
 
-    public function testPhpStanConfigurationDiscoveryPrefersPhpstanNeon(): void
+    public function testPhpStanConfigurationIsNotDiscoveredImplicitly(): void
     {
         file_put_contents($this->root . '/phpstan.neon.dist', "parameters:
     level: 1
@@ -119,8 +120,29 @@ final class AgentMapBuilderTest extends TestCase
 
         (new AgentMapBuilder(semanticAnalyzer: $semantic))->build($this->root, ['src'], [], null, '512M');
 
-        self::assertSame($this->root . '/phpstan.neon', $semantic->configurationFile);
+        self::assertNull($semantic->configurationFile);
         self::assertSame('512M', $semantic->memoryLimit);
+    }
+
+    public function testProjectPhpStanBootstrapRunsOnlyWhenConfigurationIsExplicit(): void
+    {
+        if (!PhpStanSemanticAnalyzer::isAvailable()) {
+            self::markTestSkipped('PHPStan is not installed.');
+        }
+
+        $marker = $this->root . '/bootstrap-ran';
+        $bootstrap = $this->root . '/bootstrap.php';
+        file_put_contents($bootstrap, "<?php\nfile_put_contents(" . var_export($marker, true) . ", 'yes');\n");
+        file_put_contents(
+            $this->root . '/phpstan.neon',
+            "parameters:\n    level: 0\n    bootstrapFiles:\n        - " . json_encode($bootstrap, JSON_THROW_ON_ERROR) . "\n",
+        );
+
+        (new AgentMapBuilder())->build($this->root, ['src'], []);
+        self::assertFileDoesNotExist($marker, 'A default map build must not execute repo-tracked PHPStan bootstraps.');
+
+        (new AgentMapBuilder())->build($this->root, ['src'], [], 'phpstan.neon');
+        self::assertFileExists($marker, 'An explicitly selected project config retains its PHPStan behavior.');
     }
 
     public function testBuildKeepsDirectoryScopeWhenMapExcludesFiles(): void
