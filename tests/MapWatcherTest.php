@@ -162,8 +162,8 @@ final class MapWatcherTest extends TestCase
      */
     public function testWatchProcessEndToEnd(): void
     {
-        if (!function_exists('proc_open') || !function_exists('posix_kill')) {
-            self::markTestSkipped('proc_open/posix required');
+        if (!function_exists('proc_open') || !function_exists('posix_kill') || !defined('SIGTERM')) {
+            self::markTestSkipped('proc_open/posix SIGTERM support required');
         }
 
         $bin = dirname(__DIR__) . '/bin/agent-map';
