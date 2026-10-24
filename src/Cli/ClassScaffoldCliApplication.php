@@ -82,7 +82,7 @@ TEXT;
             $index = $explicitIndex === null
                 ? $this->artifacts->indexJson()
                 : $this->artifacts->projectPath($explicitIndex);
-            $map = (new IndexReader())->read($index);
+            $map = (new IndexReader())->readForRoot($index, $this->artifacts->projectRoot());
 
             $final = !isset($parsed['flags']['no-final']);
             $readonly = isset($parsed['flags']['readonly']);

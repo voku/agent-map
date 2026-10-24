@@ -304,6 +304,49 @@ final class IndexReader
         return $index;
     }
 
+    /**
+     * Read a persisted map for the project selected by the caller.
+     *
+     * The root stored in an index is untrusted metadata. CLI and service
+     * boundaries that read source files must bind it to their explicit project
+     * root before using the index.
+     *
+     * @param list<string>|null $sections
+     */
+    public function readForRoot(
+        string $file,
+        string $expectedRoot,
+        bool $loadRelations = true,
+        ?array $sections = null,
+    ): AgentMapIndex {
+        $index = $sections === null
+            ? $this->read($file, $loadRelations)
+            : $this->readSections($file, $sections);
+        $indexRoot = realpath($index->root);
+        $requestedRoot = realpath($expectedRoot);
+        if (!is_string($indexRoot) || !is_string($requestedRoot) || $indexRoot !== $requestedRoot) {
+            throw new RuntimeException(
+                'Agent-map index source root does not match the selected project root.',
+            );
+        }
+
+        $normalizedRoot = rtrim(str_replace('\\', '/', $indexRoot), '/');
+        $rootPrefix = $normalizedRoot === '' ? '/' : $normalizedRoot . '/';
+        foreach ($index->files as $sourceFile) {
+            $absolute = realpath($indexRoot . '/' . $sourceFile->path);
+            if (!is_string($absolute)) {
+                continue;
+            }
+            if (!str_starts_with(str_replace('\\', '/', $absolute), $rootPrefix)) {
+                throw new RuntimeException(
+                    'Agent-map index contains a source file outside the selected project root: ' . $sourceFile->path,
+                );
+            }
+        }
+
+        return $index;
+    }
+
     /** Whether the chunk just read reaches the end of its line. */
     private function endsLine(string $chunk, mixed $handle): bool
     {

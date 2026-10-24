@@ -13,6 +13,7 @@ use voku\AgentMap\Cli\PropertyRenameCliApplication;
 use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexWriter;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Rename\PropertyRenamePlan;
 use voku\AgentMap\Rename\PropertyRenamePlanner;
 use voku\AgentMap\Plan\PlanBlindSpot;
@@ -234,7 +235,7 @@ PHP, 'already exists'];
         $before = file_get_contents($this->root . '/src/Box.php');
 
         ob_start();
-        $exit = (new PropertyRenameCliApplication())->run([
+        $exit = (new PropertyRenameCliApplication(MapArtifactPaths::forProject($this->root)))->run([
             'agent-map',
             'property-rename-plan',
             'Demo\\Box::$name',

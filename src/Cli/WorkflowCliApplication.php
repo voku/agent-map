@@ -83,7 +83,7 @@ TEXT;
         }
 
         $indexPath = $parsed['options']['index'] ?? $this->artifacts->indexJson();
-        $map = (new IndexReader())->read($indexPath);
+        $map = (new IndexReader())->readForRoot($indexPath, $this->artifacts->projectRoot());
 
         $report = (new WorkflowDiscovery())->discover($map, $query);
 

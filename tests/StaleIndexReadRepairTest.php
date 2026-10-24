@@ -334,6 +334,7 @@ final class StaleIndexReadRepairTest extends TestCase
                 'scope',
                 $symbol,
                 '--index=' . $this->root . '/map.json',
+                '--root=' . $this->root,
                 '--backend=structural',
             ],
             [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],

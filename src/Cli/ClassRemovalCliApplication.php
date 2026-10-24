@@ -79,7 +79,7 @@ TEXT;
             $format = $this->format($parsed['options']['format'] ?? 'text');
             $explicitIndex = $parsed['options']['index'] ?? null;
             $index = $explicitIndex === null ? $this->artifacts->indexJson() : $this->artifacts->projectPath($explicitIndex);
-            $plan = (new ClassRemovalPlanner())->plan((new IndexReader())->read($index), $parsed['arguments'][0]);
+            $plan = (new ClassRemovalPlanner())->plan((new IndexReader())->readForRoot($index, $this->artifacts->projectRoot()), $parsed['arguments'][0]);
             echo $this->render($plan, $format);
 
             return $plan->isBlocked() ? 1 : 0;

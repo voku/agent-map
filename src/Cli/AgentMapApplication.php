@@ -83,7 +83,7 @@ final readonly class AgentMapApplication
     {
         $previous = null;
         if ($options->merge && is_file($options->out)) {
-            $previous = (new IndexReader())->read($options->out);
+            $previous = $this->readIndex($options->out, $options->root);
         }
 
         $structural = $options->backend === 'structural';
@@ -286,7 +286,7 @@ final readonly class AgentMapApplication
             return 1;
         }
 
-        $index = (new IndexReader())->read($options->index);
+        $index = $this->readIndex($options->index, $options->root);
         $store = new SearchIndexStore($this->absolute($options->root, $options->database));
 
         if ($subcommand === 'doctor') {
@@ -475,7 +475,7 @@ final readonly class AgentMapApplication
             return 1;
         }
 
-        $index = (new IndexReader())->read($options->index);
+        $index = $this->readIndex($options->index, $options->root);
         $store = new SearchIndexStore($this->absolute($options->root, $options->database));
         $result = (new HybridSearch(embeddings: $options->semantic ? $this->corpusProvider($store) : null))
             ->search($index, $store, (string)$options->argument, $options->limit);
@@ -522,7 +522,7 @@ final readonly class AgentMapApplication
             return 1;
         }
 
-        $index = (new IndexReader())->read($options->index);
+        $index = $this->readIndex($options->index, $options->root);
         $store = new SearchIndexStore($this->absolute($options->root, $options->database));
         $provider = $options->semantic ? $this->corpusProvider($store) : null;
         $report = (new SearchBenchmark(new HybridSearch(embeddings: $provider), $provider))
@@ -588,7 +588,7 @@ final readonly class AgentMapApplication
 
     private function query(CliOptions $options): int
     {
-        $index = (new IndexReader())->readSections($options->index, ['files']);
+        $index = $this->readIndex($options->index, $options->root, ['files']);
         $this->warnIfStale($index->staleEntries());
         $result = $index->query((string) $options->argument);
         $files = array_slice($result->files, 0, $options->limit);
@@ -606,7 +606,7 @@ final readonly class AgentMapApplication
 
     private function file(CliOptions $options): int
     {
-        $index = (new IndexReader())->readSections($options->index, ['files']);
+        $index = $this->readIndex($options->index, $options->root, ['files']);
         $file = $index->file((string) $options->argument);
         if ($file === null) {
             fwrite(STDERR, 'File not found in index: ' . $options->argument . "\n");
@@ -626,7 +626,7 @@ final readonly class AgentMapApplication
 
     private function stale(CliOptions $options): int
     {
-        $index = (new IndexReader())->readSections($options->index, ['files']);
+        $index = $this->readIndex($options->index, $options->root, ['files']);
         $stale = $index->staleEntries();
         if ($stale === []) {
             echo "OK\n";
@@ -642,7 +642,7 @@ final readonly class AgentMapApplication
 
     private function summary(CliOptions $options): int
     {
-        $index = (new IndexReader())->readSections($options->index, ['files']);
+        $index = $this->readIndex($options->index, $options->root, ['files']);
         $this->warnIfStale($index->staleEntries());
         echo $this->formatter->render([
             'type' => 'summary',
@@ -658,7 +658,7 @@ final readonly class AgentMapApplication
 
     private function stats(CliOptions $options): int
     {
-        $index = (new IndexReader())->readSections($options->index, ['files']);
+        $index = $this->readIndex($options->index, $options->root, ['files']);
         $this->warnIfStale($index->staleEntries());
         echo $this->formatter->render([
             'type' => 'stats',
@@ -675,7 +675,7 @@ final readonly class AgentMapApplication
 
     private function changed(CliOptions $options): int
     {
-        $index = (new IndexReader())->readSections($options->index, ['files']);
+        $index = $this->readIndex($options->index, $options->root, ['files']);
         $this->warnIfStale($index->staleEntries());
         $changed = $this->changedPhpFiles($index->root, $options->base);
         $files = [];
@@ -853,7 +853,7 @@ final readonly class AgentMapApplication
 
     private function currentIndexForRead(CliOptions $options): AgentMapIndex
     {
-        $index = (new IndexReader())->read($options->index);
+        $index = $this->readIndex($options->index, $options->root);
         $builder = $this->builder($options);
         $semanticScope = $this->recordedSemanticScope($index);
 
@@ -909,6 +909,18 @@ final readonly class AgentMapApplication
         }
 
         return $refreshed;
+    }
+
+    /**
+     * An index is project data and can be committed by a repository contributor.
+     * Never let its recorded root choose which project this CLI reads or updates.
+     * The caller may select another project explicitly with --root after reviewing it.
+     *
+     * @param list<string>|null $sections
+     */
+    private function readIndex(string $path, string $expectedRoot, ?array $sections = null): AgentMapIndex
+    {
+        return (new IndexReader())->readForRoot($path, $expectedRoot, sections: $sections);
     }
 
     private function scope(CliOptions $options): int

@@ -195,7 +195,12 @@ TEXT;
     private function loadFresh(string $path, bool $loadRelations = true): AgentMapIndex
     {
         $reader = new IndexReader();
-        $map = $loadRelations ? $reader->read($path) : $reader->readSections($path, ['files']);
+        $map = $reader->readForRoot(
+            $path,
+            $this->artifacts->projectRoot(),
+            loadRelations: $loadRelations,
+            sections: $loadRelations ? null : ['files'],
+        );
         $stale = $map->staleEntries();
         if ($stale !== []) {
             throw new RuntimeException(sprintf(

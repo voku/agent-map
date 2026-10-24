@@ -13,6 +13,7 @@ use voku\AgentMap\Extract\SimplePhpParserSymbolExtractor;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexWriter;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Rename\ParameterRenamePlan;
 use voku\AgentMap\Rename\ParameterRenamePlanner;
@@ -257,7 +258,7 @@ PHP);
         $mapPath = $this->root . '/map.json';
         (new IndexWriter())->write($this->map(), $mapPath, 'json');
         $before = (string) file_get_contents($this->root . '/src/Service.php');
-        $application = new ParameterRenameCliApplication();
+        $application = new ParameterRenameCliApplication(MapArtifactPaths::forProject($this->root));
 
         ob_start();
         $jsonStatus = $application->run([

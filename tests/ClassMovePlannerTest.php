@@ -13,6 +13,7 @@ use voku\AgentMap\Cli\ClassMoveCliApplication;
 use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexWriter;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Move\ClassMovePlan;
 use voku\AgentMap\Move\ClassMovePlanner;
 use voku\AgentMap\Rename\ClassRenamePlanner;
@@ -549,7 +550,7 @@ PHP);
     {
         ob_start();
         try {
-            $status = (new ClassMoveCliApplication())->run($argv);
+            $status = (new ClassMoveCliApplication(MapArtifactPaths::forProject($this->root)))->run($argv);
         } finally {
             $output = (string) ob_get_clean();
         }

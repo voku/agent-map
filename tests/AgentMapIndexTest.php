@@ -5,9 +5,15 @@ declare(strict_types=1);
 namespace voku\AgentMap\Tests;
 
 use PHPUnit\Framework\TestCase;
+use InvalidArgumentException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
+use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
+use voku\AgentMap\Cli\AgentMapApplication;
+use voku\AgentMap\Inspect\ScopeInspector;
+use voku\AgentMap\Inspect\ScopeTarget;
+use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\AnalysisFingerprint;
 use voku\AgentMap\Index\FileEntry;
@@ -33,6 +39,7 @@ final class AgentMapIndexTest extends TestCase
     protected function tearDown(): void
     {
         $this->removeDirectory($this->root);
+        $this->removeDirectory($this->root . '-outside');
     }
 
     public function testSerializesAndReadsJsonAndToon(): void
@@ -143,6 +150,131 @@ final class AgentMapIndexTest extends TestCase
 
         unlink($this->root . '/src/EvidenceValidator.php');
         self::assertSame([['path' => 'src/EvidenceValidator.php', 'reason' => 'missing']], $index->staleEntries());
+    }
+
+    public function testStaleRejectsSymlinkedSourceThatEscapesTheRecordedRoot(): void
+    {
+        $outsideRoot = $this->root . '-outside';
+        mkdir($outsideRoot);
+        $outside = $outsideRoot . '/outside.php';
+        file_put_contents($outside, "<?php\nfinal class Outside {}\n");
+        self::assertTrue(symlink($outside, $this->root . '/src/Outside.php'));
+        $entry = new FileEntry(
+            'src/Outside.php',
+            'sha256:' . hash_file('sha256', $outside),
+            'Outside',
+            [],
+        );
+        $index = new AgentMapIndex('2.0', $this->root, 'test', [$entry]);
+
+        self::assertSame([['path' => 'src/Outside.php', 'reason' => 'outside-root']], $index->staleEntries());
+    }
+
+    public function testReaderRejectsSymlinkedSourceThatEscapesTheSelectedRoot(): void
+    {
+        $outsideRoot = $this->root . '-outside';
+        mkdir($outsideRoot);
+        $outside = $outsideRoot . '/outside.php';
+        file_put_contents($outside, "<?php\nfinal class Outside {}\n");
+        self::assertTrue(symlink($outside, $this->root . '/src/Outside.php'));
+        $index = new AgentMapIndex('2.0', $this->root, 'test', [
+            new FileEntry(
+                'src/Outside.php',
+                'sha256:' . hash_file('sha256', $outside),
+                'Outside',
+                [],
+            ),
+        ]);
+        $indexPath = $this->root . '/untrusted-map.json';
+        (new IndexWriter())->write($index, $indexPath, 'json');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('outside the selected project root');
+        (new IndexReader())->readForRoot($indexPath, $this->root);
+    }
+
+    public function testPersistedFileEntryRejectsTraversalPaths(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('project-relative path');
+
+        FileEntry::fromArray([
+            'path' => '../outside.php',
+            'sha256' => 'sha256:fixture',
+            'namespace' => '',
+            'symbols' => [],
+        ]);
+    }
+
+    public function testPersistedFileEntryNormalizesSafeDotSegments(): void
+    {
+        $entry = FileEntry::fromArray([
+            'path' => './src/./EvidenceValidator.php',
+            'sha256' => 'sha256:fixture',
+            'namespace' => '',
+            'symbols' => [],
+        ]);
+
+        self::assertSame('src/EvidenceValidator.php', $entry->path);
+    }
+
+    public function testScopeInspectionRejectsSymlinkedSourceThatEscapesTheRecordedRoot(): void
+    {
+        $outsideRoot = $this->root . '-outside';
+        mkdir($outsideRoot);
+        $outside = $outsideRoot . '/outside.php';
+        file_put_contents($outside, "<?php\nfinal class Outside {}\n");
+        self::assertTrue(symlink($outside, $this->root . '/src/Outside.php'));
+        $index = new AgentMapIndex('2.0', $this->root, 'test', []);
+
+        try {
+            (new ScopeInspector())->inspect($index, new ScopeTarget('method', 'Outside::value', 'src/Outside.php', 1, 2));
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('escapes repository root', $exception->getMessage());
+
+            return;
+        }
+
+        self::fail('Scope inspection must refuse a symlink that resolves outside the map root.');
+    }
+
+    public function testContextRejectsIndexWithAnotherSourceRoot(): void
+    {
+        $outsideRoot = $this->root . '/outside-source';
+        mkdir($outsideRoot . '/src', 0o775, true);
+        file_put_contents($outsideRoot . '/src/Leak.php', <<<'PHP'
+<?php
+
+namespace Demo;
+
+final class Leak
+{
+    public function value(): string
+    {
+        return 'OUTSIDE_ROOT_PROBE';
+    }
+}
+PHP);
+        $indexPath = $this->root . '/untrusted-map.json';
+        $index = (new AgentMapBuilder(semanticAnalyzer: new StructuralOnlySemanticAnalyzer()))
+            ->build($outsideRoot, ['src'], []);
+        (new IndexWriter())->write($index, $indexPath, 'json');
+
+        ob_start();
+        $exit = (new AgentMapApplication())->run([
+            'agent-map',
+            'context',
+            'Demo\\Leak::value',
+            '--root=' . $this->root,
+            '--index=' . $indexPath,
+            '--backend=structural',
+            '--format=json',
+        ]);
+        $output = ob_get_clean();
+
+        self::assertSame(1, $exit);
+        self::assertIsString($output);
+        self::assertStringNotContainsString('OUTSIDE_ROOT_PROBE', $output);
     }
 
     public function testLikelyTestFilesAndSummaryHelpers(): void

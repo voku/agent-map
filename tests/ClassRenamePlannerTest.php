@@ -13,6 +13,7 @@ use voku\AgentMap\Cli\ClassRenameCliApplication;
 use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexWriter;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Rename\ClassRenamePlan;
 use voku\AgentMap\Rename\ClassRenamePlanner;
 use voku\AgentMap\Plan\PlanBlindSpot;
@@ -271,7 +272,7 @@ PHP);
         $before = (string) file_get_contents($this->root . '/src/OldClass.php');
 
         ob_start();
-        $status = (new ClassRenameCliApplication())->run([
+        $status = (new ClassRenameCliApplication(MapArtifactPaths::forProject($this->root)))->run([
             'agent-map',
             'class-rename-plan',
             'Demo\\OldClass',

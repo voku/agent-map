@@ -269,14 +269,31 @@ final readonly class AgentMapIndex
     public function staleEntries(): array
     {
         $stale = [];
+        $realRoot = realpath($this->root);
+        if (!is_string($realRoot) || !is_dir($realRoot)) {
+            foreach ($this->files as $file) {
+                $stale[] = ['path' => $file->path, 'reason' => 'missing'];
+            }
+
+            return $stale;
+        }
+        $normalizedRoot = rtrim(str_replace('\\', '/', $realRoot), '/');
+        $rootPrefix = $normalizedRoot === '' ? '/' : $normalizedRoot . '/';
+
         foreach ($this->files as $file) {
-            $absolute = $this->root . '/' . $file->path;
+            $absolute = $realRoot . '/' . $file->path;
             clearstatcache(true, $absolute);
-            if (!is_file($absolute)) {
+            $realFile = realpath($absolute);
+            if (!is_string($realFile) || !is_file($realFile)) {
                 $stale[] = ['path' => $file->path, 'reason' => 'missing'];
                 continue;
             }
-            $hash = hash_file('sha256', $absolute);
+            $normalizedFile = str_replace('\\', '/', $realFile);
+            if (!str_starts_with($normalizedFile, $rootPrefix)) {
+                $stale[] = ['path' => $file->path, 'reason' => 'outside-root'];
+                continue;
+            }
+            $hash = hash_file('sha256', $realFile);
             if (!is_string($hash) || !hash_equals($file->sha256, 'sha256:' . $hash)) {
                 $stale[] = ['path' => $file->path, 'reason' => 'hash'];
             }

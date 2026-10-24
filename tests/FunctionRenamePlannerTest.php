@@ -13,6 +13,7 @@ use voku\AgentMap\Cli\FunctionRenameCliApplication;
 use voku\AgentMap\Index\AgentMapBuilder;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\IndexWriter;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Rename\FunctionRenamePlan;
 use voku\AgentMap\Rename\FunctionRenamePlanner;
 use voku\AgentMap\Plan\PlanEdit;
@@ -137,7 +138,7 @@ final class FunctionRenamePlannerTest extends TestCase
         $before = file_get_contents($this->root . '/src/Functions.php');
 
         ob_start();
-        $exit = (new FunctionRenameCliApplication())->run([
+        $exit = (new FunctionRenameCliApplication(MapArtifactPaths::forProject($this->root)))->run([
             'agent-map',
             'function-rename-plan',
             'FunctionRename\\old_size',

@@ -81,7 +81,7 @@ TEXT;
 
             $indexPath = $parsed['options']['index'] ?? $this->artifacts->indexJson();
             $format = $this->format($parsed['options']['format'] ?? 'text');
-            $map = (new IndexReader())->read($indexPath);
+            $map = (new IndexReader())->readForRoot($indexPath, $this->artifacts->projectRoot());
             $plan = (new PropertyRenamePlanner())->plan($map, $parsed['arguments'][0], $parsed['arguments'][1]);
 
             echo $this->render($plan, $format);
