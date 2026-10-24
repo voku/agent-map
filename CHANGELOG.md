@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.22.3 - 2026-10-24
+
+### Security
+
+- Require explicit trust before executing project PHPStan configuration and bind persisted indexes to the selected project root.
+
 ### Fixed
 
 - `method-copy-plan`, `method-scaffold-plan` and `method-move-plan` wrote their inserted text with hard-coded `\n` line breaks, so applying them to a CRLF file left it with mixed line endings (bare LF inside CRLF), and `method-scaffold-plan` hard-coded four-space indentation (wrong in a tab-indented file). The inserted declaration and `use` import now follow the destination file's line ending, and the scaffolded method its indentation unit (tab or space width, including the docblock and body prefix); copied or moved text from a file with another line ending is converted. Found by running the plans end to end on CRLF and tab-indented projects.
