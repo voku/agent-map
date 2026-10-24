@@ -208,6 +208,7 @@ PHP);
             '--root=' . $this->root,
             '--paths=src',
             '--backend=phpstan',
+            '--phpstan-config=phpstan.neon',
             '--out=' . $map,
         ]);
         self::assertSame(0, $build['exit'], $build['output']);
@@ -218,6 +219,7 @@ PHP);
             'refresh',
             '--root=' . $this->root,
             '--backend=phpstan',
+            '--phpstan-config=phpstan.neon',
             '--index=' . $map,
             '--out=' . $map,
         ]);

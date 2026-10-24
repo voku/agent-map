@@ -413,12 +413,9 @@ final readonly class AgentMapBuilder
             return $candidate;
         }
 
-        foreach (['phpstan.neon', 'phpstan.neon.dist'] as $name) {
-            if (is_file($root . '/' . $name)) {
-                return $root . '/' . $name;
-            }
-        }
-
+        // PHPStan configuration is executable project input: it can load
+        // bootstrap files and extensions. Do not execute repository config
+        // during an ordinary map build unless the caller selected it.
         return null;
     }
 
