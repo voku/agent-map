@@ -122,6 +122,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/safe" \
@@ -130,7 +138,7 @@ jobs:
             --out="$DOGFOOD_ROOT/safe/map.json"
 
           before="$(sha256sum "$DOGFOOD_ROOT/safe/src/Legacy/UserService.php" | cut -d' ' -f1)"
-          php bin/agent-map class-move-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/safe" class-move-plan \
             'Dogfood\Legacy\UserService' \
             'Dogfood\Service\UserService' \
             --index="$DOGFOOD_ROOT/safe/map.json" \
@@ -157,12 +165,12 @@ jobs:
             and (.moves[0].destination_must_be_absent == true)
           ' "$DOGFOOD_ROOT/safe/plan.json" >/dev/null
 
-          php bin/agent-map class-move-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/safe" class-move-plan \
             'Dogfood\Legacy\UserService' \
             'Dogfood\Service\UserService' \
             --index="$DOGFOOD_ROOT/safe/map.json" \
             --format=text > "$DOGFOOD_ROOT/safe/plan.txt"
-          php bin/agent-map class-move-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/safe" class-move-plan \
             'Dogfood\Legacy\UserService' \
             'Dogfood\Service\UserService' \
             --index="$DOGFOOD_ROOT/safe/map.json" \
@@ -212,6 +220,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/occupied" \
@@ -221,7 +237,7 @@ jobs:
 
           before="$(sha256sum "$DOGFOOD_ROOT/occupied/src/Legacy/UserService.php" | cut -d' ' -f1)"
           set +e
-          php bin/agent-map class-move-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/occupied" class-move-plan \
             'Dogfood\Legacy\UserService' \
             'Dogfood\Service\UserService' \
             --index="$DOGFOOD_ROOT/occupied/map.json" \

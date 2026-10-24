@@ -200,6 +200,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/class-safe" \
@@ -208,7 +216,7 @@ jobs:
             --phpstan-memory-limit=512M
 
           before="$(sha256sum "$DOGFOOD_ROOT/class-safe/src/Obsolete.php" | cut -d' ' -f1)"
-          php bin/agent-map class-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/class-safe" class-removal-plan \
             'Dogfood\Legacy\Obsolete' \
             --index="$DOGFOOD_ROOT/class-safe/map.json" \
             --format=json > "$DOGFOOD_ROOT/class-safe/plan.json"
@@ -228,11 +236,11 @@ jobs:
             and (.deletions[0].source_sha256 | startswith("sha256:"))
           ' "$DOGFOOD_ROOT/class-safe/plan.json" >/dev/null
 
-          php bin/agent-map class-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/class-safe" class-removal-plan \
             'Dogfood\Legacy\Obsolete' \
             --index="$DOGFOOD_ROOT/class-safe/map.json" \
             --format=text > "$DOGFOOD_ROOT/class-safe/plan.txt"
-          php bin/agent-map class-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/class-safe" class-removal-plan \
             'Dogfood\Legacy\Obsolete' \
             --index="$DOGFOOD_ROOT/class-safe/map.json" \
             --format=toon > "$DOGFOOD_ROOT/class-safe/plan.toon"
@@ -244,6 +252,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/class-used" \
@@ -252,7 +268,7 @@ jobs:
             --phpstan-memory-limit=512M
 
           set +e
-          php bin/agent-map class-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/class-used" class-removal-plan \
             'Dogfood\Legacy\Obsolete' \
             --index="$DOGFOOD_ROOT/class-used/map.json" \
             --format=json > "$DOGFOOD_ROOT/class-used/plan.json"
@@ -271,6 +287,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/method-safe" \
@@ -279,7 +303,7 @@ jobs:
             --phpstan-memory-limit=512M
 
           before="$(sha256sum "$DOGFOOD_ROOT/method-safe/src/Worker.php" | cut -d' ' -f1)"
-          php bin/agent-map method-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/method-safe" method-removal-plan \
             'Dogfood\Worker::obsolete' \
             --index "$DOGFOOD_ROOT/method-safe/map.json" \
             --format json > "$DOGFOOD_ROOT/method-safe/plan.json"
@@ -302,11 +326,11 @@ jobs:
             and (.edits[0].expected | contains("Proven unused"))
           ' "$DOGFOOD_ROOT/method-safe/plan.json" >/dev/null
 
-          php bin/agent-map method-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/method-safe" method-removal-plan \
             'Dogfood\Worker::obsolete' \
             --index="$DOGFOOD_ROOT/method-safe/map.json" \
             --format=text > "$DOGFOOD_ROOT/method-safe/plan.txt"
-          php bin/agent-map method-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/method-safe" method-removal-plan \
             'Dogfood\Worker::obsolete' \
             --index="$DOGFOOD_ROOT/method-safe/map.json" \
             --format=toon > "$DOGFOOD_ROOT/method-safe/plan.toon"
@@ -318,6 +342,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/method-used" \
@@ -326,7 +358,7 @@ jobs:
             --phpstan-memory-limit=512M
 
           set +e
-          php bin/agent-map method-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/method-used" method-removal-plan \
             'Dogfood\Worker::used' \
             --index="$DOGFOOD_ROOT/method-used/map.json" \
             --format=json > "$DOGFOOD_ROOT/method-used/plan.json"
@@ -344,6 +376,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/property-safe" \
@@ -352,7 +392,7 @@ jobs:
             --phpstan-memory-limit=512M
 
           before="$(sha256sum "$DOGFOOD_ROOT/property-safe/src/Worker.php" | cut -d' ' -f1)"
-          php bin/agent-map property-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/property-safe" property-removal-plan \
             'Dogfood\Worker::$obsolete' \
             --index "$DOGFOOD_ROOT/property-safe/map.json" \
             --format json > "$DOGFOOD_ROOT/property-safe/plan.json"
@@ -374,11 +414,11 @@ jobs:
             and (.edits[0].expected | contains("private string $obsolete"))
           ' "$DOGFOOD_ROOT/property-safe/plan.json" >/dev/null
 
-          php bin/agent-map property-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/property-safe" property-removal-plan \
             'Dogfood\Worker::$obsolete' \
             --index="$DOGFOOD_ROOT/property-safe/map.json" \
             --format=text > "$DOGFOOD_ROOT/property-safe/plan.txt"
-          php bin/agent-map property-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/property-safe" property-removal-plan \
             'Dogfood\Worker::$obsolete' \
             --index="$DOGFOOD_ROOT/property-safe/map.json" \
             --format=toon > "$DOGFOOD_ROOT/property-safe/plan.toon"
@@ -390,6 +430,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/property-used" \
@@ -398,7 +446,7 @@ jobs:
             --phpstan-memory-limit=512M
 
           set +e
-          php bin/agent-map property-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/property-used" property-removal-plan \
             'Dogfood\Worker::$used' \
             --index="$DOGFOOD_ROOT/property-used/map.json" \
             --format=json > "$DOGFOOD_ROOT/property-used/plan.json"
@@ -417,6 +465,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/class-constant-safe" \
@@ -425,7 +481,7 @@ jobs:
             --phpstan-memory-limit=512M
 
           before="$(sha256sum "$DOGFOOD_ROOT/class-constant-safe/src/Worker.php" | cut -d' ' -f1)"
-          php bin/agent-map class-constant-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/class-constant-safe" class-constant-removal-plan \
             'Dogfood\Worker::OBSOLETE' \
             --index="$DOGFOOD_ROOT/class-constant-safe/map.json" \
             --format=json > "$DOGFOOD_ROOT/class-constant-safe/plan.json"
@@ -447,11 +503,11 @@ jobs:
             and (.edits[0].expected | contains("private const OBSOLETE"))
           ' "$DOGFOOD_ROOT/class-constant-safe/plan.json" >/dev/null
 
-          php bin/agent-map class-constant-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/class-constant-safe" class-constant-removal-plan \
             'Dogfood\Worker::OBSOLETE' \
             --index="$DOGFOOD_ROOT/class-constant-safe/map.json" \
             --format=text > "$DOGFOOD_ROOT/class-constant-safe/plan.txt"
-          php bin/agent-map class-constant-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/class-constant-safe" class-constant-removal-plan \
             'Dogfood\Worker::OBSOLETE' \
             --index="$DOGFOOD_ROOT/class-constant-safe/map.json" \
             --format=toon > "$DOGFOOD_ROOT/class-constant-safe/plan.toon"
@@ -463,6 +519,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/class-constant-used" \
@@ -471,7 +535,7 @@ jobs:
             --phpstan-memory-limit=512M
 
           set +e
-          php bin/agent-map class-constant-removal-plan \
+          run_agent_map_for_root "$DOGFOOD_ROOT/class-constant-used" class-constant-removal-plan \
             'Dogfood\Worker::USED' \
             --index="$DOGFOOD_ROOT/class-constant-used/map.json" \
             --format=json > "$DOGFOOD_ROOT/class-constant-used/plan.json"

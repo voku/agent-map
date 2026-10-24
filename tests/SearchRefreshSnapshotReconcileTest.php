@@ -64,6 +64,7 @@ final class SearchRefreshSnapshotReconcileTest extends TestCase
     /** @param list<string> $arguments */
     private function cli(array $arguments): int
     {
+        $arguments[] = '--root=' . $this->root;
         ob_start();
         try {
             return (new AgentMapApplication())->run(['agent-map', ...$arguments]);

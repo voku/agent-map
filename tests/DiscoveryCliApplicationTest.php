@@ -12,6 +12,7 @@ use voku\AgentMap\Cli\DiscoveryCliApplication;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexWriter;
+use voku\AgentMap\MapArtifactPaths;
 
 final class DiscoveryCliApplicationTest extends TestCase
 {
@@ -72,7 +73,7 @@ final class DiscoveryCliApplicationTest extends TestCase
     public function testRegionJsonContainsStructuredArchitecturePath(): void
     {
         ob_start();
-        $exit = (new DiscoveryCliApplication())->run([
+        $exit = (new DiscoveryCliApplication(artifacts: MapArtifactPaths::forProject($this->root)))->run([
             'agent-map',
             'discover',
             '--index=' . $this->indexPath,

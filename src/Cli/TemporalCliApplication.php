@@ -165,14 +165,16 @@ TEXT;
     /** @param list<string> $tokens */
     private function observe(array $tokens): int
     {
-        $parsed = $this->parse($tokens, ['index', 'database', 'format']);
+        $parsed = $this->parse($tokens, ['index', 'root', 'database', 'format']);
         if ($parsed['help']) {
             echo $this->help();
             return 0;
         }
         $this->rejectArguments($parsed['arguments'], 'history observe');
 
-        $map = $this->loadFresh($parsed['options']['index'] ?? $this->indexPath());
+        $expectedRoot = $parsed['options']['root']
+            ?? ($this->artifacts ?? MapArtifactPaths::forProject(getcwd() ?: '.'))->projectRoot();
+        $map = $this->loadFresh($parsed['options']['index'] ?? $this->indexPath(), $expectedRoot);
         $revision = (new GitRevisionInspector())->current($map->root);
         $observations = (new EntityObservationBuilder())->build($map);
         $database = $this->absolute($map->root, $parsed['options']['database'] ?? $this->historyDatabase($map->root));
@@ -231,7 +233,8 @@ TEXT;
     /** @param array<string, string> $options */
     private function coChangeReport(array $options): CoChangeReport
     {
-        $map = $this->loadFresh($options['index'] ?? $this->indexPath());
+        $expectedRoot = $options['root'] ?? (getcwd() ?: '.');
+        $map = $this->loadFresh($options['index'] ?? $this->indexPath(), $expectedRoot);
         $history = (new GitChangeHistory())->commits(
             $options['root'] ?? $map->root,
             $this->positiveInt('commits', $options['commits'] ?? '100'),
@@ -256,9 +259,9 @@ TEXT;
         return ($this->artifacts ?? MapArtifactPaths::forProject($root))->historyDatabase();
     }
 
-    private function loadFresh(string $path): AgentMapIndex
+    private function loadFresh(string $path, string $expectedRoot): AgentMapIndex
     {
-        $map = (new IndexReader())->read($path);
+        $map = (new IndexReader())->readForRoot($path, $expectedRoot);
         $stale = $map->staleEntries();
         if ($stale !== []) {
             throw new RuntimeException(sprintf(
@@ -301,7 +304,7 @@ Temporal evolution:
   agent-map history coupling [--index=MAP] [--root=PATH] [--commits=100] [--min-cochanges=2]
                              [--max-files-per-commit=100] [--top=20] [--format=...]
   agent-map history claims [same coupling options] [--min-ratio=0.6] [--format=...]
-  agent-map history observe [--index=MAP] [--database=PATH] [--format=...]
+  agent-map history observe [--index=MAP] [--root=PATH] [--database=PATH] [--format=...]
   agent-map history show ENTITY [--database=PATH] [--format=...]
 
 `history diff` compares canonical map structure and ignores line-number-only relation movement.

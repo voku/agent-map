@@ -105,6 +105,7 @@ final class ScopeCommandTest extends TestCase
      */
     private function runApp(array $argv): array
     {
+        $argv[] = '--root=' . $this->scopeRoot;
         ob_start();
         $exit = (new AgentMapApplication())->run($argv);
         $output = (string) ob_get_clean();

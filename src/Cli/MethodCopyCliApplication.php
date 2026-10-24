@@ -82,7 +82,7 @@ TEXT;
             $index = $explicitIndex === null
                 ? $this->artifacts->indexJson()
                 : $this->artifacts->projectPath($explicitIndex);
-            $map = (new IndexReader())->read($index);
+            $map = (new IndexReader())->readForRoot($index, $this->artifacts->projectRoot());
 
             $newName = $parsed['options']['name'] ?? null;
             $visibility = $parsed['options']['visibility'] ?? null;

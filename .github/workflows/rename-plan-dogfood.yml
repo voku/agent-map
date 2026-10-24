@@ -224,13 +224,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          run_agent_map_for_root() {
+            local selected_root="$1"
+            shift
+            (
+              cd "$selected_root"
+              php "$GITHUB_WORKSPACE/bin/agent-map" "$@"
+            )
+          }
 
           php bin/agent-map build \
             --root="$DOGFOOD_ROOT/method" \
             --paths=src \
             --out="$DOGFOOD_ROOT/method/map.json" \
             --phpstan-memory-limit=512M
-          php bin/agent-map "$METHOD_RENAME_COMMAND" \
+          run_agent_map_for_root "$DOGFOOD_ROOT/method" "$METHOD_RENAME_COMMAND" \
             'Dogfood\Greeter::oldName' renamedMethod \
             --index="$DOGFOOD_ROOT/method/map.json" \
             --format=json > "$DOGFOOD_ROOT/method/plan.json"
@@ -240,7 +248,7 @@ jobs:
             --paths=src \
             --out="$DOGFOOD_ROOT/function/map.json" \
             --phpstan-memory-limit=512M
-          php bin/agent-map "$FUNCTION_RENAME_COMMAND" \
+          run_agent_map_for_root "$DOGFOOD_ROOT/function" "$FUNCTION_RENAME_COMMAND" \
             'Dogfood\old_function' renamed_function \
             --index="$DOGFOOD_ROOT/function/map.json" \
             --format=json > "$DOGFOOD_ROOT/function/plan.json"
@@ -250,7 +258,7 @@ jobs:
             --paths=src \
             --backend=structural \
             --out="$DOGFOOD_ROOT/class/map.json"
-          php bin/agent-map "$CLASS_RENAME_COMMAND" \
+          run_agent_map_for_root "$DOGFOOD_ROOT/class" "$CLASS_RENAME_COMMAND" \
             'Dogfood\OldService' NewService \
             --index="$DOGFOOD_ROOT/class/map.json" \
             --format=json > "$DOGFOOD_ROOT/class/plan.json"
@@ -260,7 +268,7 @@ jobs:
             --paths=src \
             --out="$DOGFOOD_ROOT/parameter/map.json" \
             --phpstan-memory-limit=512M
-          php bin/agent-map "$PARAMETER_RENAME_COMMAND" \
+          run_agent_map_for_root "$DOGFOOD_ROOT/parameter" "$PARAMETER_RENAME_COMMAND" \
             'Dogfood\ParameterService::format' '$value' '$text' \
             --index="$DOGFOOD_ROOT/parameter/map.json" \
             --format=json > "$DOGFOOD_ROOT/parameter/plan.json"
@@ -270,7 +278,7 @@ jobs:
             --paths=src \
             --out="$DOGFOOD_ROOT/property/map.json" \
             --phpstan-memory-limit=512M
-          php bin/agent-map "$PROPERTY_RENAME_COMMAND" \
+          run_agent_map_for_root "$DOGFOOD_ROOT/property" "$PROPERTY_RENAME_COMMAND" \
             'Dogfood\PropertyBox::$name' label \
             --index="$DOGFOOD_ROOT/property/map.json" \
             --format=json > "$DOGFOOD_ROOT/property/plan.json"
@@ -280,7 +288,7 @@ jobs:
             --paths=src \
             --backend=structural \
             --out="$DOGFOOD_ROOT/class-constant/map.json"
-          php bin/agent-map "$CLASS_CONSTANT_RENAME_COMMAND" \
+          run_agent_map_for_root "$DOGFOOD_ROOT/class-constant" "$CLASS_CONSTANT_RENAME_COMMAND" \
             'Dogfood\Settings::OLD_NAME' NEW_NAME \
             --index="$DOGFOOD_ROOT/class-constant/map.json" \
             --format=json > "$DOGFOOD_ROOT/class-constant/plan.json"

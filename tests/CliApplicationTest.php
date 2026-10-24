@@ -289,15 +289,15 @@ final class CliApplicationTest extends TestCase
     {
         $projectRoot = sys_get_temp_dir() . '/agent-map-cli-project-' . bin2hex(random_bytes(6));
         $sourceRoot = sys_get_temp_dir() . '/agent-map-cli-source-' . bin2hex(random_bytes(6));
-        mkdir($projectRoot . '/src', 0o775, true);
-        mkdir($sourceRoot, 0o775, true);
-        $source = $projectRoot . '/src/Foo.php';
+        mkdir($projectRoot . '/var/agent-state/map', 0o775, true);
+        mkdir($sourceRoot . '/src', 0o775, true);
+        $source = $sourceRoot . '/src/Foo.php';
         file_put_contents($source, "<?php\n");
         $hash = hash_file('sha256', $source);
         self::assertIsString($hash);
 
         (new IndexWriter())->write(
-            new AgentMapIndex('2.0', $projectRoot, 'test', [new FileEntry('src/Foo.php', 'sha256:' . $hash, '', [])]),
+            new AgentMapIndex('2.0', $sourceRoot, 'test', [new FileEntry('src/Foo.php', 'sha256:' . $hash, '', [])]),
             MapArtifactPaths::forProject($projectRoot, 'var/agent-state/map')->indexJson(),
         );
 

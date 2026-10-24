@@ -82,7 +82,7 @@ TEXT;
             $index = $explicitIndex === null
                 ? $this->artifacts->indexJson()
                 : $this->artifacts->projectPath($explicitIndex);
-            $map = (new IndexReader())->read($index);
+            $map = (new IndexReader())->readForRoot($index, $this->artifacts->projectRoot());
             $plan = (new MethodMovePlanner())->plan($map, $parsed['arguments'][0], $parsed['arguments'][1]);
             echo $this->render($plan, $format);
 

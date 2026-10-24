@@ -29,8 +29,8 @@ final readonly class MapReadinessInspector
             try {
                 $reader = new IndexReader();
                 $map = $loadRelations
-                    ? $reader->read($mapPath)
-                    : $reader->readSections($mapPath, ['files']);
+                    ? $reader->readForRoot($mapPath, $artifacts->projectRoot())
+                    : $reader->readForRoot($mapPath, $artifacts->projectRoot(), sections: ['files']);
                 /** @var list<array{path: string, reason: 'missing'|'hash'}> $staleEntries */
                 $staleEntries = $map->staleEntries();
                 $mapSnapshot = $map->fingerprint?->sourceDigest;

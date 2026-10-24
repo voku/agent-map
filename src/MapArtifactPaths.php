@@ -129,6 +129,11 @@ final readonly class MapArtifactPaths
         return $this->path('phpstan-cache');
     }
 
+    public function projectRoot(): string
+    {
+        return $this->projectRoot;
+    }
+
     /** Resolve one user-supplied artifact path using the public --root contract. */
     public function projectPath(string $path): string
     {

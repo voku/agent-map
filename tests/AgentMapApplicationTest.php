@@ -149,6 +149,7 @@ PHP);
      */
     private function runApp(array $argv): array
     {
+        $argv[] = '--root=' . $this->root;
         ob_start();
         $exit = (new AgentMapApplication())->run($argv);
         $output = (string) ob_get_clean();

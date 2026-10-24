@@ -44,9 +44,15 @@ final readonly class LocalSemanticFrameBuilder
     public function build(AgentMapIndex $index, ScopeTarget $target): LocalSemanticFrame
     {
         $targetId = $target->sourceId ?? ('file:' . $target->file . '#L' . $target->lineStart);
-        $absolute = rtrim($index->root, '/') . '/' . $target->file;
-        if (!is_file($absolute)) {
+        $realRoot = realpath($index->root);
+        $absolute = is_string($realRoot) ? realpath($realRoot . '/' . $target->file) : false;
+        if (!is_string($realRoot) || !is_string($absolute) || !is_file($absolute)) {
             return new LocalSemanticFrame($targetId, $target->file, $target->lineStart, $target->lineEnd, []);
+        }
+        $normalizedRoot = rtrim(str_replace('\\', '/', $realRoot), '/');
+        $rootPrefix = $normalizedRoot === '' ? '/' : $normalizedRoot . '/';
+        if (!str_starts_with(str_replace('\\', '/', $absolute), $rootPrefix)) {
+            throw new RuntimeException('Source path escapes repository root: ' . $target->file);
         }
 
         $code = file_get_contents($absolute);

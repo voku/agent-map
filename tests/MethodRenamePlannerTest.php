@@ -12,6 +12,7 @@ use voku\AgentMap\Extract\SimplePhpParserSymbolExtractor;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexWriter;
+use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Rename\MethodRenamePlan;
 use voku\AgentMap\Rename\MethodRenamePlanner;
@@ -183,7 +184,7 @@ final class MethodRenamePlannerTest extends TestCase
         $before = (string) file_get_contents($this->root . '/src/Caller.php');
 
         ob_start();
-        $status = (new RenameCliApplication())->run([
+        $status = (new RenameCliApplication(MapArtifactPaths::forProject($this->root)))->run([
             'agent-map',
             'rename-plan',
             'Demo\\Contract::oldName',

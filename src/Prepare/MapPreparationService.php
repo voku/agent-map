@@ -39,7 +39,7 @@ final readonly class MapPreparationService
         }
 
         try {
-            $index = $this->reader->read($request->indexPath);
+            $index = $this->reader->readForRoot($request->indexPath, $request->root);
         } catch (Throwable $exception) {
             throw new MapPreparationException(
                 reason: 'invalid_index',
@@ -73,7 +73,7 @@ final readonly class MapPreparationService
      */
     public function refresh(MapPreparationRequest $request): MapPreparationResult
     {
-        $index = $this->reader->read($request->indexPath);
+        $index = $this->reader->readForRoot($request->indexPath, $request->root);
 
         $structural = $request->backend === 'structural';
         $phpStanRefresh = !$structural

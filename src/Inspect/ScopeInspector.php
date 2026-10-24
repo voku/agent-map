@@ -41,7 +41,21 @@ final readonly class ScopeInspector
 
     public function inspect(AgentMapIndex $index, ScopeTarget $target, int $limit = 10): ScopeInspection
     {
-        $absolute = rtrim($index->root, '/') . '/' . $target->file;
+        $realRoot = realpath($index->root);
+        $absolute = is_string($realRoot) ? realpath($realRoot . '/' . $target->file) : false;
+        if (!is_string($realRoot)) {
+            throw new RuntimeException('Unable to resolve repository root: ' . $index->root);
+        }
+        if (!is_string($absolute) || !is_file($absolute)) {
+            throw new RuntimeException('Unable to read source file: ' . $index->root . '/' . $target->file);
+        }
+
+        $normalizedRoot = rtrim(str_replace('\\', '/', $realRoot), '/');
+        $rootPrefix = $normalizedRoot === '' ? '/' : $normalizedRoot . '/';
+        $normalizedFile = str_replace('\\', '/', $absolute);
+        if (!str_starts_with($normalizedFile, $rootPrefix)) {
+            throw new RuntimeException('Source path escapes repository root: ' . $target->file);
+        }
         $code = file_get_contents($absolute);
         if (!is_string($code)) {
             throw new RuntimeException('Unable to read source file: ' . $absolute);
