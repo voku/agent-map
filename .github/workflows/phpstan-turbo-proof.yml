@@ -74,15 +74,20 @@ jobs:
             local mode="$1"
             local phase="$2"
             local dest="$proof/$mode/$phase"
-            mkdir -p "$dest"
+            local working="$proof/$mode/current"
+            mkdir -p "$dest" "$working"
+            # Both phases MUST use the same output directory: agent-map places
+            # the PHPStan/structural result caches alongside that output.
             /usr/bin/time -f '%e %U %S %M' -o "$dest/metrics.txt" \
               php bin/agent-map build \
                 --root="$GITHUB_WORKSPACE" \
                 --paths=src \
-                --out="$dest/php-symbols.json" \
+                --out="$working/php-symbols.json" \
                 --phpstan-memory-limit=512M >"$dest/build.log" 2>&1
-            test -s "$dest/php-symbols.json"
-            test -s "$dest/php-relations.json"
+            test -s "$working/php-symbols.json"
+            test -s "$working/php-relations.json"
+            cp "$working/php-symbols.json" "$dest/php-symbols.json"
+            cp "$working/php-relations.json" "$dest/php-relations.json"
             php -r '
               $map = json_decode((string) file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
               if (($map["backend"] ?? null) !== "simple-php-code-parser+phpstan" || count($map["files"] ?? []) === 0) {
@@ -92,18 +97,23 @@ jobs:
             ' "$dest/php-symbols.json"
           }
 
-          # Each mode starts from identical source and cold structural/PHPStan caches.
-          rm -rf .agent-map/phpstan-cache .agent-map/structural-cache.json
+          # Fresh independent mode-specific output/cache directories;
+          # the second build of each mode reuses the same cache.
           diagnose on
           build on cold
           build on warm
 
           mv "$bundled" "$backup"
-          rm -rf .agent-map/phpstan-cache .agent-map/structural-cache.json
           diagnose off
           build off cold
           build off warm
           restore
+
+          # Validate each mode's own cold/warm output before comparing modes.
+          for mode in on off; do
+            cmp "$proof/$mode/cold/php-symbols.json" "$proof/$mode/warm/php-symbols.json"
+            cmp "$proof/$mode/cold/php-relations.json" "$proof/$mode/warm/php-relations.json"
+          done
 
           # The no-Turbo PHAR prints four informational notes which agent-map
           # conservatively records as diagnostics. Require precisely those four,
@@ -157,7 +167,7 @@ jobs:
             echo '- PHPStan entry point: Composer-installed `phpstan.phar`, identical to production code.'
             echo '- Control: bundled Turbo present; `diagnose` confirms analyse-process restart will load it.'
             echo '- Baseline: bundled Turbo binaries temporarily absent and confirmed not loaded.'
-            echo '- Cache: independently cleared for both modes; same source, config, dependencies and PHPStan version.'
+            echo '- Cache: independent per mode, reused for actual warm builds; same source, config, dependencies and PHPStan version.'
             echo '- Semantic parity: complete relations byte-for-byte; canonical JSON equal after removing precisely four verified Turbo informational diagnostics.'
             echo
             echo '| Mode | Phase | Wall (s) | User CPU (s) | System CPU (s) | Max RSS (KiB) |'
@@ -169,12 +179,11 @@ jobs:
               done
             done
             echo
-            echo 'These are runner-specific end-to-end map-build timings, not isolated PHPStan timings.'
+            echo 'These are runner-specific end-to-end map-build timings, not isolated PHPStan timings. Warm builds reuse the mode's identical output path and cache.'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: phpstan-turbo-agent-map-proof
-          path: /tmp/agent-map-turbo-proof
-          if-no-files-found: warn
+          path: |\n            /tmp/agent-map-turbo-proof\n            !/tmp/agent-map-turbo-proof/**/phpstan-cache/**\n          if-no-files-found: warn
