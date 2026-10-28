@@ -39,6 +39,15 @@ final readonly class PhpFileFinder
                 continue;
             }
 
+            // Explicit scopes can themselves resolve to an ignored subtree,
+            // or lexically start inside one while pointing elsewhere via symlink.
+            // Reject either side before traversing a potentially enormous tree.
+            $requestedScope = $this->normalizeRelativeScope($path);
+            $resolvedScope = ltrim(substr($absolutePath, strlen($root)), '/');
+            if ($this->isExcluded($requestedScope, $resolvedScope, self::DEFAULT_EXCLUDES)) {
+                continue;
+            }
+
             if (is_file($absolutePath)) {
                 $this->addPhpFile($files, $root, $absolutePath, $patterns);
                 continue;
@@ -110,6 +119,27 @@ final readonly class PhpFileFinder
 
         return $name === 'cache'
             && basename(str_replace('\\', '/', $directory->getPath())) === 'var';
+    }
+
+    private function normalizeRelativeScope(string $path): string
+    {
+        $segments = [];
+        foreach (explode('/', trim($this->normalizePath($path), '/')) as $part) {
+            if ($part === '' || $part === '.') {
+                continue;
+            }
+            if ($part === '..') {
+                if ($segments !== [] && $segments[array_key_last($segments)] !== '..') {
+                    array_pop($segments);
+                } else {
+                    $segments[] = $part;
+                }
+                continue;
+            }
+            $segments[] = $part;
+        }
+
+        return implode('/', $segments);
     }
 
     private function resolvePathWithinRoot(string $root, string $path): ?string
