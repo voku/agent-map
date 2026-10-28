@@ -1,0 +1,45 @@
+name: agent-map performance hypotheses
+
+on:
+  push:
+    branches:
+      - experiment/perf-hypotheses-*
+    paths:
+      - .github/workflows/perf-hypotheses.yml
+      - tools/perf-hypotheses.php
+  pull_request:
+    paths:
+      - .github/workflows/perf-hypotheses.yml
+      - tools/perf-hypotheses.php
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  investigate:
+    name: Directory pruning, freshness and real build stages
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+      - run: composer install --prefer-dist --no-interaction
+      - name: Validate experimental probe syntax
+        run: php -l tools/perf-hypotheses.php
+      - name: Measure with strict parity / no-op invariants
+        run: php tools/perf-hypotheses.php
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: perf-hypotheses-php-${{ matrix.php }}
+          path: ${{ runner.temp }}/agent-map-perf-*/report.json
+          if-no-files-found: warn
