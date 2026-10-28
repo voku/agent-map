@@ -141,6 +141,45 @@ final class PhpFileFinderTest extends TestCase
         );
     }
 
+    public function testExplicitScopeResolvingToExcludedVendorIsNotTraversed(): void
+    {
+        $alias = $this->root . '/src/alias-to-vendor';
+        if (!function_exists('symlink') || !symlink($this->root . '/vendor/package', $alias)) {
+            self::markTestSkipped('Directory symlinks unavailable.');
+        }
+
+        self::assertSame([], (new PhpFileFinder())->find($this->root, ['src/alias-to-vendor']));
+    }
+
+    public function testExplicitLexicalVendorScopeCannotEscapeThroughSymlink(): void
+    {
+        $link = $this->root . '/vendor/package/BackLink.php';
+        if (!function_exists('symlink') || !symlink($this->root . '/src/Keep.php', $link)) {
+            self::markTestSkipped('File symlinks unavailable.');
+        }
+
+        self::assertSame([], (new PhpFileFinder())->find($this->root, ['vendor/package/BackLink.php']));
+    }
+
+    public function testNestedDefaultExclusionDoesNotTraverseSymlinksBackToIncludedFiles(): void
+    {
+        mkdir($this->root . '/src/packages/vendor', 0o775, true);
+        $link = $this->root . '/src/packages/vendor/BackLink.php';
+        if (!function_exists('symlink') || !symlink($this->root . '/src/Keep.php', $link)) {
+            self::markTestSkipped('File symlinks unavailable.');
+        }
+
+        self::assertSame([], (new PhpFileFinder())->find($this->root, ['src/packages']));
+    }
+
+    public function testDotDotLexicalScopeDoesNotAccidentallyExcludeIncludedSources(): void
+    {
+        self::assertSame(
+            ['src/GeneratedProxy.php', 'src/Keep.php'],
+            (new PhpFileFinder())->find($this->root, ['vendor/../src']),
+        );
+    }
+
     private function removeDirectory(string $path): void
     {
         if (!is_dir($path)) {
