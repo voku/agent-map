@@ -179,7 +179,7 @@ jobs:
               done
             done
             echo
-            echo 'These are runner-specific end-to-end map-build timings, not isolated PHPStan timings. Warm builds reuse the mode's identical output path and cache.'
+            echo 'These are runner-specific end-to-end map-build timings, not isolated PHPStan timings. Warm builds reuse the same per-mode output path and cache.'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v7
