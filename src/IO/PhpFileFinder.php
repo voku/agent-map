@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace voku\AgentMap\IO;
 
 use InvalidArgumentException;
+use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use SplFileInfo;
 
 final readonly class PhpFileFinder
 {
@@ -46,8 +48,15 @@ final readonly class PhpFileFinder
                 continue;
             }
 
+            // Default exclusions are prefix-closed: any PHP file inside one of
+            // these directories is excluded. Do not descend into the subtree.
+            // Arbitrary caller regexes are NOT safe to prune: a pattern may
+            // match a directory but intentionally not match its children.
             $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($absolutePath, RecursiveDirectoryIterator::SKIP_DOTS)
+                new RecursiveCallbackFilterIterator(
+                    new RecursiveDirectoryIterator($absolutePath, RecursiveDirectoryIterator::SKIP_DOTS),
+                    static fn (SplFileInfo $entry): bool => !$entry->isDir() || !self::isDefaultExcludedDirectory($entry),
+                ),
             );
 
             foreach ($iterator as $item) {
@@ -90,6 +99,17 @@ final readonly class PhpFileFinder
         }
 
         $files[$relative] = $relative;
+    }
+
+    private static function isDefaultExcludedDirectory(SplFileInfo $directory): bool
+    {
+        $name = $directory->getFilename();
+        if ($name === 'vendor' || $name === '.git' || $name === 'node_modules') {
+            return true;
+        }
+
+        return $name === 'cache'
+            && basename(str_replace('\\', '/', $directory->getPath())) === 'var';
     }
 
     private function resolvePathWithinRoot(string $root, string $path): ?string
