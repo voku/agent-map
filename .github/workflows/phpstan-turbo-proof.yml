@@ -52,13 +52,19 @@ jobs:
             local mode="$1"
             php "$package/phpstan.phar" diagnose 2>&1 | tee "$proof/diagnose-$mode.txt"
             if [[ "$mode" == on ]]; then
-              grep -Eq '^Turbo extension: +loaded' "$proof/diagnose-$mode.txt" || {
-                echo 'Turbo did not load in the control run.' >&2
+              # PHPStan does not load Turbo into the diagnose process itself.
+              # It reports what the subsequent analyse-process restart will load.
+              grep -Fq 'Turbo extension: not loaded here, loaded by the restart an analyse run performs' "$proof/diagnose-$mode.txt" || {
+                echo 'Turbo is not scheduled for loading in the analysis subprocess.' >&2
+                exit 1
+              }
+              grep -Eq '^Turbo worker binary: +.*/phpstan_turbo-[0-9.]+\\.so' "$proof/diagnose-$mode.txt" || {
+                echo 'No bundled Turbo binary selected for the analysis runtime.' >&2
                 exit 1
               }
             else
-              grep -Eq '^Turbo extension: +not loaded' "$proof/diagnose-$mode.txt" || {
-                echo 'Turbo unexpectedly remained loaded after removing its bundled binaries.' >&2
+              grep -Eq '^Turbo worker binary: +none found' "$proof/diagnose-$mode.txt" || {
+                echo 'Turbo unexpectedly remained available after removing its bundled binaries.' >&2
                 exit 1
               }
             fi
