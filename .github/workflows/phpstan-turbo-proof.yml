@@ -105,10 +105,49 @@ jobs:
           build off warm
           restore
 
-          # Compare canonical index AND split relations, including type and call-edge evidence.
-          # Equal output is required; faster execution alone is not proof of correctness.
+          # The no-Turbo PHAR prints four informational notes which agent-map
+          # conservatively records as diagnostics. Require precisely those four,
+          # then compare every semantic field and the complete split relations.
           for phase in cold warm; do
-            cmp "$proof/on/$phase/php-symbols.json" "$proof/off/$phase/php-symbols.json"
+            php -r '
+              $on = json_decode((string) file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+              $off = json_decode((string) file_get_contents($argv[2]), true, 512, JSON_THROW_ON_ERROR);
+              if (!is_array($on) || !is_array($off) || !is_array($off["diagnostics"] ?? null)) {
+                  throw new RuntimeException("Invalid canonical map payload.");
+              }
+              $notices = [
+                  "! [NOTE] PHPStan runs without PHPStan Turbo.",
+                  "!        Install PHPStan with Composer: composer require --dev phpstan/phpstan",
+                  "!        With PHPStan Turbo, analysis is up to 60% faster.",
+              ];
+              $seen = [];
+              $remaining = [];
+              foreach ($off["diagnostics"] as $finding) {
+                  $message = $finding["message"] ?? null;
+                  if (!is_string($message)) {
+                      throw new RuntimeException("Unexpected non-string diagnostic.");
+                  }
+                  $known = in_array($message, $notices, true)
+                      || (str_starts_with($message, "!        Or install PHPStan Turbo with PIE: pie install phpstan/turbo:")
+                          && preg_match("~:[0-9]+[.][0-9]+[.][0-9]+$~", $message) === 1);
+                  if (!$known) {
+                      $remaining[] = $finding;
+                      continue;
+                  }
+                  if (($finding["kind"] ?? null) !== "phpstan_finding" || ($finding["file"] ?? null) !== null || ($finding["line"] ?? null) !== null) {
+                      throw new RuntimeException("Turbo notice has unexpected provenance.");
+                  }
+                  $seen[] = $message;
+              }
+              if (count($seen) !== 4 || count(array_unique($seen)) !== 4) {
+                  throw new RuntimeException("The disabled-Turbo warning contract changed.");
+              }
+              $off["diagnostics"] = $remaining;
+              if ($on !== $off) {
+                  throw new RuntimeException("Semantic map content differs beyond known Turbo information notes.");
+              }
+              echo "Canonical semantic parity passed after filtering four known Turbo notices.\n";
+            ' "$proof/on/$phase/php-symbols.json" "$proof/off/$phase/php-symbols.json"
             cmp "$proof/on/$phase/php-relations.json" "$proof/off/$phase/php-relations.json"
           done
 
@@ -119,7 +158,7 @@ jobs:
             echo '- Control: bundled Turbo present; `diagnose` confirms analyse-process restart will load it.'
             echo '- Baseline: bundled Turbo binaries temporarily absent and confirmed not loaded.'
             echo '- Cache: independently cleared for both modes; same source, config, dependencies and PHPStan version.'
-            echo '- Semantic parity: exact canonical JSON and relations byte comparison passed for cold and warm builds.'
+            echo '- Semantic parity: complete relations byte-for-byte; canonical JSON equal after removing precisely four verified Turbo informational diagnostics.'
             echo
             echo '| Mode | Phase | Wall (s) | User CPU (s) | System CPU (s) | Max RSS (KiB) |'
             echo '| --- | --- | ---: | ---: | ---: | ---: |'
