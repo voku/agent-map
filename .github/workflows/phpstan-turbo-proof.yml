@@ -58,7 +58,7 @@ jobs:
                 echo 'Turbo is not scheduled for loading in the analysis subprocess.' >&2
                 exit 1
               }
-              grep -Eq '^Turbo worker binary: +.*/phpstan_turbo-[0-9.]+\\.so' "$proof/diagnose-$mode.txt" || {
+              grep -Eq '^Turbo worker binary: +.*/phpstan_turbo-[0-9.]+[.]so' "$proof/diagnose-$mode.txt" || {
                 echo 'No bundled Turbo binary selected for the analysis runtime.' >&2
                 exit 1
               }
@@ -116,7 +116,7 @@ jobs:
             echo '## agent-map PHPStan Turbo A/B evidence'
             echo
             echo '- PHPStan entry point: Composer-installed `phpstan.phar`, identical to production code.'
-            echo '- Control: bundled Turbo present and confirmed loaded by `diagnose`.'
+            echo '- Control: bundled Turbo present; `diagnose` confirms analyse-process restart will load it.'
             echo '- Baseline: bundled Turbo binaries temporarily absent and confirmed not loaded.'
             echo '- Cache: independently cleared for both modes; same source, config, dependencies and PHPStan version.'
             echo '- Semantic parity: exact canonical JSON and relations byte comparison passed for cold and warm builds.'
