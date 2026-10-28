@@ -84,6 +84,63 @@ final class PhpFileFinderTest extends TestCase
         self::assertSame([], $files);
     }
 
+    public function testNestedDefaultExclusionsArePrunedWithoutSkippingSimilarNames(): void
+    {
+        foreach (['vendor', '.git', 'node_modules', 'var/cache'] as $ignored) {
+            mkdir($this->root . '/src/packages/' . $ignored, 0o775, true);
+            file_put_contents($this->root . '/src/packages/' . $ignored . '/Skip.php', '<?php');
+        }
+        mkdir($this->root . '/src/packages/vendor-like', 0o775, true);
+        mkdir($this->root . '/src/packages/var/cache-like', 0o775, true);
+        file_put_contents($this->root . '/src/packages/vendor-like/Keep.php', '<?php');
+        file_put_contents($this->root . '/src/packages/var/cache-like/Keep.php', '<?php');
+
+        $files = (new PhpFileFinder())->find($this->root, ['.']);
+
+        self::assertSame([
+            'src/GeneratedProxy.php',
+            'src/Keep.php',
+            'src/packages/var/cache-like/Keep.php',
+            'src/packages/vendor-like/Keep.php',
+            'tests/KeepTest.php',
+        ], $files);
+    }
+
+    public function testCustomRegexMatchingOnlyADirectoryDoesNotPruneItsChildren(): void
+    {
+        mkdir($this->root . '/src/Area', 0o775, true);
+        file_put_contents($this->root . '/src/Area/Keep.php', '<?php');
+        file_put_contents($this->root . '/src/Area/Skip.php', '<?php');
+
+        $files = (new PhpFileFinder())->find(
+            $this->root,
+            ['src'],
+            ['~^src/Area$~', '~^src/Area/Skip[.]php$~'],
+        );
+
+        self::assertSame([
+            'src/Area/Keep.php',
+            'src/GeneratedProxy.php',
+            'src/Keep.php',
+        ], $files);
+    }
+
+    public function testExplicitDefaultExcludedScopeStillYieldsNothing(): void
+    {
+        self::assertSame(
+            [],
+            (new PhpFileFinder())->find($this->root, ['vendor', 'var/cache']),
+        );
+    }
+
+    public function testOverlappingPathsReturnEachFileOnlyOnce(): void
+    {
+        self::assertSame(
+            ['src/GeneratedProxy.php', 'src/Keep.php'],
+            (new PhpFileFinder())->find($this->root, ['src', 'src/Keep.php', 'src']),
+        );
+    }
+
     private function removeDirectory(string $path): void
     {
         if (!is_dir($path)) {
