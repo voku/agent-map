@@ -188,7 +188,7 @@ final class PhpFileFinderTest extends TestCase
 
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
         foreach ($iterator as $item) {
-            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+            ($item->isDir() && !$item->isLink()) ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
 
         rmdir($path);
