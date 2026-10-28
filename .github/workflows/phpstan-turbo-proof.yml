@@ -186,4 +186,7 @@ jobs:
         if: always()
         with:
           name: phpstan-turbo-agent-map-proof
-          path: |\n            /tmp/agent-map-turbo-proof\n            !/tmp/agent-map-turbo-proof/**/phpstan-cache/**\n          if-no-files-found: warn
+          path: |
+            /tmp/agent-map-turbo-proof
+            !/tmp/agent-map-turbo-proof/**/phpstan-cache/**
+          if-no-files-found: warn
