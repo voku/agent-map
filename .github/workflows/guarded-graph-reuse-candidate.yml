@@ -73,7 +73,7 @@ jobs:
           php -r '
             $db = new PDO("sqlite:" . getenv("RUNNER_TEMP") . "/agent-map-reuse.graph.sqlite");
             $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            $db->exec("CREATE TRIGGER forbid_graph_replace BEFORE DELETE ON graph_relations BEGIN SELECT RAISE(ABORT, \'graph-replacement-not-allowed\'); END");
+            $db->exec("CREATE TRIGGER forbid_graph_replace BEFORE DELETE ON graph_relations BEGIN SELECT RAISE(ABORT, " . $db->quote("graph-replacement-not-allowed") . "); END");
           '
           started="$(date +%s%N)"
           php bin/agent-map refresh --root="$PWD" --paths=src --out="$index" --backend=phpstan
