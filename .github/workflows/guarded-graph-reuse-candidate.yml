@@ -1,0 +1,95 @@
+name: Guarded graph reuse candidate proof
+
+on:
+  pull_request:
+    paths:
+      - src/Index/MapGraphIndex.php
+      - src/Index/IndexWriter.php
+      - tests/GraphProvenanceReuseTest.php
+      - .github/workflows/guarded-graph-reuse-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  consumer:
+    name: agent-map reuse with candidate graph (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: agent-map
+      - uses: actions/checkout@v4
+        with:
+          repository: voku/agent-graph
+          # Owner PR #45 exact implementation head, not a released 0.3.1 API.
+          ref: 6d526735134b9ced3023a20b1d7b2c5af04c96a7
+          path: agent-graph
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+          extensions: pdo_sqlite
+      - name: Install unmerged graph dependency without modifying main
+        working-directory: agent-map
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer config repositories.candidate-graph '{"type":"path","url":"../agent-graph","options":{"symlink":true,"versions":{"voku/agent-graph":"0.3.1"}}}'
+          composer update --no-interaction --prefer-dist
+          php -r '
+            require "vendor/autoload.php";
+            $graph = new ReflectionClass(\voku\AgentGraph\Sqlite\GraphStore::class);
+            $path = $graph->getFileName();
+            if (!is_string($path) || !str_contains(realpath($path) ?: "", "/agent-graph/src/")
+                || !$graph->hasMethod("advanceProvenanceIfUnchanged")) {
+                throw new RuntimeException("Candidate owner API was not installed from exact checkout.");
+            }
+            echo "Using candidate graph: $path\n";
+          '
+      - name: PHPStan, PHPUnit and composer validation with candidate graph
+        working-directory: agent-map
+        run: composer ci
+      - name: Real PHPStan-backed changed-source refresh must not rewrite identical graph
+        working-directory: agent-map
+        shell: bash
+        run: |
+          set -euo pipefail
+          index="$RUNNER_TEMP/agent-map-reuse.json"
+          started="$(date +%s%N)"
+          php bin/agent-map build --root="$PWD" --paths=src --out="$index" --backend=phpstan
+          build_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
+          before="$(php -r 'require "vendor/autoload.php"; echo (new \voku\AgentMap\Index\MapGraphIndex())->verifyCurrent(getenv("RUNNER_TEMP")."/agent-map-reuse.json")->sourceRevision();')"
+          test -n "$before"
+          # A changed source comment changes the canonical source hash, but no graph edges.
+          printf '\n// CI comment-only graph-reuse fixture\n' >> src/Index/GraphIndexFingerprint.php
+          php -r '
+            $db = new PDO("sqlite:" . getenv("RUNNER_TEMP") . "/agent-map-reuse.graph.sqlite");
+            $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $db->exec("CREATE TRIGGER forbid_graph_replace BEFORE DELETE ON graph_relations BEGIN SELECT RAISE(ABORT, \'graph-replacement-not-allowed\'); END");
+          '
+          started="$(date +%s%N)"
+          php bin/agent-map refresh --root="$PWD" --paths=src --out="$index" --backend=phpstan
+          changed_refresh_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
+          after="$(php -r 'require "vendor/autoload.php"; echo (new \voku\AgentMap\Index\MapGraphIndex())->verifyCurrent(getenv("RUNNER_TEMP")."/agent-map-reuse.json")->sourceRevision();')"
+          test "$before" != "$after"
+          started="$(date +%s%N)"
+          php bin/agent-map refresh --root="$PWD" --paths=src --out="$index" --backend=phpstan
+          nochange_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
+          echo "PHP ${{ matrix.php }}: cold build=${build_ms}ms, changed source / unchanged relations=${changed_refresh_ms}ms, no-op refresh=${nochange_ms}ms"
+          echo "Graph remained verifiably current, revision advanced, and any DELETE from graph_relations would have failed."
+          printf '{"php":"%s","build_ms":%s,"changed_refresh_ms":%s,"nochange_refresh_ms":%s,"reused_without_relation_delete":true}\n' \
+            "${{ matrix.php }}" "$build_ms" "$changed_refresh_ms" "$nochange_ms" > "$RUNNER_TEMP/graph-reuse-evidence.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: graph-reuse-evidence-php-${{ matrix.php }}
+          path: ${{ runner.temp }}/graph-reuse-evidence.json
+          if-no-files-found: warn
