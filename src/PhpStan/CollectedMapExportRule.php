@@ -83,13 +83,7 @@ final readonly class CollectedMapExportRule implements Rule
             }
         }
 
-        usort($records, static function (array $left, array $right): int {
-            return ((string) $left['record_type']) <=> ((string) $right['record_type'])
-                ?: ((string) ($left['file'] ?? '')) <=> ((string) ($right['file'] ?? ''))
-                ?: ((int) ($left['line_start'] ?? 0)) <=> ((int) ($right['line_start'] ?? 0))
-                ?: ((string) ($left['name'] ?? $left['kind'] ?? '')) <=> ((string) ($right['name'] ?? $right['kind'] ?? ''))
-                ?: ((string) ($left['source_id'] ?? '')) <=> ((string) ($right['source_id'] ?? ''));
-        });
+        $records = CollectedRecordSorter::sort($records);
 
         $json = json_encode(['schema_version' => '1.0', 'records' => $records], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         if (!is_string($json) || file_put_contents($exportFile, $json . "\n") === false) {
