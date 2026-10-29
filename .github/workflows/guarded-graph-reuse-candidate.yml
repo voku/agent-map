@@ -39,7 +39,7 @@ jobs:
           composer install --no-interaction --prefer-dist
           php -r '
             require "vendor/autoload.php";
-            if (!method_exists(\\voku\\AgentGraph\\Sqlite\\GraphStore::class, "advanceProvenanceIfUnchanged")) {
+            if (!method_exists(\voku\AgentGraph\Sqlite\GraphStore::class, "advanceProvenanceIfUnchanged")) {
                 throw new RuntimeException("Released graph dependency is missing required provenance API.");
             }
             echo "Graph provenance API installed from Composer.\\n";
