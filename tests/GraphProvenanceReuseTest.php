@@ -134,7 +134,7 @@ final class GraphProvenanceReuseTest extends TestCase
 
     private function requireCandidateGraphApi(): void
     {
-        if (!method_exists(GraphStore::class, 'advanceProvenanceIfUnchanged')) {
+        if (!method_exists(GraphStore::class, 'advanceProvenanceIfUnchanged')) { // @phpstan-ignore function.alreadyNarrowedType (The owner API is installed only in candidate CI.)
             self::markTestSkipped('Guarded graph provenance needs unreleased agent-graph PR #45.');
         }
     }
