@@ -19,13 +19,63 @@ final readonly class MapGraphIndex
     ) {
     }
 
-    public function rebuild(AgentMapIndex $index, string $indexFile): void
+    /**
+     * Capture the previous canonical generation before the writer publishes new artifacts.
+     *
+     * An absent, stale, or unsupported graph is disposable and must be rebuilt.
+     * The full SQLite integrity scan is reserved for a successful reuse attempt.
+     *
+     * @return array{revision: string, fingerprint: string}|null
+     */
+    public function reusableProvenance(string $indexFile): ?array
+    {
+        if (!method_exists(GraphStore::class, 'advanceProvenanceIfUnchanged')
+            || !is_file($indexFile)
+            || !is_file(MapArtifactPaths::graphDatabaseFor($indexFile))) {
+            return null;
+        }
+
+        try {
+            $previous = $this->openCurrent($indexFile);
+            $revision = $previous->sourceRevision();
+            $fingerprint = $previous->sourceFingerprint();
+            $canonicalFingerprint = $this->fingerprint->forIndexFile($indexFile);
+            if ($revision === null || $fingerprint === null || !hash_equals($fingerprint, $canonicalFingerprint)) {
+                return null;
+            }
+
+            return ['revision' => $revision, 'fingerprint' => $fingerprint];
+        } catch (RuntimeException) {
+            // A derived graph is rebuildable; never trust a failed preflight for reuse.
+            return null;
+        }
+    }
+
+    /**
+     * @param array{revision: string, fingerprint: string}|null $previousProvenance
+     */
+    public function rebuild(AgentMapIndex $index, string $indexFile, ?array $previousProvenance = null): void
     {
         $mapDigest = $index->mapDigest();
         $this->publishGeneration($indexFile, $mapDigest);
 
         $fingerprint = $this->fingerprint->forIndexFile($indexFile);
         $store = new GraphStore(MapArtifactPaths::graphDatabaseFor($indexFile));
+        if ($previousProvenance !== null
+            && method_exists($store, 'advanceProvenanceIfUnchanged')
+            && $store->advanceProvenanceIfUnchanged(
+                $this->projectionFactory->relations($index),
+                $previousProvenance['revision'],
+                $previousProvenance['fingerprint'],
+                $mapDigest,
+                $fingerprint,
+            )
+            && $store->integrityFailures() === []) {
+            // Reuse must preserve the explicit full-integrity verification boundary:
+            // a successfully updated digest alone does not check physical SQLite rows.
+            return;
+        }
+
         $store->replace(
             $this->projectionFactory->relations($index),
             sourceRevision: $mapDigest,
