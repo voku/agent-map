@@ -53,6 +53,8 @@ function median(array $values): float
 $cases = [
     ['records' => 5000, 'shape' => 'compact'],
     ['records' => 50000, 'shape' => 'compact'],
+    ['records' => 65536, 'shape' => 'compact'],
+    ['records' => 65537, 'shape' => 'compact'],
     ['records' => 180000, 'shape' => 'compact'],
     ['records' => 50000, 'shape' => 'wide'],
     ['records' => 180000, 'shape' => 'wide'],
