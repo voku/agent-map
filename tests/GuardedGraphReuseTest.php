@@ -86,7 +86,7 @@ final class GuardedGraphReuseTest extends TestCase
             self::assertStringContainsString('stale', $exception->getMessage());
         }
 
-        self::assertSame(1, $pdo->exec('DROP TRIGGER block_relation_delete'));
+        self::assertSame(0, $pdo->exec('DROP TRIGGER block_relation_delete'));
         $writer->write($changed, $path);
         $store = (new MapGraphIndex())->verifyCurrent($path);
         self::assertSame(3, $store->relationCount());
@@ -109,7 +109,7 @@ final class GuardedGraphReuseTest extends TestCase
             self::assertStringContainsString('replacement blocked', $exception->getMessage());
         }
 
-        self::assertSame(1, $pdo->exec('DROP TRIGGER block_relation_delete'));
+        self::assertSame(0, $pdo->exec('DROP TRIGGER block_relation_delete'));
         $writer->write($this->map('phpstan'), $path);
         self::assertSame(2, (new MapGraphIndex())->verifyCurrent($path)->relationCount());
     }
