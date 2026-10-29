@@ -1,4 +1,4 @@
-name: Guarded graph reuse candidate proof
+name: Released graph reuse proof
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   consumer:
-    name: agent-map reuse with candidate graph (PHP ${{ matrix.php }})
+    name: agent-map reuse with released graph (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -25,36 +25,26 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: agent-map
-      - uses: actions/checkout@v4
-        with:
-          repository: voku/agent-graph
-          # Owner PR #45 exact implementation head, not a released 0.3.1 API.
-          ref: 60b86d9d080b081792058ec54a320a9871abe897
-          path: agent-graph
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: composer:v2
           extensions: pdo_sqlite
-      - name: Install unmerged graph dependency without modifying main
+      - name: Install released graph dependency
         working-directory: agent-map
         shell: bash
         run: |
           set -euo pipefail
-          composer config repositories.candidate-graph '{"type":"path","url":"../agent-graph","options":{"symlink":true,"versions":{"voku/agent-graph":"0.3.1"}}}'
-          composer update --no-interaction --prefer-dist
+          composer install --no-interaction --prefer-dist
           php -r '
             require "vendor/autoload.php";
-            $graph = new ReflectionClass(\voku\AgentGraph\Sqlite\GraphStore::class);
-            $path = $graph->getFileName();
-            if (!is_string($path) || !str_contains(realpath($path) ?: "", "/agent-graph/src/")
-                || !$graph->hasMethod("advanceProvenanceIfUnchanged")) {
-                throw new RuntimeException("Candidate owner API was not installed from exact checkout.");
+            if (!method_exists(\\voku\\AgentGraph\\Sqlite\\GraphStore::class, "advanceProvenanceIfUnchanged")) {
+                throw new RuntimeException("Released graph dependency is missing required provenance API.");
             }
-            echo "Using candidate graph: $path\n";
+            echo "Graph provenance API installed from Composer.\\n";
           '
-      - name: PHPStan, PHPUnit and composer validation with candidate graph
+      - name: PHPStan, PHPUnit and composer validation with released graph
         working-directory: agent-map
         run: composer ci
       - name: Real PHPStan-backed changed-source refresh must not rewrite identical graph
@@ -76,7 +66,7 @@ jobs:
             $db->exec("CREATE TRIGGER forbid_graph_replace BEFORE DELETE ON graph_relations BEGIN SELECT RAISE(ABORT, " . $db->quote("graph-replacement-not-allowed") . "); END");
           '
           started="$(date +%s%N)"
-          php bin/agent-map refresh --root="$PWD" --paths=src --out="$index" --backend=phpstan
+          php bin/agent-map refresh --root="$PWD" --paths=src --index="$index" --out="$index" --backend=phpstan
           changed_refresh_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
           after="$(php -r 'require "vendor/autoload.php"; echo (new \voku\AgentMap\Index\MapGraphIndex())->verifyCurrent(getenv("RUNNER_TEMP")."/agent-map-reuse.json")->sourceRevision();')"
           test "$before" != "$after"
@@ -91,12 +81,12 @@ jobs:
           '
           printf '\n// CI second comment-only graph-reuse fixture\n' >> src/Index/GraphIndexFingerprint.php
           started="$(date +%s%N)"
-          php bin/agent-map refresh --root="$PWD" --paths=src --out="$index" --backend=phpstan
+          php bin/agent-map refresh --root="$PWD" --paths=src --index="$index" --out="$index" --backend=phpstan
           forced_replace_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
           control="$(php -r 'require "vendor/autoload.php"; echo (new \voku\AgentMap\Index\MapGraphIndex())->verifyCurrent(getenv("RUNNER_TEMP")."/agent-map-reuse.json")->sourceRevision();')"
           test "$control" != "$after"
           started="$(date +%s%N)"
-          php bin/agent-map refresh --root="$PWD" --paths=src --out="$index" --backend=phpstan
+          php bin/agent-map refresh --root="$PWD" --paths=src --index="$index" --out="$index" --backend=phpstan
           nochange_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
           echo "PHP ${{ matrix.php }}: cold build=${build_ms}ms, guarded changed refresh=${changed_refresh_ms}ms, forced full replace=${forced_replace_ms}ms, no-op refresh=${nochange_ms}ms"
           echo "Paired single-sample wall times are exploratory; PHPStan cache state and runner noise can differ between edits."
