@@ -1,4 +1,4 @@
-name: Guarded graph end-to-end integration
+name: Released graph end-to-end build benchmark
 
 on:
   push:
@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   consumer:
-    name: Complete owner/consumer parity (PHP ${{ matrix.php }})
+    name: Release graph build parity (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -29,60 +29,76 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: agent-map
-      - uses: actions/checkout@v7
-        with:
-          repository: voku/agent-graph
-          ref: 60b86d9d080b081792058ec54a320a9871abe897
-          path: agent-graph
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: composer:v2
-      - name: Resolve exact owner implementation through ephemeral path repository
+      - name: Install released owner graph through Composer
         working-directory: agent-map
         shell: bash
         run: |
           set -euo pipefail
-          composer config repositories.guarded-graph '{"type":"path","url":"../agent-graph","options":{"symlink":true,"versions":{"voku/agent-graph":"0.3.2"}}}'
-          composer update --no-interaction --prefer-dist
+          composer install --no-interaction --prefer-dist
           php -r '
             require "vendor/autoload.php";
-            $file = (new ReflectionClass(\voku\AgentGraph\Sqlite\GraphStore::class))->getFileName();
-            if (!is_string($file) || !str_contains(realpath($file) ?: "", "/agent-graph/src/")) {
-              throw new RuntimeException("Not using the exact unmerged graph owner checkout.");
-            }
             if (!method_exists(\voku\AgentGraph\Sqlite\GraphStore::class, "advanceProvenanceIfUnchanged")) {
-              throw new RuntimeException("Guarded provenance API missing.");
+              throw new RuntimeException("Published agent-graph dependency lacks guarded provenance API.");
             }
-            echo "Owner: $file\n";
           '
       - name: Downstream full consumer tests and PHPStan
         working-directory: agent-map
         run: composer ci
-      - name: PHPStan-backed changed-source refresh with graph row replacement blocked
+      - name: Paired released-package PHPStan build proof
         working-directory: agent-map
         shell: bash
         run: |
           set -euo pipefail
           index="$RUNNER_TEMP/guarded-map.json"
           php bin/agent-map build --root="$PWD" --paths=src --out="$index"
-          php -r '
-            $file = getenv("RUNNER_TEMP") . "/guarded-map.graph.sqlite";
-            $db = new PDO("sqlite:" . $file, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-            $db->exec("CREATE TRIGGER block_graph_replace BEFORE DELETE ON graph_relations BEGIN SELECT RAISE(ABORT, \"unexpected full graph replacement\"); END");
-          '
-          printf '\n// Changed non-relation source evidence for guarded SQLite E2E.\n' >> src/Index/MapGraphIndex.php
-          start="$(date +%s%N)"
-          php bin/agent-map build --root="$PWD" --paths=src --out="$index"
-          finish="$(date +%s%N)"
-          echo "changed-source semantic build elapsed_ms: $(((finish-start)/1000000))" >> "$GITHUB_STEP_SUMMARY"
-          php -r '
-            require "vendor/autoload.php";
-            $path = getenv("RUNNER_TEMP") . "/guarded-map.json";
-            $graph = (new \voku\AgentMap\Index\MapGraphIndex())->verifyCurrent($path);
-            if ($graph->relationCount() < 100) {
-              throw new RuntimeException("Unexpectedly small graph after changed-source refresh.");
-            }
-            echo "Exact canonical fingerprint and SQLite integrity verified: " . $graph->relationCount() . " relations.\n";
-          '
+          echo "| PHP | Sample | Guarded changed build (ms) | Forced replacement build (ms) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---:|---:|---:|" >> "$GITHUB_STEP_SUMMARY"
+          for sample in 1 2 3; do
+            # A graph-replacement attempt is an explicit failure in the reuse half.
+            php -r '
+              $db = new PDO("sqlite:" . getenv("RUNNER_TEMP") . "/guarded-map.graph.sqlite", null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+              $db->exec("CREATE TRIGGER block_graph_replace BEFORE DELETE ON graph_relations BEGIN SELECT RAISE(ABORT, " . $db->quote("unexpected full graph replacement") . "); END");
+            '
+            printf '\n// CI reusable non-relation edit %s\n' "$sample" >> src/Index/GraphIndexFingerprint.php
+            started="$(date +%s%N)"
+            php bin/agent-map build --root="$PWD" --paths=src --out="$index"
+            guarded_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
+            php -r '
+              require "vendor/autoload.php";
+              $index = getenv("RUNNER_TEMP") . "/guarded-map.json";
+              $store = (new \voku\AgentMap\Index\MapGraphIndex())->verifyCurrent($index);
+              if ($store->relationCount() < 100) { throw new RuntimeException("Graph relation count unexpectedly small."); }
+            '
+            # Enforce the existing full-replace path without changing product code.
+            php -r '
+              $db = new PDO("sqlite:" . getenv("RUNNER_TEMP") . "/guarded-map.graph.sqlite", null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+              $db->exec("DROP TRIGGER block_graph_replace");
+              if ($db->exec("DELETE FROM graph_meta WHERE key = " . $db->quote("projection_digest_v1")) !== 1) {
+                throw new RuntimeException("Missing graph projection digest control.");
+              }
+            '
+            printf '\n// CI forced-rebuild non-relation edit %s\n' "$sample" >> src/Index/GraphIndexFingerprint.php
+            started="$(date +%s%N)"
+            php bin/agent-map build --root="$PWD" --paths=src --out="$index"
+            replacement_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
+            php -r '
+              require "vendor/autoload.php";
+              $index = getenv("RUNNER_TEMP") . "/guarded-map.json";
+              $store = (new \voku\AgentMap\Index\MapGraphIndex())->verifyCurrent($index);
+              if ($store->relationCount() < 100) { throw new RuntimeException("Graph relation count unexpectedly small."); }
+            '
+            echo "| ${{ matrix.php }} | $sample | $guarded_ms | $replacement_ms |" >> "$GITHUB_STEP_SUMMARY"
+            printf '%s,%s,%s,%s\n' "${{ matrix.php }}" "$sample" "$guarded_ms" "$replacement_ms" >> "$RUNNER_TEMP/graph-build-paired.csv"
+          done
+          echo "Measurements are same-runner alternating single-file-comment edits, not full statistical speedup claims."
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: graph-build-paired-php-${{ matrix.php }}
+          path: ${{ runner.temp }}/graph-build-paired.csv
+          if-no-files-found: warn
