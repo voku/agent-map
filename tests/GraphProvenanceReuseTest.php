@@ -7,7 +7,6 @@ namespace voku\AgentMap\Tests;
 use PDO;
 use PDOException;
 use PHPUnit\Framework\TestCase;
-use voku\AgentGraph\Sqlite\GraphStore;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\IndexWriter;
@@ -41,7 +40,6 @@ final class GraphProvenanceReuseTest extends TestCase
 
     public function testChangedCanonicalEvidenceReusesIdenticalGraphWithoutDeletingRows(): void
     {
-        $this->requireCandidateGraphApi();
         $before = $this->map('sha256:before');
         $after = $this->map('sha256:after');
         self::assertNotSame($before->mapDigest(), $after->mapDigest());
@@ -60,7 +58,6 @@ final class GraphProvenanceReuseTest extends TestCase
 
     public function testChangedRelationForcesFullReplacement(): void
     {
-        $this->requireCandidateGraphApi();
         $writer = new IndexWriter();
         $writer->write($this->map('sha256:before'), $this->indexFile);
 
@@ -78,7 +75,6 @@ final class GraphProvenanceReuseTest extends TestCase
 
     public function testTamperedPreviousCanonicalFingerprintForcesReplacement(): void
     {
-        $this->requireCandidateGraphApi();
         $writer = new IndexWriter();
         $writer->write($this->map('sha256:before'), $this->indexFile);
         self::assertIsInt(file_put_contents(MapArtifactPaths::relationsFileFor($this->indexFile), "\n", FILE_APPEND));
@@ -95,7 +91,6 @@ final class GraphProvenanceReuseTest extends TestCase
 
     public function testOldStoreWithoutProjectionDigestForcesReplacement(): void
     {
-        $this->requireCandidateGraphApi();
         $writer = new IndexWriter();
         $writer->write($this->map('sha256:before'), $this->indexFile);
         $pdo = new PDO('sqlite:' . MapArtifactPaths::graphDatabaseFor($this->indexFile));
@@ -114,7 +109,6 @@ final class GraphProvenanceReuseTest extends TestCase
 
     public function testStaleGenerationMarkerForcesReplacement(): void
     {
-        $this->requireCandidateGraphApi();
         $writer = new IndexWriter();
         $writer->write($this->map('sha256:before'), $this->indexFile);
         self::assertIsInt(file_put_contents(
@@ -129,13 +123,6 @@ final class GraphProvenanceReuseTest extends TestCase
             $writer->write($this->map('sha256:after'), $this->indexFile);
         } finally {
             unset($pdo);
-        }
-    }
-
-    private function requireCandidateGraphApi(): void
-    {
-        if (!method_exists(GraphStore::class, 'advanceProvenanceIfUnchanged')) { // @phpstan-ignore function.alreadyNarrowedType (The owner API is installed only in candidate CI.)
-            self::markTestSkipped('Guarded graph provenance needs unreleased agent-graph PR #45.');
         }
     }
 
