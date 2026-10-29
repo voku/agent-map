@@ -29,7 +29,7 @@ jobs:
         with:
           repository: voku/agent-graph
           # Owner PR #45 exact implementation head, not a released 0.3.1 API.
-          ref: 6d526735134b9ced3023a20b1d7b2c5af04c96a7
+          ref: 0fe1913ccdc0d7569ae31e45507a7e8211353184
           path: agent-graph
       - uses: shivammathur/setup-php@v2
         with:
