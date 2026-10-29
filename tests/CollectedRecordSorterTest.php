@@ -22,7 +22,6 @@ final class CollectedRecordSorterTest extends TestCase
         self::assertSame($equal, CollectedRecordSorter::sort($equal));
     }
 
-
     public function testMemoryBoundedSortKeepsExactOrderAboveThreshold(): void
     {
         // 65,536 uses the native fast path; 65,537 must use the low-memory path.
