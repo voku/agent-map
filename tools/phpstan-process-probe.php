@@ -328,22 +328,44 @@ try {
             $beforeRelations = hash_file('sha256', MapArtifactPaths::relationsFileFor($out));
             $profiled = execute($root, $out, true, $profileDir);
             $profiledGraph = verifiedGraph($out);
-            if ($profiledGraph !== $changedGraph
-                || hash_file('sha256', $out) !== $beforeMap
-                || hash_file('sha256', MapArtifactPaths::relationsFileFor($out)) !== $beforeRelations) {
-                $baseline = json_decode((string) $baselineJson, true);
-                $after = json_decode((string) file_get_contents($out), true);
-                if (is_array($baseline) && is_array($after)) {
-                    foreach (array_unique([...array_keys($baseline), ...array_keys($after)]) as $key) {
-                        if (($baseline[$key] ?? null) !== ($after[$key] ?? null)) {
-                            fwrite(STDERR, 'Profiler mismatch field ' . $key . ': ' . substr(json_encode(['original' => $baseline[$key] ?? null, 'profiled' => $after[$key] ?? null], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE), 0, 4000) . "\\n");
-                        }
+            // Enabling Xdebug makes PHPStan print exactly three additional
+            // advisory notes. They become diagnostics and therefore legitimately
+            // change the canonical JSON byte fingerprint. Only those exact
+            // messages may be removed before comparing all semantic fields.
+            $baseline = json_decode((string) $baselineJson, true, 512, JSON_THROW_ON_ERROR);
+            $after = json_decode((string) file_get_contents($out), true, 512, JSON_THROW_ON_ERROR);
+            if (!is_array($baseline) || !is_array($after) || !is_array($after['diagnostics'] ?? null)) {
+                throw new RuntimeException('Xdebug experiment canonical JSON is invalid.');
+            }
+            $knownNotices = [
+                '! [NOTE] The Xdebug PHP extension is active, but "--xdebug" is not used. This',
+                '!        may slow down performance and the process will not halt at',
+                '!        breakpoints.',
+            ];
+            $kept = [];
+            $ignored = [];
+            foreach ($after['diagnostics'] as $diagnostic) {
+                $text = $diagnostic['message'] ?? null;
+                if (is_string($text) && in_array($text, $knownNotices, true)) {
+                    if (($diagnostic['kind'] ?? null) !== 'phpstan_finding'
+                        || ($diagnostic['file'] ?? null) !== null
+                        || ($diagnostic['line'] ?? null) !== null) {
+                        throw new RuntimeException('Xdebug note has surprising provenance.');
                     }
+                    $ignored[] = $text;
+                } else {
+                    $kept[] = $diagnostic;
                 }
-                fwrite(STDERR, 'Profiler byte parity: map=' . (hash_file('sha256', $out) === $beforeMap ? 'yes' : 'no')
-                    . ', relations=' . (hash_file('sha256', MapArtifactPaths::relationsFileFor($out)) === $beforeRelations ? 'yes' : 'no')
-                    . ', graph=' . ($profiledGraph === $changedGraph ? 'yes' : 'no') . "\\n");
-                throw new RuntimeException('Xdebug-enabled PHPStan changed canonical or graph evidence.');
+            }
+            if (count($ignored) !== 3 || count(array_unique($ignored)) !== 3) {
+                throw new RuntimeException('Unexpected Xdebug diagnostic shape: ' . json_encode($after['diagnostics']));
+            }
+            $after['diagnostics'] = $kept;
+            if ($baseline !== $after
+                || hash_file('sha256', MapArtifactPaths::relationsFileFor($out)) !== $beforeRelations
+                || $profiledGraph['revision'] !== $changedGraph['revision']
+                || $profiledGraph['count'] !== $changedGraph['count']) {
+                throw new RuntimeException('Xdebug changed real semantic evidence beyond its three verified notes.');
             }
         }
     }
