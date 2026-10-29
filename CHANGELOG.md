@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.22.5 - 2026-10-29
+
+### Changed
+
+- Speed up deterministic PHPStan collected-record export with native `array_multisort()` on precomputed typed sort keys, preserving the original five-key ordering and stable ties ([#180](https://github.com/voku/agent-map/pull/180)). On paired real changed-source PHPStan builds, median wall-time improved by 2.7% (PHP 8.4) and 3.4% (PHP 8.5); the result is workload-specific.
+
+### Tests
+
+- Add exact-order and byte-identical JSON regression coverage for mixed numeric-looking sort keys, missing fields and 200 equal-key ties. A separate research-only memory experiment ([#182](https://github.com/voku/agent-map/pull/182)) verified identical output at 5k/50k/100k records and found no meaningful increase in the maximum PHPStan child-process RSS on the tested real project. Large collector populations can still require more transient PHP memory.
+
 ## 0.22.4 - 2026-10-29
 
 ### Changed
