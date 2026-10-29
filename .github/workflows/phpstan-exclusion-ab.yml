@@ -46,9 +46,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cmp baseline/composer.lock candidate/composer.lock
+          cmp baseline/composer.json candidate/composer.json
+          composer update --working-dir=baseline --no-install --no-interaction --prefer-dist
+          cp baseline/composer.lock candidate/composer.lock
           composer install --working-dir=baseline --no-interaction --prefer-dist
           composer install --working-dir=candidate --no-interaction --prefer-dist
+          cmp baseline/composer.lock candidate/composer.lock
       - name: Validate PHP syntax and exclusion/incremental dependency tests
         shell: bash
         working-directory: candidate
