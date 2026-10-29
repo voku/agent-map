@@ -16,8 +16,8 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/vendor/autoload.php';
 
 use PDO;
-use RuntimeException;
 use voku\AgentMap\Index\MapGraphIndex;
+use voku\AgentMap\MapArtifactPaths;
 
 const SAMPLES = 3;
 
@@ -130,8 +130,8 @@ try {
         throw new RuntimeException('Baseline and candidate differ before measurement.');
     }
 
-    $fastDatabase = $work . '/fast/php-symbols.graph.sqlite';
-    $fullDatabase = $work . '/full/php-symbols.graph.sqlite';
+    $fastDatabase = MapArtifactPaths::graphDatabaseFor($paths['fast']);
+    $fullDatabase = MapArtifactPaths::graphDatabaseFor($paths['full']);
     $fastPdo = new PDO('sqlite:' . $fastDatabase, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $fullPdo = new PDO('sqlite:' . $fullDatabase, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 
