@@ -127,8 +127,12 @@ function parseCachegrind(string $path): array
             $line = trim($line);
             if (str_starts_with($line, 'events: ')) {
                 $events = preg_split('/\s+/', substr($line, 8)) ?: [];
-                $idx = array_search('Time', $events, true);
-                $eventsTime = is_int($idx) ? $idx : -1;
+                foreach ($events as $idx => $event) {
+                    if (str_starts_with($event, 'Time')) {
+                        $eventsTime = $idx;
+                        break;
+                    }
+                }
                 continue;
             }
             if (str_starts_with($line, 'summary:')) {
@@ -191,12 +195,23 @@ function parseCachegrind(string $path): array
         }
     }
     if ($eventsTime < 0 || $total === 0) {
-        throw new RuntimeException('Missing Cachegrind Time events or summary: ' . basename($path));
+        throw new RuntimeException('Missing Cachegrind Time events or summary: ' . basename($path)
+            . '; events=' . json_encode($events) . '; summary=' . $total);
+    }
+
+    // Xdebug 3.5 emits Time_(10ns), older releases may emit Time (µs).
+    // Normalize raw samples only after parsing all call and self costs.
+    $factor = str_contains((string) ($events[$eventsTime] ?? ''), '10ns') ? 0.01 : 1.0;
+    foreach ($self as $name => $value) {
+        $self[$name] = (int) round($value * $factor);
+    }
+    foreach ($edges as $name => $value) {
+        $edges[$name] = (int) round($value * $factor);
     }
 
     return [
         'file' => basename($path),
-        'summary_time_us' => $total,
+        'summary_time_us' => (int) round($total * $factor),
         'function_self_us' => $self,
         'call_inclusive_us' => $edges,
         'traces' => count($self),
