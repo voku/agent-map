@@ -29,7 +29,7 @@ jobs:
         with:
           repository: voku/agent-graph
           # Owner PR #45 exact implementation head, not a released 0.3.1 API.
-          ref: 0fe1913ccdc0d7569ae31e45507a7e8211353184
+          ref: 60b86d9d080b081792058ec54a320a9871abe897
           path: agent-graph
       - uses: shivammathur/setup-php@v2
         with:
@@ -80,13 +80,29 @@ jobs:
           changed_refresh_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
           after="$(php -r 'require "vendor/autoload.php"; echo (new \voku\AgentMap\Index\MapGraphIndex())->verifyCurrent(getenv("RUNNER_TEMP")."/agent-map-reuse.json")->sourceRevision();')"
           test "$before" != "$after"
+          # Matched control on the same runner: force the old whole-graph rebuild.
+          # The first sample includes an identical one-file comment-only source edit.
+          php -r '
+            $db = new PDO("sqlite:" . getenv("RUNNER_TEMP") . "/agent-map-reuse.graph.sqlite");
+            $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $db->exec("DROP TRIGGER forbid_graph_replace");
+            $deleted = $db->exec("DELETE FROM graph_meta WHERE key = " . $db->quote("projection_digest_v1"));
+            if ($deleted !== 1) { throw new RuntimeException("Missing stored graph digest for control."); }
+          '
+          printf '\n// CI second comment-only graph-reuse fixture\n' >> src/Index/GraphIndexFingerprint.php
+          started="$(date +%s%N)"
+          php bin/agent-map refresh --root="$PWD" --paths=src --out="$index" --backend=phpstan
+          forced_replace_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
+          control="$(php -r 'require "vendor/autoload.php"; echo (new \voku\AgentMap\Index\MapGraphIndex())->verifyCurrent(getenv("RUNNER_TEMP")."/agent-map-reuse.json")->sourceRevision();')"
+          test "$control" != "$after"
           started="$(date +%s%N)"
           php bin/agent-map refresh --root="$PWD" --paths=src --out="$index" --backend=phpstan
           nochange_ms="$(( ($(date +%s%N) - started) / 1000000 ))"
-          echo "PHP ${{ matrix.php }}: cold build=${build_ms}ms, changed source / unchanged relations=${changed_refresh_ms}ms, no-op refresh=${nochange_ms}ms"
+          echo "PHP ${{ matrix.php }}: cold build=${build_ms}ms, guarded changed refresh=${changed_refresh_ms}ms, forced full replace=${forced_replace_ms}ms, no-op refresh=${nochange_ms}ms"
+          echo "Paired single-sample wall times are exploratory; PHPStan cache state and runner noise can differ between edits."
           echo "Graph remained verifiably current, revision advanced, and any DELETE from graph_relations would have failed."
-          printf '{"php":"%s","build_ms":%s,"changed_refresh_ms":%s,"nochange_refresh_ms":%s,"reused_without_relation_delete":true}\n' \
-            "${{ matrix.php }}" "$build_ms" "$changed_refresh_ms" "$nochange_ms" > "$RUNNER_TEMP/graph-reuse-evidence.json"
+          printf '{"php":"%s","build_ms":%s,"guarded_changed_refresh_ms":%s,"forced_rebuild_changed_refresh_ms":%s,"nochange_refresh_ms":%s,"reused_without_relation_delete":true}\\n' \\
+            "${{ matrix.php }}" "$build_ms" "$changed_refresh_ms" "$forced_replace_ms" "$nochange_ms" > "$RUNNER_TEMP/graph-reuse-evidence.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
