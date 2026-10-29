@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - tools/record-sort-memory-ab.php
+      - tools/real-phpstan-child-memory-ab.php
       - .github/workflows/record-sort-memory-ab.yml
       - src/PhpStan/CollectedRecordSorter.php
   workflow_dispatch:
@@ -81,4 +82,77 @@ jobs:
         with:
           name: record-sort-memory-php-${{ matrix.php }}
           path: ${{ runner.temp }}/sort-proof/*.json
+          if-no-files-found: warn
+
+  real-phpstan:
+    name: Real PHPStan child RSS parity (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: candidate
+      - uses: actions/checkout@v7
+        with:
+          repository: voku/agent-map
+          ref: 0.22.4
+          path: baseline
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+        working-directory: candidate
+      - run: composer install --no-interaction --prefer-dist
+        working-directory: baseline
+      - name: Warm each independent PHPStan cache then measure changed-source real subprocess RSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="$GITHUB_WORKSPACE/candidate"
+          baseline="$GITHUB_WORKSPACE/baseline"
+          fixture="$RUNNER_TEMP/real-source"
+          mkdir -p "$fixture"
+          cp -a "$candidate/src" "$fixture/src"
+          mkdir -p "$RUNNER_TEMP/real-sorting/baseline" "$RUNNER_TEMP/real-sorting/candidate"
+          script="$candidate/tools/real-phpstan-child-memory-ab.php"
+          php -l "$script"
+          for mode in baseline candidate; do
+            php "$script" "$GITHUB_WORKSPACE/$mode" "$fixture" "$RUNNER_TEMP/real-sorting/$mode/map.json" \
+              > "$RUNNER_TEMP/real-sorting/$mode/warm.json"
+          done
+          echo '| Sample | Baseline child peak RSS MiB | Native child peak RSS MiB | Baseline ms | Native ms |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|---:|---:|---:|---:|---:|' >> "$GITHUB_STEP_SUMMARY"
+          for sample in 1 2 3; do
+            printf '\n// Memory-only changed-source fixture %s\n' "$sample" >> "$fixture/src/Index/GraphIndexFingerprint.php"
+            if (( sample % 2 == 0 )); then
+              order=(candidate baseline)
+            else
+              order=(baseline candidate)
+            fi
+            for mode in "${order[@]}"; do
+              php "$script" "$GITHUB_WORKSPACE/$mode" "$fixture" "$RUNNER_TEMP/real-sorting/$mode/map.json" \
+                > "$RUNNER_TEMP/real-sorting/$mode/sample-$sample.json"
+            done
+            left="$RUNNER_TEMP/real-sorting/baseline/sample-$sample.json"
+            right="$RUNNER_TEMP/real-sorting/candidate/sample-$sample.json"
+            for field in map_sha256 relations_sha256 graph_revision; do
+              test "$(jq -r ".$field" "$left")" = "$(jq -r ".$field" "$right")"
+            done
+            jq -rn --argjson sample "$sample" \
+              --slurpfile left "$left" --slurpfile right "$right" \
+              ' "| \($sample) | \((($left[0].max_child_rss_kib / 1024) * 10 | round) / 10) | \((($right[0].max_child_rss_kib / 1024) * 10 | round) / 10) | \($left[0].elapsed_ms) | \($right[0].elapsed_ms) |" ' \
+              >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo 'Linux getrusage(RUSAGE_CHILDREN) measures maximum direct-child RSS, not all concurrent workers summed; these are changed-source builds on one shared fixture.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: real-phpstan-sort-child-rss-php-${{ matrix.php }}
+          path: ${{ runner.temp }}/real-sorting/*/*.json
           if-no-files-found: warn
