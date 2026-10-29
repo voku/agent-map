@@ -40,6 +40,9 @@ final readonly class IndexWriter
             $payload = $index->toArray();
 
             $relationsFile = MapArtifactPaths::relationsFileFor($file);
+            // Snapshot old provenance while canonical bytes still match it.
+            // A stale/corrupt previous graph never qualifies for reuse.
+            $previousGraphIdentity = $this->graphIndex->captureCurrentIdentity($file);
             $relationsPayload = [
                 'schema_version' => $index->schemaVersion,
                 'root' => $index->root,
@@ -78,7 +81,7 @@ final readonly class IndexWriter
             // graph store records their byte fingerprint and readers reject an older generation.
             // Keep the writer lock through rebuild so the in-memory index, canonical artifacts and
             // graph provenance cannot be mixed with another writer's generation.
-            $this->graphIndex->rebuild($index, $file);
+            $this->graphIndex->rebuild($index, $file, $previousGraphIdentity);
             clearstatcache(true, $file);
             clearstatcache(true, $relationsFile);
             IndexReader::clearCache();
