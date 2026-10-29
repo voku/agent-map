@@ -14,13 +14,35 @@ namespace voku\AgentMap\PhpStan;
 final readonly class CollectedRecordSorter
 {
     /**
+     * Three-runtime CI measurements found ~16 MiB extra peak at 50k records,
+     * ~59 MiB at 180k with the native six-key arrays. Keep an approximate
+     * 20–25 MiB temporary-key budget and prefer lower peak RAM beyond it.
+     */
+    private const MAX_NATIVE_RECORDS = 65_536;
+
+    /**
      * @param list<array<string, mixed>> $records
      *
      * @return list<array<string, mixed>>
      */
     public static function sort(array $records): array
     {
-        if (count($records) < 2) {
+        $count = count($records);
+        if ($count < 2) {
+            return $records;
+        }
+
+        if ($count > self::MAX_NATIVE_RECORDS) {
+            // PHPStan also runs against very large, memory-constrained codebases.
+            // Avoid six O(n) key arrays if their peak memory becomes material.
+            usort($records, static function (array $left, array $right): int {
+                return ((string) $left['record_type']) <=> ((string) $right['record_type'])
+                    ?: ((string) ($left['file'] ?? '')) <=> ((string) ($right['file'] ?? ''))
+                    ?: ((int) ($left['line_start'] ?? 0)) <=> ((int) ($right['line_start'] ?? 0))
+                    ?: ((string) ($left['name'] ?? $left['kind'] ?? '')) <=> ((string) ($right['name'] ?? $right['kind'] ?? ''))
+                    ?: ((string) ($left['source_id'] ?? '')) <=> ((string) ($right['source_id'] ?? ''));
+            });
+
             return $records;
         }
 
