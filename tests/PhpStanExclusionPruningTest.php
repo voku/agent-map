@@ -84,7 +84,12 @@ final class PhpStanExclusionPruningTest extends TestCase
         $method = new ReflectionMethod(PhpStanSemanticAnalyzer::class, 'excludedPaths');
         $value = $method->invoke(new PhpStanSemanticAnalyzer(), $this->root, $scopes, $included);
         self::assertIsArray($value);
+        self::assertTrue(array_is_list($value));
+        foreach ($value as $excludedPath) {
+            self::assertIsString($excludedPath);
+        }
 
+        /** @var list<string> $value */
         return $value;
     }
 }
