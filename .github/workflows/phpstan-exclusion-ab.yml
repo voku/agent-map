@@ -1,0 +1,87 @@
+name: PHPStan excluded-subtree traversal A/B
+
+on:
+  push:
+    branches:
+      - experiment/phpstan-exclusion-pruning-*
+    paths:
+      - .github/workflows/phpstan-exclusion-ab.yml
+      - tools/phpstan-exclusion-ab.php
+      - src/Build/PhpStanSemanticAnalyzer.php
+      - tests/PhpStanExclusionPruningTest.php
+  pull_request:
+    paths:
+      - .github/workflows/phpstan-exclusion-ab.yml
+      - tools/phpstan-exclusion-ab.php
+      - src/Build/PhpStanSemanticAnalyzer.php
+      - tests/PhpStanExclusionPruningTest.php
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Same-source PHPStan exclusions and complete build (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: baseline
+          ref: 7be6a4a3275c06f0cc361a5a35b553d1f0d6b001
+      - uses: actions/checkout@v7
+        with:
+          path: candidate
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+      - name: Install exact same dependency lock in each checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmp baseline/composer.lock candidate/composer.lock
+          composer install --working-dir=baseline --no-interaction --prefer-dist
+          composer install --working-dir=candidate --no-interaction --prefer-dist
+      - name: Validate PHP syntax and exclusion/incremental dependency tests
+        shell: bash
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          php -l tools/phpstan-exclusion-ab.php
+          php -l src/Build/PhpStanSemanticAnalyzer.php
+          php -l tests/PhpStanExclusionPruningTest.php
+          vendor/bin/phpunit tests/PhpStanExclusionPruningTest.php tests/PhpStanRefreshDependencyTest.php
+      - name: Prepare one shared real-project source fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture="$RUNNER_TEMP/phpstan-exclusion-ab"
+          mkdir -p "$fixture"
+          cp -a candidate/src "$fixture/src"
+          test -f "$fixture/src/Index/MapGraphIndex.php"
+      - name: Compare exact PHPStan exclusions plus full CLI canonical and graph evidence
+        shell: bash
+        env:
+          MAP_AB_FIXTURE: ${{ runner.temp }}/phpstan-exclusion-ab
+          MAP_AB_BASELINE: ${{ github.workspace }}/baseline
+          MAP_AB_CANDIDATE: ${{ github.workspace }}/candidate
+        run: |
+          set -euo pipefail
+          php candidate/tools/phpstan-exclusion-ab.php
+      - name: Full candidate test suite and static analysis
+        shell: bash
+        working-directory: candidate
+        run: composer ci
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: phpstan-exclusion-ab-php-${{ matrix.php }}
+          path: ${{ runner.temp }}/phpstan-exclusion-ab/exclusion-ab-report.json
+          if-no-files-found: warn
