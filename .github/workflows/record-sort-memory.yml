@@ -8,11 +8,15 @@ on:
       - .github/workflows/record-sort-memory.yml
       - tools/record-sort-memory-worker.php
       - tools/record-sort-memory-benchmark.php
+      - src/PhpStan/CollectedRecordSorter.php
+      - tests/CollectedRecordSorterTest.php
   pull_request:
     paths:
       - .github/workflows/record-sort-memory.yml
       - tools/record-sort-memory-worker.php
       - tools/record-sort-memory-benchmark.php
+      - src/PhpStan/CollectedRecordSorter.php
+      - tests/CollectedRecordSorterTest.php
   workflow_dispatch:
 
 permissions:
