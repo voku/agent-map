@@ -19,13 +19,58 @@ final readonly class MapGraphIndex
     ) {
     }
 
-    public function rebuild(AgentMapIndex $index, string $indexFile): void
+    /**
+     * Read a verified previous provenance snapshot *before* canonical artifacts
+     * are replaced. The outer IndexWriter lock prevents competing map writers.
+     *
+     * @return array{revision: string, fingerprint: string}|null
+     */
+    public function captureCurrentIdentity(string $indexFile): ?array
+    {
+        if (!is_file($indexFile) || !is_file(MapArtifactPaths::relationsFileFor($indexFile))) {
+            return null;
+        }
+
+        try {
+            $previous = $this->openCurrent($indexFile);
+            $revision = $previous->sourceRevision();
+            $fingerprint = $previous->sourceFingerprint();
+            if ($revision === null || $fingerprint === null
+                || !hash_equals($fingerprint, $this->fingerprint->forIndexFile($indexFile))) {
+                return null;
+            }
+
+            return ['revision' => $revision, 'fingerprint' => $fingerprint];
+        } catch (RuntimeException) {
+            // A missing, outdated or malformed acceleration index can be rebuilt.
+            return null;
+        }
+    }
+
+    /**
+     * @param array{revision: string, fingerprint: string}|null $previousIdentity
+     */
+    public function rebuild(AgentMapIndex $index, string $indexFile, ?array $previousIdentity = null): void
     {
         $mapDigest = $index->mapDigest();
         $this->publishGeneration($indexFile, $mapDigest);
 
         $fingerprint = $this->fingerprint->forIndexFile($indexFile);
         $store = new GraphStore(MapArtifactPaths::graphDatabaseFor($indexFile));
+
+        // The owner verifies the complete ordered relation digest and the old
+        // provenance together under BEGIN IMMEDIATE. A changed graph, a stale
+        // store or a legacy store without a digest falls back to full replace.
+        if ($previousIdentity !== null && $store->advanceProvenanceIfUnchanged(
+            $this->projectionFactory->relations($index),
+            $previousIdentity['revision'],
+            $previousIdentity['fingerprint'],
+            $mapDigest,
+            $fingerprint,
+        )) {
+            return;
+        }
+
         $store->replace(
             $this->projectionFactory->relations($index),
             sourceRevision: $mapDigest,
