@@ -301,7 +301,7 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
             $iterator = new RecursiveIteratorIterator(
                 new RecursiveCallbackFilterIterator(
                     new RecursiveDirectoryIterator($absoluteDirectory, RecursiveDirectoryIterator::SKIP_DOTS),
-                    static function (\SplFileInfo $entry) use ($root, &$directories): bool {
+                    function (\SplFileInfo $entry) use ($root, &$directories): bool {
                         if (!$entry->isDir()) {
                             return true;
                         }
@@ -317,11 +317,18 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
                             return true;
                         }
 
-                        $directories[$relative] ??= [
-                            'absolute' => $root . '/' . $relative,
-                            'total' => 1,
-                            'included' => 0,
-                        ];
+                        // The old scan contributed each excluded PHP file to
+                        // every ancestor. Preserve those zero-included ancestors
+                        // so the later collapse can still exclude a whole parent
+                        // (e.g. src/var instead of only src/var/cache).
+                        foreach ([$relative, ...$this->directoryAncestors($relative)] as $ancestor) {
+                            $directories[$ancestor] ??= [
+                                'absolute' => $root . '/' . $ancestor,
+                                'total' => 0,
+                                'included' => 0,
+                            ];
+                            ++$directories[$ancestor]['total'];
+                        }
 
                         return false;
                     },
