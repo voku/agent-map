@@ -31,7 +31,7 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           extensions: xdebug
-          coverage: none
+          coverage: xdebug
           tools: composer:v2
       - run: composer install --no-interaction --prefer-dist
       - name: Assert Xdebug profiler and PHPStan are installed
