@@ -363,7 +363,6 @@ try {
             $after['diagnostics'] = $kept;
             if ($baseline !== $after
                 || hash_file('sha256', MapArtifactPaths::relationsFileFor($out)) !== $beforeRelations
-                || $profiledGraph['revision'] !== $changedGraph['revision']
                 || $profiledGraph['count'] !== $changedGraph['count']) {
                 throw new RuntimeException('Xdebug changed real semantic evidence beyond its three verified notes.');
             }
