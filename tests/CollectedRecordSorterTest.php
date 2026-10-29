@@ -22,6 +22,38 @@ final class CollectedRecordSorterTest extends TestCase
         self::assertSame($equal, CollectedRecordSorter::sort($equal));
     }
 
+
+    public function testMemoryBoundedSortKeepsExactOrderAboveThreshold(): void
+    {
+        // 65,536 uses the native fast path; 65,537 must use the low-memory path.
+        // Ensure the actual returned records remain byte-identical to the
+        // historical comparator across both sides of the threshold.
+        foreach ([65_536, 65_537] as $count) {
+            $records = [];
+            for ($i = 0; $i < $count; ++$i) {
+                $records[] = [
+                    'record_type' => (string) ($i % 13),
+                    'file' => 'src/File_' . ($i % 37) . '.php',
+                    'line_start' => $i % 29,
+                    'name' => $i % 2 === 0 ? (string) ($i % 19) : 'name_' . ($i % 19),
+                    'source_id' => (string) ($i % 17),
+                    'ordinal' => $i,
+                ];
+            }
+
+            $expected = $records;
+            usort($expected, static function (array $left, array $right): int {
+                return ((string) $left['record_type']) <=> ((string) $right['record_type'])
+                    ?: ((string) ($left['file'] ?? '')) <=> ((string) ($right['file'] ?? ''))
+                    ?: ((int) ($left['line_start'] ?? 0)) <=> ((int) ($right['line_start'] ?? 0))
+                    ?: ((string) ($left['name'] ?? $left['kind'] ?? '')) <=> ((string) ($right['name'] ?? $right['kind'] ?? ''))
+                    ?: ((string) ($left['source_id'] ?? '')) <=> ((string) ($right['source_id'] ?? ''));
+            });
+
+            self::assertSame($expected, CollectedRecordSorter::sort($records), 'record count ' . $count);
+        }
+    }
+
     public function testNativeSortIsByteIdenticalToOriginalComparatorAcrossMixedKeys(): void
     {
         $records = [];
