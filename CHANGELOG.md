@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.22.4 - 2026-10-29
+
+### Changed
+
+- Require `voku/agent-graph ^0.3.2` and reuse an existing SQLite graph when the complete ordered relations are unchanged but canonical map evidence changes. Guarded provenance advancement verifies the previous canonical byte fingerprint under the existing writer lock; changed relations, missing digests and stale generations fall back to a full rebuild. Failed rebuilds cannot make an older graph appear current ([#171](https://github.com/voku/agent-map/pull/171)).
+- Prune default-excluded directory subtrees during PHP file discovery, instead of traversing their contents and rejecting the files afterwards. Preserve lexical/resolved-path exclusion and symlink safety ([#168](https://github.com/voku/agent-map/pull/168)).
+
+### Tests
+
+- Add cross-repository guarded SQLite reuse integration tests for PHP 8.3, 8.4 and 8.5, including changed-source PHPStan-backed builds, stale-canonical checks and explicit full-replacement fallback.
+- Cover excluded directory aliases, symlinks and normalized traversal paths.
+
 ## 0.22.3 - 2026-10-24
 
 ### Security
