@@ -322,6 +322,8 @@ try {
         if ($sample === 0) {
             // A separate already-warm pass under Xdebug. Do not include in
             // production timing samples. Check byte-for-byte parity afterward.
+            $baselineJson = file_get_contents($out);
+            $baselineRelationsJson = file_get_contents(MapArtifactPaths::relationsFileFor($out));
             $beforeMap = hash_file('sha256', $out);
             $beforeRelations = hash_file('sha256', MapArtifactPaths::relationsFileFor($out));
             $profiled = execute($root, $out, true, $profileDir);
@@ -329,6 +331,18 @@ try {
             if ($profiledGraph !== $changedGraph
                 || hash_file('sha256', $out) !== $beforeMap
                 || hash_file('sha256', MapArtifactPaths::relationsFileFor($out)) !== $beforeRelations) {
+                $baseline = json_decode((string) $baselineJson, true);
+                $after = json_decode((string) file_get_contents($out), true);
+                if (is_array($baseline) && is_array($after)) {
+                    foreach (array_unique([...array_keys($baseline), ...array_keys($after)]) as $key) {
+                        if (($baseline[$key] ?? null) !== ($after[$key] ?? null)) {
+                            fwrite(STDERR, 'Profiler mismatch field ' . $key . ': ' . substr(json_encode(['original' => $baseline[$key] ?? null, 'profiled' => $after[$key] ?? null], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE), 0, 4000) . "\\n");
+                        }
+                    }
+                }
+                fwrite(STDERR, 'Profiler byte parity: map=' . (hash_file('sha256', $out) === $beforeMap ? 'yes' : 'no')
+                    . ', relations=' . (hash_file('sha256', MapArtifactPaths::relationsFileFor($out)) === $beforeRelations ? 'yes' : 'no')
+                    . ', graph=' . ($profiledGraph === $changedGraph ? 'yes' : 'no') . "\\n");
                 throw new RuntimeException('Xdebug-enabled PHPStan changed canonical or graph evidence.');
             }
         }
