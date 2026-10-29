@@ -107,7 +107,8 @@ function verifiedGraph(string $index): array
  */
 function parseCachegrind(string $path): array
 {
-    $stream = fopen($path, 'rb');
+    $compressed = str_ends_with($path, '.gz');
+    $stream = $compressed ? gzopen($path, 'rb') : fopen($path, 'rb');
     if (!is_resource($stream)) {
         throw new RuntimeException('Cannot open Cachegrind file.');
     }
@@ -122,7 +123,7 @@ function parseCachegrind(string $path): array
     $events = null;
     $eventsTime = -1;
     try {
-        while (($line = fgets($stream)) !== false) {
+        while (($line = ($compressed ? gzgets($stream) : fgets($stream))) !== false) {
             $line = trim($line);
             if (str_starts_with($line, 'events: ')) {
                 $events = preg_split('/\s+/', substr($line, 8)) ?: [];
@@ -183,7 +184,11 @@ function parseCachegrind(string $path): array
             }
         }
     } finally {
-        fclose($stream);
+        if ($compressed) {
+            gzclose($stream);
+        } else {
+            fclose($stream);
+        }
     }
     if ($eventsTime < 0 || $total === 0) {
         throw new RuntimeException('Missing Cachegrind Time events or summary: ' . basename($path));
