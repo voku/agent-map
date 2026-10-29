@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace voku\AgentMap\IO;
 
 use InvalidArgumentException;
+use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use SplFileInfo;
 
 final readonly class PhpFileFinder
 {
@@ -37,6 +39,15 @@ final readonly class PhpFileFinder
                 continue;
             }
 
+            // Explicit scopes can themselves resolve to an ignored subtree,
+            // or lexically start inside one while pointing elsewhere via symlink.
+            // Reject either side before traversing a potentially enormous tree.
+            $requestedScope = $this->normalizeRelativeScope($path);
+            $resolvedScope = ltrim(substr($absolutePath, strlen($root)), '/');
+            if ($this->isExcluded($requestedScope, $resolvedScope, self::DEFAULT_EXCLUDES)) {
+                continue;
+            }
+
             if (is_file($absolutePath)) {
                 $this->addPhpFile($files, $root, $absolutePath, $patterns);
                 continue;
@@ -46,8 +57,15 @@ final readonly class PhpFileFinder
                 continue;
             }
 
+            // Default exclusions are prefix-closed: any PHP file inside one of
+            // these directories is excluded. Do not descend into the subtree.
+            // Arbitrary caller regexes are NOT safe to prune: a pattern may
+            // match a directory but intentionally not match its children.
             $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($absolutePath, RecursiveDirectoryIterator::SKIP_DOTS)
+                new RecursiveCallbackFilterIterator(
+                    new RecursiveDirectoryIterator($absolutePath, RecursiveDirectoryIterator::SKIP_DOTS),
+                    static fn (SplFileInfo $entry): bool => !$entry->isDir() || !self::isDefaultExcludedDirectory($entry),
+                ),
             );
 
             foreach ($iterator as $item) {
@@ -90,6 +108,38 @@ final readonly class PhpFileFinder
         }
 
         $files[$relative] = $relative;
+    }
+
+    private static function isDefaultExcludedDirectory(SplFileInfo $directory): bool
+    {
+        $name = $directory->getFilename();
+        if ($name === 'vendor' || $name === '.git' || $name === 'node_modules') {
+            return true;
+        }
+
+        return $name === 'cache'
+            && basename(str_replace('\\', '/', $directory->getPath())) === 'var';
+    }
+
+    private function normalizeRelativeScope(string $path): string
+    {
+        $segments = [];
+        foreach (explode('/', trim($this->normalizePath($path), '/')) as $part) {
+            if ($part === '' || $part === '.') {
+                continue;
+            }
+            if ($part === '..') {
+                if ($segments !== [] && $segments[array_key_last($segments)] !== '..') {
+                    array_pop($segments);
+                } else {
+                    $segments[] = $part;
+                }
+                continue;
+            }
+            $segments[] = $part;
+        }
+
+        return implode('/', $segments);
     }
 
     private function resolvePathWithinRoot(string $root, string $path): ?string

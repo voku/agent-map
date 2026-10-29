@@ -84,6 +84,102 @@ final class PhpFileFinderTest extends TestCase
         self::assertSame([], $files);
     }
 
+    public function testNestedDefaultExclusionsArePrunedWithoutSkippingSimilarNames(): void
+    {
+        foreach (['vendor', '.git', 'node_modules', 'var/cache'] as $ignored) {
+            mkdir($this->root . '/src/packages/' . $ignored, 0o775, true);
+            file_put_contents($this->root . '/src/packages/' . $ignored . '/Skip.php', '<?php');
+        }
+        mkdir($this->root . '/src/packages/vendor-like', 0o775, true);
+        mkdir($this->root . '/src/packages/var/cache-like', 0o775, true);
+        file_put_contents($this->root . '/src/packages/vendor-like/Keep.php', '<?php');
+        file_put_contents($this->root . '/src/packages/var/cache-like/Keep.php', '<?php');
+
+        $files = (new PhpFileFinder())->find($this->root, ['.']);
+
+        self::assertSame([
+            'src/GeneratedProxy.php',
+            'src/Keep.php',
+            'src/packages/var/cache-like/Keep.php',
+            'src/packages/vendor-like/Keep.php',
+            'tests/KeepTest.php',
+        ], $files);
+    }
+
+    public function testCustomRegexMatchingOnlyADirectoryDoesNotPruneItsChildren(): void
+    {
+        mkdir($this->root . '/src/Area', 0o775, true);
+        file_put_contents($this->root . '/src/Area/Keep.php', '<?php');
+        file_put_contents($this->root . '/src/Area/Skip.php', '<?php');
+
+        $files = (new PhpFileFinder())->find(
+            $this->root,
+            ['src'],
+            ['~^src/Area$~', '~^src/Area/Skip[.]php$~'],
+        );
+
+        self::assertSame([
+            'src/Area/Keep.php',
+            'src/GeneratedProxy.php',
+            'src/Keep.php',
+        ], $files);
+    }
+
+    public function testExplicitDefaultExcludedScopeStillYieldsNothing(): void
+    {
+        self::assertSame(
+            [],
+            (new PhpFileFinder())->find($this->root, ['vendor', 'var/cache']),
+        );
+    }
+
+    public function testOverlappingPathsReturnEachFileOnlyOnce(): void
+    {
+        self::assertSame(
+            ['src/GeneratedProxy.php', 'src/Keep.php'],
+            (new PhpFileFinder())->find($this->root, ['src', 'src/Keep.php', 'src']),
+        );
+    }
+
+    public function testExplicitScopeResolvingToExcludedVendorIsNotTraversed(): void
+    {
+        $alias = $this->root . '/src/alias-to-vendor';
+        if (!function_exists('symlink') || !symlink($this->root . '/vendor/package', $alias)) {
+            self::markTestSkipped('Directory symlinks unavailable.');
+        }
+
+        self::assertSame([], (new PhpFileFinder())->find($this->root, ['src/alias-to-vendor']));
+    }
+
+    public function testExplicitLexicalVendorScopeCannotEscapeThroughSymlink(): void
+    {
+        $link = $this->root . '/vendor/package/BackLink.php';
+        if (!function_exists('symlink') || !symlink($this->root . '/src/Keep.php', $link)) {
+            self::markTestSkipped('File symlinks unavailable.');
+        }
+
+        self::assertSame([], (new PhpFileFinder())->find($this->root, ['vendor/package/BackLink.php']));
+    }
+
+    public function testNestedDefaultExclusionDoesNotTraverseSymlinksBackToIncludedFiles(): void
+    {
+        mkdir($this->root . '/src/packages/vendor', 0o775, true);
+        $link = $this->root . '/src/packages/vendor/BackLink.php';
+        if (!function_exists('symlink') || !symlink($this->root . '/src/Keep.php', $link)) {
+            self::markTestSkipped('File symlinks unavailable.');
+        }
+
+        self::assertSame([], (new PhpFileFinder())->find($this->root, ['src/packages']));
+    }
+
+    public function testDotDotLexicalScopeDoesNotAccidentallyExcludeIncludedSources(): void
+    {
+        self::assertSame(
+            ['src/GeneratedProxy.php', 'src/Keep.php'],
+            (new PhpFileFinder())->find($this->root, ['vendor/../src']),
+        );
+    }
+
     private function removeDirectory(string $path): void
     {
         if (!is_dir($path)) {
@@ -92,7 +188,7 @@ final class PhpFileFinderTest extends TestCase
 
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
         foreach ($iterator as $item) {
-            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+            ($item->isDir() && !$item->isLink()) ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
 
         rmdir($path);
