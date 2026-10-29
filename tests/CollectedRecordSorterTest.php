@@ -30,7 +30,7 @@ final class CollectedRecordSorterTest extends TestCase
         foreach ([65_536, 65_537] as $count) {
             $records = [];
             for ($i = 0; $i < $count; ++$i) {
-                $records[] = [
+                $record = [
                     'record_type' => (string) ($i % 13),
                     'file' => 'src/File_' . ($i % 37) . '.php',
                     'line_start' => $i % 29,
@@ -38,6 +38,20 @@ final class CollectedRecordSorterTest extends TestCase
                     'source_id' => (string) ($i % 17),
                     'ordinal' => $i,
                 ];
+                if ($i % 13 === 0) {
+                    unset($record['name']);
+                    $record['kind'] = 'fallback';
+                }
+                if ($i % 17 === 0) {
+                    unset($record['line_start']);
+                }
+                if ($i % 19 === 0) {
+                    unset($record['source_id']);
+                }
+                if ($i % 23 === 0) {
+                    unset($record['file']);
+                }
+                $records[] = $record;
             }
 
             $expected = $records;
