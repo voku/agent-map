@@ -60,7 +60,7 @@ final class PhpStanExclusionPruningTest extends TestCase
             $this->root . '/src/Module/vendor',
             $this->root . '/src/ignored',
             $this->root . '/src/node_modules',
-            $this->root . '/src/var/cache',
+            $this->root . '/src/var',
         ], $excludes);
     }
 
@@ -70,7 +70,7 @@ final class PhpStanExclusionPruningTest extends TestCase
         $excludes = $this->exclusions(['.'], $included);
         self::assertContains($this->root . '/src/Module/vendor', $excludes);
         self::assertContains($this->root . '/src/node_modules', $excludes);
-        self::assertContains($this->root . '/src/var/cache', $excludes);
+        self::assertContains($this->root . '/src/var', $excludes);
         self::assertNotContains($this->root . '/src/ignored', $excludes, 'Caller regex must not be pruned without an explicit regex.');
     }
 
