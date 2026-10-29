@@ -6,6 +6,7 @@ namespace voku\AgentMap\Build;
 
 use Composer\InstalledVersions;
 use JsonException;
+use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
@@ -293,8 +294,45 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
                 continue;
             }
 
+            // Default exclusions are prefix-closed in PhpFileFinder: no indexed
+            // PHP file may live below these directories. Express the excluded
+            // directory to PHPStan without enumerating all of its PHP files.
+            // Caller-defined regex exclusions are deliberately NOT pruned here.
             $iterator = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($absoluteDirectory, RecursiveDirectoryIterator::SKIP_DOTS),
+                new RecursiveCallbackFilterIterator(
+                    new RecursiveDirectoryIterator($absoluteDirectory, RecursiveDirectoryIterator::SKIP_DOTS),
+                    function (\SplFileInfo $entry) use ($root, &$directories): bool {
+                        if (!$entry->isDir()) {
+                            return true;
+                        }
+
+                        $relative = str_replace('\\', '/', $entry->getPathname());
+                        $rootPrefix = rtrim(str_replace('\\', '/', $root), '/') . '/';
+                        if (!str_starts_with($relative, $rootPrefix)) {
+                            return true;
+                        }
+
+                        $relative = substr($relative, strlen($rootPrefix));
+                        if (!self::isDefaultExcludedDirectory($relative)) {
+                            return true;
+                        }
+
+                        // The old scan contributed each excluded PHP file to
+                        // every ancestor. Preserve those zero-included ancestors
+                        // so the later collapse can still exclude a whole parent
+                        // (e.g. src/var instead of only src/var/cache).
+                        foreach ([$relative, ...$this->directoryAncestors($relative)] as $ancestor) {
+                            $directories[$ancestor] ??= [
+                                'absolute' => $root . '/' . $ancestor,
+                                'total' => 0,
+                                'included' => 0,
+                            ];
+                            ++$directories[$ancestor]['total'];
+                        }
+
+                        return false;
+                    },
+                ),
             );
             foreach ($iterator as $item) {
                 if (!$item->isFile() || !str_ends_with($item->getFilename(), '.php')) {
@@ -345,6 +383,21 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         ksort($excluded, SORT_STRING);
 
         return array_values($excluded);
+    }
+
+    /**
+     * Mirrors the prefix-closed *directory* exclusions in PhpFileFinder.
+     * Never use caller-provided regular expressions for pruning: they may
+     * exclude a directory name without excluding its descendants.
+     */
+    private static function isDefaultExcludedDirectory(string $relative): bool
+    {
+        $name = basename($relative);
+
+        return $name === 'vendor'
+            || $name === '.git'
+            || $name === 'node_modules'
+            || ($name === 'cache' && basename(dirname($relative)) === 'var');
     }
 
     /** @return list<string> */
