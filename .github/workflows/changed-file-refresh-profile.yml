@@ -1,0 +1,44 @@
+name: Real changed-file refresh stage profiler
+
+on:
+  push:
+    branches:
+      - experiment/changed-file-refresh-profile-*
+    paths:
+      - .github/workflows/changed-file-refresh-profile.yml
+      - tools/changed-file-refresh-profile.php
+  pull_request:
+    paths:
+      - .github/workflows/changed-file-refresh-profile.yml
+      - tools/changed-file-refresh-profile.php
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Changed PHP source, full semantic scope (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - run: php -l tools/changed-file-refresh-profile.php
+      - name: Measure real refresh and disjoint PHPStan/parser/residual/write
+        run: php tools/changed-file-refresh-profile.php
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: refresh-profiler-php-${{ matrix.php }}
+          path: ${{ runner.temp }}/map-refresh-profile-*/report.json
+          if-no-files-found: warn
