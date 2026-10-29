@@ -29,10 +29,7 @@ final readonly class MapGraphIndex
      */
     public function reusableProvenance(string $indexFile): ?array
     {
-        // Runtime compatibility with both released and candidate agent-graph versions.
-        if (!method_exists(GraphStore::class, 'advanceProvenanceIfUnchanged') // @phpstan-ignore function.alreadyNarrowedType (The installed version varies by CI lane.)
-            || !is_file($indexFile)
-            || !is_file(MapArtifactPaths::graphDatabaseFor($indexFile))) {
+        if (!is_file($indexFile) || !is_file(MapArtifactPaths::graphDatabaseFor($indexFile))) {
             return null;
         }
 
@@ -63,7 +60,6 @@ final readonly class MapGraphIndex
         $fingerprint = $this->fingerprint->forIndexFile($indexFile);
         $store = new GraphStore(MapArtifactPaths::graphDatabaseFor($indexFile));
         if ($previousProvenance !== null
-            && method_exists($store, 'advanceProvenanceIfUnchanged') // @phpstan-ignore function.alreadyNarrowedType (The owner API is not released yet.)
             && $store->advanceProvenanceIfUnchanged(
                 $this->projectionFactory->relations($index),
                 $previousProvenance['revision'],
