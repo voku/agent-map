@@ -36,6 +36,9 @@ final readonly class IndexWriter
         }
 
         try {
+            // Capture the old generation while its canonical bytes still exist and
+            // while the existing single-writer lock prevents a second publication.
+            $previousGraphProvenance = $this->graphIndex->reusableProvenance($file);
             $format ??= str_ends_with(strtolower($file), '.toon') ? 'toon' : 'json';
             $payload = $index->toArray();
 
@@ -78,7 +81,7 @@ final readonly class IndexWriter
             // graph store records their byte fingerprint and readers reject an older generation.
             // Keep the writer lock through rebuild so the in-memory index, canonical artifacts and
             // graph provenance cannot be mixed with another writer's generation.
-            $this->graphIndex->rebuild($index, $file);
+            $this->graphIndex->rebuild($index, $file, $previousGraphProvenance);
             clearstatcache(true, $file);
             clearstatcache(true, $relationsFile);
             IndexReader::clearCache();
