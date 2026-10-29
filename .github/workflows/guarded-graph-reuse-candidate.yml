@@ -101,7 +101,7 @@ jobs:
           echo "PHP ${{ matrix.php }}: cold build=${build_ms}ms, guarded changed refresh=${changed_refresh_ms}ms, forced full replace=${forced_replace_ms}ms, no-op refresh=${nochange_ms}ms"
           echo "Paired single-sample wall times are exploratory; PHPStan cache state and runner noise can differ between edits."
           echo "Graph remained verifiably current, revision advanced, and any DELETE from graph_relations would have failed."
-          printf '{"php":"%s","build_ms":%s,"guarded_changed_refresh_ms":%s,"forced_rebuild_changed_refresh_ms":%s,"nochange_refresh_ms":%s,"reused_without_relation_delete":true}\\n' \\
+          printf '{"php":"%s","build_ms":%s,"guarded_changed_refresh_ms":%s,"forced_rebuild_changed_refresh_ms":%s,"nochange_refresh_ms":%s,"reused_without_relation_delete":true}\n' \
             "${{ matrix.php }}" "$build_ms" "$changed_refresh_ms" "$forced_replace_ms" "$nochange_ms" > "$RUNNER_TEMP/graph-reuse-evidence.json"
       - uses: actions/upload-artifact@v4
         if: always()
