@@ -1,0 +1,192 @@
+name: PHPStan Turbo agent-map proof
+
+on:
+  push:
+    branches:
+      - ci/phpstan-turbo-evidence-*
+  pull_request:
+    paths:
+      - .github/workflows/phpstan-turbo-proof.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Real semantic map, Turbo on/off, PHP 8.4
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+
+      - name: Compare cold and warm map builds with and without bundled Turbo
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          proof=/tmp/agent-map-turbo-proof
+          package="$GITHUB_WORKSPACE/vendor/phpstan/phpstan"
+          bundled="$package/turbo-ext"
+          backup="$RUNNER_TEMP/phpstan-turbo-disabled"
+          mkdir -p "$proof"
+          test -f "$package/phpstan.phar"
+          test -d "$bundled"
+          php -v | head -n 2 | tee "$proof/runtime.txt"
+          composer show phpstan/phpstan | tee "$proof/phpstan-version.txt"
+
+          restore() {
+            if [[ -d "$backup" ]]; then
+              mv "$backup" "$bundled"
+            fi
+          }
+          trap restore EXIT
+
+          diagnose() {
+            local mode="$1"
+            php "$package/phpstan.phar" diagnose 2>&1 | tee "$proof/diagnose-$mode.txt"
+            if [[ "$mode" == on ]]; then
+              # PHPStan does not load Turbo into the diagnose process itself.
+              # It reports what the subsequent analyse-process restart will load.
+              grep -Fq 'Turbo extension: not loaded here, loaded by the restart an analyse run performs' "$proof/diagnose-$mode.txt" || {
+                echo 'Turbo is not scheduled for loading in the analysis subprocess.' >&2
+                exit 1
+              }
+              grep -Eq '^Turbo worker binary: +.*/phpstan_turbo-[0-9.]+[.]so' "$proof/diagnose-$mode.txt" || {
+                echo 'No bundled Turbo binary selected for the analysis runtime.' >&2
+                exit 1
+              }
+            else
+              grep -Eq '^Turbo worker binary: +none found' "$proof/diagnose-$mode.txt" || {
+                echo 'Turbo unexpectedly remained available after removing its bundled binaries.' >&2
+                exit 1
+              }
+            fi
+          }
+
+          build() {
+            local mode="$1"
+            local phase="$2"
+            local dest="$proof/$mode/$phase"
+            local working="$proof/$mode/current"
+            mkdir -p "$dest" "$working"
+            # Both phases MUST use the same output directory: agent-map places
+            # the PHPStan/structural result caches alongside that output.
+            /usr/bin/time -f '%e %U %S %M' -o "$dest/metrics.txt" \
+              php bin/agent-map build \
+                --root="$GITHUB_WORKSPACE" \
+                --paths=src \
+                --out="$working/php-symbols.json" \
+                --phpstan-memory-limit=512M >"$dest/build.log" 2>&1
+            test -s "$working/php-symbols.json"
+            test -s "$working/php-relations.json"
+            cp "$working/php-symbols.json" "$dest/php-symbols.json"
+            cp "$working/php-relations.json" "$dest/php-relations.json"
+            php -r '
+              $map = json_decode((string) file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+              if (($map["backend"] ?? null) !== "simple-php-code-parser+phpstan" || count($map["files"] ?? []) === 0) {
+                  fwrite(STDERR, "Missing PHPStan semantic backend or indexed files.\n");
+                  exit(1);
+              }
+            ' "$dest/php-symbols.json"
+          }
+
+          # Fresh independent mode-specific output/cache directories;
+          # the second build of each mode reuses the same cache.
+          diagnose on
+          build on cold
+          build on warm
+
+          mv "$bundled" "$backup"
+          diagnose off
+          build off cold
+          build off warm
+          restore
+
+          # Validate each mode's own cold/warm output before comparing modes.
+          for mode in on off; do
+            cmp "$proof/$mode/cold/php-symbols.json" "$proof/$mode/warm/php-symbols.json"
+            cmp "$proof/$mode/cold/php-relations.json" "$proof/$mode/warm/php-relations.json"
+          done
+
+          # The no-Turbo PHAR prints four informational notes which agent-map
+          # conservatively records as diagnostics. Require precisely those four,
+          # then compare every semantic field and the complete split relations.
+          for phase in cold warm; do
+            php -r '
+              $on = json_decode((string) file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+              $off = json_decode((string) file_get_contents($argv[2]), true, 512, JSON_THROW_ON_ERROR);
+              if (!is_array($on) || !is_array($off) || !is_array($off["diagnostics"] ?? null)) {
+                  throw new RuntimeException("Invalid canonical map payload.");
+              }
+              $notices = [
+                  "! [NOTE] PHPStan runs without PHPStan Turbo.",
+                  "!        Install PHPStan with Composer: composer require --dev phpstan/phpstan",
+                  "!        With PHPStan Turbo, analysis is up to 60% faster.",
+              ];
+              $seen = [];
+              $remaining = [];
+              foreach ($off["diagnostics"] as $finding) {
+                  $message = $finding["message"] ?? null;
+                  if (!is_string($message)) {
+                      throw new RuntimeException("Unexpected non-string diagnostic.");
+                  }
+                  $known = in_array($message, $notices, true)
+                      || (str_starts_with($message, "!        Or install PHPStan Turbo with PIE: pie install phpstan/turbo:")
+                          && preg_match("~:[0-9]+[.][0-9]+[.][0-9]+$~", $message) === 1);
+                  if (!$known) {
+                      $remaining[] = $finding;
+                      continue;
+                  }
+                  if (($finding["kind"] ?? null) !== "phpstan_finding" || ($finding["file"] ?? null) !== null || ($finding["line"] ?? null) !== null) {
+                      throw new RuntimeException("Turbo notice has unexpected provenance.");
+                  }
+                  $seen[] = $message;
+              }
+              if (count($seen) !== 4 || count(array_unique($seen)) !== 4) {
+                  throw new RuntimeException("The disabled-Turbo warning contract changed.");
+              }
+              $off["diagnostics"] = $remaining;
+              if ($on !== $off) {
+                  throw new RuntimeException("Semantic map content differs beyond known Turbo information notes.");
+              }
+              echo "Canonical semantic parity passed after filtering four known Turbo notices.\n";
+            ' "$proof/on/$phase/php-symbols.json" "$proof/off/$phase/php-symbols.json"
+            cmp "$proof/on/$phase/php-relations.json" "$proof/off/$phase/php-relations.json"
+          done
+
+          {
+            echo '## agent-map PHPStan Turbo A/B evidence'
+            echo
+            echo '- PHPStan entry point: Composer-installed `phpstan.phar`, identical to production code.'
+            echo '- Control: bundled Turbo present; `diagnose` confirms analyse-process restart will load it.'
+            echo '- Baseline: bundled Turbo binaries temporarily absent and confirmed not loaded.'
+            echo '- Cache: independent per mode, reused for actual warm builds; same source, config, dependencies and PHPStan version.'
+            echo '- Semantic parity: complete relations byte-for-byte; canonical JSON equal after removing precisely four verified Turbo informational diagnostics.'
+            echo
+            echo '| Mode | Phase | Wall (s) | User CPU (s) | System CPU (s) | Max RSS (KiB) |'
+            echo '| --- | --- | ---: | ---: | ---: | ---: |'
+            for mode in on off; do
+              for phase in cold warm; do
+                read -r wall user system rss < "$proof/$mode/$phase/metrics.txt"
+                echo "| Turbo $mode | $phase | $wall | $user | $system | $rss |"
+              done
+            done
+            echo
+            echo 'These are runner-specific end-to-end map-build timings, not isolated PHPStan timings. Warm builds reuse the same per-mode output path and cache.'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: phpstan-turbo-agent-map-proof
+          path: |
+            /tmp/agent-map-turbo-proof
+            !/tmp/agent-map-turbo-proof/**/phpstan-cache/**
+          if-no-files-found: warn
