@@ -219,23 +219,36 @@ jobs:
             )) {
               throw new RuntimeException("Known property-set additions were classified as calls.");
             }
-            if ($argv[3] === "021-to-022" && (
-                $probe["possible_rename_count"] < 1
-                || $probe["candidate_count"] !== 0
-            )) {
-              throw new RuntimeException("Known method rename was not separated.");
+            if ($argv[3] === "021-to-022") {
+              $knownRename = false;
+              foreach ($probe["possible_renames"] as $rename) {
+                if ($rename["source_id"] === "method:voku\\AgentMap\\Prepare\\MapPreparationService::prepare"
+                    && $rename["from_target_ids"] === "method:voku\\AgentMap\\Prepare\\MapPreparationService::buildMissing"
+                    && $rename["to_target_ids"] === "method:voku\\AgentMap\\Prepare\\MapPreparationService::rebuild"
+                    && $rename["assessment"] === "possible_rename_unverified") {
+                  $knownRename = true;
+                }
+              }
+              if (!$knownRename || $probe["candidate_count"] !== 0) {
+                throw new RuntimeException("Exact source-backed method rename was not separated.");
+              }
             }
             if ($argv[3] === "022-to-0225") {
               $found = false;
               foreach ($probe["repeated_migrations"] as $migration) {
-                if (str_ends_with($migration["from_target_ids"], "IndexReader::read")
-                    && str_ends_with($migration["to_target_ids"], "IndexReader::readForRoot")
-                    && $migration["occurrence_count"] >= 2) {
+                if ($migration["from_target_ids"] === "method:voku\\AgentMap\\Index\\IndexReader::read"
+                    && $migration["to_target_ids"] === "method:voku\\AgentMap\\Index\\IndexReader::readForRoot"
+                    && $migration["occurrence_count"] >= 2
+                    && in_array(
+                        "method:voku\\AgentMap\\Cli\\ClassConstantRemovalCliApplication::run",
+                        $migration["source_ids"],
+                        true
+                    )) {
                   $found = true;
                 }
               }
               if (!$found) {
-                throw new RuntimeException("Known source-backed call-target migration was not grouped.");
+                throw new RuntimeException("Exact source-backed call-target migration was not grouped.");
               }
             }
 
