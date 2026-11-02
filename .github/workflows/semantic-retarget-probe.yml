@@ -119,3 +119,110 @@ jobs:
             ${{ runner.temp }}/semantic-retarget-probe/retarget-evidence.json
           if-no-files-found: warn
           retention-days: 7
+
+  frozen-historical-corpus:
+    name: Frozen real history ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: 019-to-020
+            before: '555c3ad40cb8023444695219fbfb79a119767f46'
+            after: '96bffea331cec063adba37e6659e5f3760202f9b'
+          - label: 021-to-022
+            before: '52c901f42f338bb6c1f29d5512873b05a751cdba'
+            after: '91e631249f3e3bcfd8b5783f600f2a6d8818cab2'
+          - label: 022-to-0225
+            before: '91e631249f3e3bcfd8b5783f600f2a6d8818cab2'
+            after: '5e5b179176ce8b9fa961c795daf84d1c692bc064'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Build fixed source-backed maps with one current analyzer
+        shell: bash
+        env:
+          BEFORE_COMMIT: ${{ matrix.before }}
+          AFTER_COMMIT: ${{ matrix.after }}
+          CASE_LABEL: ${{ matrix.label }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_HEAD" ]] || { echo 'Analyzer checkout is not exact head.' >&2; exit 1; }
+          out="$RUNNER_TEMP/semantic-retarget-corpus/$CASE_LABEL"
+          mkdir -p "$out"
+          for ref in "$BEFORE_COMMIT" "$AFTER_COMMIT"; do
+            git cat-file -e "$ref^{commit}" || { echo "Unknown frozen commit: $ref" >&2; exit 1; }
+          done
+          git worktree add --detach "$out/previous" "$BEFORE_COMMIT"
+          git worktree add --detach "$out/current" "$AFTER_COMMIT"
+          printf 'analyzer_sha=%s\nbefore_sha=%s\nafter_sha=%s\n' \
+            "$(git rev-parse HEAD)" \
+            "$(git -C "$out/previous" rev-parse HEAD)" \
+            "$(git -C "$out/current" rev-parse HEAD)" > "$out/revisions.txt"
+          php bin/agent-map build --root="$out/previous" --paths=src --out="$out/before.json" --phpstan-memory-limit=512M
+          php bin/agent-map build --root="$out/current" --paths=src --out="$out/after.json" --phpstan-memory-limit=512M
+          echo "CORPUS_OUTPUT=$out" >> "$GITHUB_ENV"
+      - name: Measure fixed real evolution, completeness and determinism
+        shell: bash
+        env:
+          CASE_LABEL: ${{ matrix.label }}
+        run: |
+          set -euo pipefail
+          php tools/temporal-retarget-probe.php --self-test
+          php bin/agent-map history diff \
+            --before="$CORPUS_OUTPUT/before.json" \
+            --after="$CORPUS_OUTPUT/after.json" \
+            --format=json --limit=250000 > "$CORPUS_OUTPUT/history-diff.json"
+          php tools/temporal-retarget-probe.php "$CORPUS_OUTPUT/history-diff.json" > "$CORPUS_OUTPUT/retarget-evidence.json"
+          php tools/temporal-retarget-probe.php "$CORPUS_OUTPUT/history-diff.json" > "$CORPUS_OUTPUT/repeat.json"
+          cmp "$CORPUS_OUTPUT/retarget-evidence.json" "$CORPUS_OUTPUT/repeat.json"
+          rm "$CORPUS_OUTPUT/repeat.json"
+          php -r '
+            $diff = json_decode((string) file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+            $probe = json_decode((string) file_get_contents($argv[2]), true, 512, JSON_THROW_ON_ERROR);
+            if (($diff["truncated"] ?? true)
+                || ($diff["event_count"] ?? 0) < 1
+                || ($probe["evidence_level"] ?? null) !== "UNVERIFIED"
+                || ($probe["before_map_digest"] ?? null) !== ($diff["before_map_digest"] ?? null)
+                || ($probe["after_map_digest"] ?? null) !== ($diff["after_map_digest"] ?? null)) {
+              throw new RuntimeException("Invalid frozen history comparison evidence.");
+            }
+            $counts = $diff["counts"] ?? [];
+            $summary = "## Frozen history: " . $argv[3] . "\n\n";
+            $summary .= "- Original history events: **" . $diff["event_count"] . "**\n";
+            $summary .= "- Relation added/removed: **" . ($counts["relation_added"] ?? 0) . " / " . ($counts["relation_removed"] ?? 0) . "**\n";
+            $summary .= "- Retarget candidates (UNVERIFIED): **" . $probe["candidate_count"] . "**\n";
+            $summary .= "- Ambiguous groups: **" . $probe["ambiguous_group_count"] . "**\n";
+            $summary .= "- Repeated classification: byte-identical; no inference of identity or authority.\n";
+            file_put_contents((string) getenv("GITHUB_STEP_SUMMARY"), $summary, FILE_APPEND);
+            echo $summary;
+            foreach (array_slice($probe["candidates"], 0, 10) as $candidate) {
+              echo json_encode($candidate, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";
+            }
+          ' "$CORPUS_OUTPUT/history-diff.json" "$CORPUS_OUTPUT/retarget-evidence.json" "$CASE_LABEL"
+      - name: Upload frozen historical comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: semantic-retarget-${{ matrix.label }}
+          path: |
+            ${{ runner.temp }}/semantic-retarget-corpus/${{ matrix.label }}/revisions.txt
+            ${{ runner.temp }}/semantic-retarget-corpus/${{ matrix.label }}/before.json
+            ${{ runner.temp }}/semantic-retarget-corpus/${{ matrix.label }}/before.relations.json
+            ${{ runner.temp }}/semantic-retarget-corpus/${{ matrix.label }}/after.json
+            ${{ runner.temp }}/semantic-retarget-corpus/${{ matrix.label }}/after.relations.json
+            ${{ runner.temp }}/semantic-retarget-corpus/${{ matrix.label }}/history-diff.json
+            ${{ runner.temp }}/semantic-retarget-corpus/${{ matrix.label }}/retarget-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
