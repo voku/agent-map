@@ -313,15 +313,43 @@ function testProbe(): void
         throw new RuntimeException('Repeated migration grouping or determinism failed.');
     }
 
-    $bad = testDiffReport($events);
-    $bad['truncated'] = true;
-    try {
-        $probe->analyze($bad);
-    } catch (RuntimeException) {
-        echo "[PASS] semantic retarget probe: call-only, rename-evidence-separated, repeated-migrations, deterministic, ambiguous-safe, grouped-targets, truncated-fail-closed.\n";
-        return;
+    // Isolate every rejection path and assert its exact failure reason:
+    // catching any RuntimeException can silently hide unrelated test failures.
+    $valid = testDiffReport($events);
+    $missingTruncated = $valid;
+    unset($missingTruncated['truncated']);
+    $rejected = [
+        'truncated' => [...$valid, 'truncated' => true],
+        'event_count mismatch' => [...$valid, 'event_count' => $valid['event_count'] + 1],
+        'missing truncated flag' => $missingTruncated,
+        'malformed relation' => testDiffReport([
+            ['kind' => 'relation_removed', 'before' => ['source_id' => 'method:A::b']],
+        ]),
+        'malformed method lifecycle' => testDiffReport([
+            ['kind' => 'method_added', 'entity_id' => 'type:NotAMethod'],
+        ]),
+    ];
+    $expectedMessages = [
+        'truncated' => 'Expected a complete, non-truncated agent-map history_diff report.',
+        'event_count mismatch' => 'Expected a complete, non-truncated agent-map history_diff report.',
+        'missing truncated flag' => 'Expected a complete, non-truncated agent-map history_diff report.',
+        'malformed relation' => 'Malformed relation event in history diff.',
+        'malformed method lifecycle' => 'Malformed method lifecycle event in history diff.',
+    ];
+    foreach ($rejected as $name => $report) {
+        try {
+            $probe->analyze($report);
+        } catch (RuntimeException $exception) {
+            if ($exception->getMessage() === $expectedMessages[$name]) {
+                continue;
+            }
+
+            throw new RuntimeException('Unexpected validation failure for: ' . $name, 0, $exception);
+        }
+
+        throw new RuntimeException('Invalid report was accepted: ' . $name);
     }
-    throw new RuntimeException('Truncated report was accepted.');
+    echo "[PASS] semantic retarget probe: call-only, rename-evidence-separated, repeated-migrations, deterministic, ambiguous-safe, grouped-targets, five explicit fail-closed fixtures.\n";
 }
 
 try {
