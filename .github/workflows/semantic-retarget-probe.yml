@@ -1,0 +1,115 @@
+name: Semantic retarget probe (experimental)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/semantic-retarget-probe.yml'
+      - 'tools/temporal-retarget-probe.php'
+      - 'docs/experiments/semantic-retarget-probe.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: semantic-retarget-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-history-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+
+      - name: Prove controlled semantic-classification invariants
+        run: |
+          set -euo pipefail
+          php -l tools/temporal-retarget-probe.php
+          php tools/temporal-retarget-probe.php --self-test
+
+      - name: Build real historical and current canonical maps
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/semantic-retarget-probe"
+          mkdir -p "$out"
+          previous="$out/previous"
+          baseline=""
+          while IFS= read -r tag; do
+            if ! git diff --quiet "$tag" HEAD -- src; then
+              baseline="$tag"
+              break
+            fi
+          done < <(git tag --merged HEAD --sort=-v:refname)
+          if [[ -z "$baseline" ]]; then
+            baseline="$(git rev-list --max-parents=0 HEAD)"
+          fi
+          if git diff --quiet "$baseline" HEAD -- src; then
+            echo 'No real source evolution found for comparison.' >&2
+            exit 1
+          fi
+          git worktree add --detach "$previous" "$baseline"
+          printf 'baseline_ref=%s\nbaseline_sha=%s\nhead_sha=%s\n' \
+            "$baseline" "$(git rev-parse "$baseline^{commit}")" "$(git rev-parse HEAD)" \
+            > "$out/revisions.txt"
+          php bin/agent-map build --root="$previous" --paths=src --out="$out/before.json" --phpstan-memory-limit=512M
+          php bin/agent-map build --root="$GITHUB_WORKSPACE" --paths=src --out="$out/after.json" --phpstan-memory-limit=512M
+          echo "PROBE_OUT=$out" >> "$GITHUB_ENV"
+
+      - name: Run existing temporal diff and experimental classification
+        shell: bash
+        run: |
+          set -euo pipefail
+          php bin/agent-map history diff \
+            --before="$PROBE_OUT/before.json" \
+            --after="$PROBE_OUT/after.json" \
+            --format=json --limit=250000 > "$PROBE_OUT/history-diff.json"
+          php tools/temporal-retarget-probe.php "$PROBE_OUT/history-diff.json" > "$PROBE_OUT/retarget-evidence.json"
+          php tools/temporal-retarget-probe.php "$PROBE_OUT/history-diff.json" > "$PROBE_OUT/repeat.json"
+          cmp "$PROBE_OUT/retarget-evidence.json" "$PROBE_OUT/repeat.json"
+          php -r '
+            $diff = json_decode((string) file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+            $probe = json_decode((string) file_get_contents($argv[2]), true, 512, JSON_THROW_ON_ERROR);
+            if (($diff["truncated"] ?? true) || !is_int($diff["event_count"] ?? null)
+                || !is_int($probe["candidate_count"] ?? null)
+                || !is_int($probe["ambiguous_group_count"] ?? null)
+                || ($probe["evidence_level"] ?? null) !== "UNVERIFIED") {
+              throw new RuntimeException("Incomplete or falsely authoritative comparison evidence.");
+            }
+            $summary = "## Experimental semantic retarget probe\n\n";
+            $summary .= "- Actual agent-map history events: **" . $diff["event_count"] . "**\n";
+            $summary .= "- Possible retargets (UNVERIFIED): **" . $probe["candidate_count"] . "**\n";
+            $summary .= "- Ambiguous groups (no guessed pairings): **" . $probe["ambiguous_group_count"] . "**\n";
+            $summary .= "- Output: byte-identical in two independent runs\n";
+            $summary .= "- Provenance: see revisions.txt and both canonical map artifacts\n";
+            $summary .= "- Not evidence of identity, correctness, approval, or permission to change code.\n";
+            file_put_contents((string) getenv("GITHUB_STEP_SUMMARY"), $summary, FILE_APPEND);
+            echo $summary;
+          ' "$PROBE_OUT/history-diff.json" "$PROBE_OUT/retarget-evidence.json"
+          rm "$PROBE_OUT/repeat.json"
+
+      - name: Upload reproducible source-backed evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: semantic-retarget-probe
+          path: |
+            ${{ runner.temp }}/semantic-retarget-probe/revisions.txt
+            ${{ runner.temp }}/semantic-retarget-probe/before.json
+            ${{ runner.temp }}/semantic-retarget-probe/before.relations.json
+            ${{ runner.temp }}/semantic-retarget-probe/after.json
+            ${{ runner.temp }}/semantic-retarget-probe/after.relations.json
+            ${{ runner.temp }}/semantic-retarget-probe/history-diff.json
+            ${{ runner.temp }}/semantic-retarget-probe/retarget-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
