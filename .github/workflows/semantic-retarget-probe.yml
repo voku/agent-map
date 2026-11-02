@@ -22,6 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: shivammathur/setup-php@v2
@@ -41,6 +42,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          expected_head="${{ github.event.pull_request.head.sha || github.sha }}"
+          if [[ "$(git rev-parse HEAD)" != "$expected_head" ]]; then
+            echo "Checkout is not at the exact requested head SHA." >&2
+            exit 1
+          fi
           out="$RUNNER_TEMP/semantic-retarget-probe"
           mkdir -p "$out"
           previous="$out/previous"
