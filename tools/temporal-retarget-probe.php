@@ -18,8 +18,13 @@ final readonly class TemporalRetargetProbe
      *   after_map_digest: string,
      *   candidate_count: int,
      *   ambiguous_group_count: int,
+     *   suppressed_non_call_group_count: int,
+     *   possible_rename_count: int,
+     *   repeated_migration_group_count: int,
      *   candidates: list<array{source_id: string, kind: string, resolution: string, receiver_type: ?string, result_type: ?string, from_target_ids: string, to_target_ids: string, from_count: int, to_count: int, assessment: 'retarget_candidate_unverified'}>,
      *   ambiguous_groups: list<array{source_id: string, kind: string, removed: int, added: int, reason: 'multiple_possible_pairings'}>,
+     *   possible_renames: list<array{source_id: string, from_target_ids: string, to_target_ids: string, evidence: 'method_removed_and_added', assessment: 'possible_rename_unverified'}>,
+     *   repeated_migrations: list<array{from_target_ids: string, to_target_ids: string, resolution: string, receiver_type: ?string, result_type: ?string, source_ids: non-empty-list<string>, occurrence_count: int, assessment: 'repeated_call_target_migration_unverified'}>,
      *   limitations: list<string>
      * }
      */
@@ -36,6 +41,12 @@ final readonly class TemporalRetargetProbe
             throw new RuntimeException('Expected a complete, non-truncated agent-map history_diff report.');
         }
 
+        // Method lifecycle is evidence for a *possible* rename, not proof that a
+        // removed call was retargeted to an unrelated implementation.
+        /** @var array<string, true> $removedMethods */
+        $removedMethods = [];
+        /** @var array<string, true> $addedMethods */
+        $addedMethods = [];
         /** @var array<string, array{source_id: string, kind: string, resolution: string, receiver_type: ?string, result_type: ?string, removed: list<array{target_ids: string, count: int}>, added: list<array{target_ids: string, count: int}>}> $groups */
         $groups = [];
         foreach ($report['events'] as $event) {
@@ -43,6 +54,17 @@ final readonly class TemporalRetargetProbe
                 throw new RuntimeException('Unexpected non-object history event.');
             }
             $eventKind = $event['kind'] ?? null;
+            if ($eventKind === 'method_removed' || $eventKind === 'method_added') {
+                if (!is_string($event['entity_id'] ?? null) || !str_starts_with($event['entity_id'], 'method:')) {
+                    throw new RuntimeException('Malformed method lifecycle event in history diff.');
+                }
+                if ($eventKind === 'method_removed') {
+                    $removedMethods[$event['entity_id']] = true;
+                } else {
+                    $addedMethods[$event['entity_id']] = true;
+                }
+                continue;
+            }
             if (!in_array($eventKind, ['relation_removed', 'relation_added'], true)) {
                 continue;
             }
@@ -77,9 +99,17 @@ final readonly class TemporalRetargetProbe
         }
         ksort($groups, SORT_STRING);
         $candidates = [];
+        $possibleRenames = [];
         $ambiguous = [];
+        $suppressedNonCallGroups = 0;
         foreach ($groups as $group) {
             if ($group['removed'] === [] || $group['added'] === []) {
+                continue;
+            }
+            // Declares-property / declares-method / inheritance set differences
+            // are not call retargets, even if they share one stable source ID.
+            if ($group['kind'] !== 'calls' || !str_starts_with($group['source_id'], 'method:')) {
+                ++$suppressedNonCallGroups;
                 continue;
             }
             if (count($group['removed']) !== 1 || count($group['added']) !== 1) {
@@ -97,6 +127,21 @@ final readonly class TemporalRetargetProbe
             if ($old['target_ids'] === $new['target_ids']) {
                 continue;
             }
+            // Only single-target method lifecycle can support even a possible
+            // rename. Multi-target groups stay opaque; no edge flattening.
+            if (!str_contains($old['target_ids'], ',')
+                && !str_contains($new['target_ids'], ',')
+                && isset($removedMethods[$old['target_ids']], $addedMethods[$new['target_ids']])
+            ) {
+                $possibleRenames[] = [
+                    'source_id' => $group['source_id'],
+                    'from_target_ids' => $old['target_ids'],
+                    'to_target_ids' => $new['target_ids'],
+                    'evidence' => 'method_removed_and_added',
+                    'assessment' => 'possible_rename_unverified',
+                ];
+                continue;
+            }
             $candidates[] = [
                 'source_id' => $group['source_id'],
                 'kind' => $group['kind'],
@@ -111,18 +156,55 @@ final readonly class TemporalRetargetProbe
             ];
         }
 
+        // Aggregate a repeated migration without conflating distinct relation
+        // contexts. This grouping is review evidence, never proof of intent.
+        /** @var array<string, array{from_target_ids: string, to_target_ids: string, resolution: string, receiver_type: ?string, result_type: ?string, source_ids: list<string>}> $migrations */
+        $migrations = [];
+        foreach ($candidates as $candidate) {
+            $data = [
+                'from_target_ids' => $candidate['from_target_ids'],
+                'to_target_ids' => $candidate['to_target_ids'],
+                'resolution' => $candidate['resolution'],
+                'receiver_type' => $candidate['receiver_type'],
+                'result_type' => $candidate['result_type'],
+            ];
+            $key = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            $migrations[$key] ??= [...$data, 'source_ids' => []];
+            $migrations[$key]['source_ids'][] = $candidate['source_id'];
+        }
+        ksort($migrations, SORT_STRING);
+        $repeatedMigrations = [];
+        foreach ($migrations as $migration) {
+            if (count($migration['source_ids']) < 2) {
+                continue;
+            }
+            sort($migration['source_ids'], SORT_STRING);
+            $repeatedMigrations[] = [
+                ...$migration,
+                'occurrence_count' => count($migration['source_ids']),
+                'assessment' => 'repeated_call_target_migration_unverified',
+            ];
+        }
+
         return [
-            'schema_version' => 1,
+            'schema_version' => 2,
             'source_type' => 'agent-map.history_diff',
             'evidence_level' => 'UNVERIFIED',
             'before_map_digest' => $report['before_map_digest'],
             'after_map_digest' => $report['after_map_digest'],
             'candidate_count' => count($candidates),
             'ambiguous_group_count' => count($ambiguous),
+            'suppressed_non_call_group_count' => $suppressedNonCallGroups,
+            'possible_rename_count' => count($possibleRenames),
+            'repeated_migration_group_count' => count($repeatedMigrations),
             'candidates' => $candidates,
             'ambiguous_groups' => $ambiguous,
+            'possible_renames' => $possibleRenames,
+            'repeated_migrations' => $repeatedMigrations,
             'limitations' => [
                 'A candidate is not verified call-site identity; independent changes may look like a retarget.',
+                'A possible rename requires removed/added method IDs but is NOT a verified rename.',
+                'Only calls are classified as retargets; declarations and set differences are excluded.',
                 'Multi-target relations are compared as opaque target_ids strings, not flattened edges.',
                 'No node rename, split, merge, authorization, or lifecycle conclusion is made.',
             ],
@@ -192,12 +274,51 @@ function testProbe(): void
     ) {
         throw new RuntimeException('Multi-target group was not preserved.');
     }
+    $propertyEvent = static function (string $direction, string $targets): array {
+        $event = testRelationEvent($direction, 'type:App\\Plan', $targets);
+        $field = $direction === 'removed' ? 'before' : 'after';
+        $event[$field]['kind'] = 'declares_property';
+        return $event;
+    };
+    $nonCall = $probe->analyze(testDiffReport([
+        $propertyEvent('removed', 'property:App\\Plan::$one'),
+        $propertyEvent('added', 'property:App\\Plan::$one,property:App\\Plan::$two'),
+    ]));
+    if ($nonCall['candidate_count'] !== 0 || $nonCall['suppressed_non_call_group_count'] !== 1) {
+        throw new RuntimeException('Declaration-set change was misclassified as retarget.');
+    }
+
+    $oldMethod = 'method:Example::oldName';
+    $newMethod = 'method:Example::newName';
+    $rename = $probe->analyze(testDiffReport([
+        testRelationEvent('removed', 'method:Caller::run', $oldMethod),
+        testRelationEvent('added', 'method:Caller::run', $newMethod),
+        ['kind' => 'method_removed', 'entity_id' => $oldMethod],
+        ['kind' => 'method_added', 'entity_id' => $newMethod],
+    ]));
+    if ($rename['candidate_count'] !== 0 || $rename['possible_rename_count'] !== 1) {
+        throw new RuntimeException('Method lifecycle rename evidence was ignored.');
+    }
+
+    $migrationEvents = [
+        ...$events,
+        testRelationEvent('removed', 'method:Second::run', 'method:Legacy::run'),
+        testRelationEvent('added', 'method:Second::run', 'method:Modern::run'),
+    ];
+    $migration = $probe->analyze(testDiffReport($migrationEvents));
+    if ($migration['candidate_count'] !== 2 || $migration['repeated_migration_group_count'] !== 1
+        || $migration['repeated_migrations'][0]['occurrence_count'] !== 2
+        || $migration !== $probe->analyze(testDiffReport(array_reverse($migrationEvents)))
+    ) {
+        throw new RuntimeException('Repeated migration grouping or determinism failed.');
+    }
+
     $bad = testDiffReport($events);
     $bad['truncated'] = true;
     try {
         $probe->analyze($bad);
     } catch (RuntimeException) {
-        echo "[PASS] semantic retarget probe: deterministic, ambiguous-safe, grouped-targets, truncated-fail-closed.\n";
+        echo "[PASS] semantic retarget probe: call-only, rename-evidence-separated, repeated-migrations, deterministic, ambiguous-safe, grouped-targets, truncated-fail-closed.\n";
         return;
     }
     throw new RuntimeException('Truncated report was accepted.');
