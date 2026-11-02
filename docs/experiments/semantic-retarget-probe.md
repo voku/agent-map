@@ -28,3 +28,18 @@ The workflow requests contents: read only. No external npm dependency, token, LL
 Zero real-history candidates is a measured negative result, not a failure. More than zero does NOT prove an actual retarget: independent edits in one source method can resemble a retarget. Grouped target_ids are opaque comma-joined strings from the existing owner output, never flattened into independently asserted edges. No source call-site identity, rename, split/merge, authorization, graph invertibility, architectural improvement, or safety is established.
 
 Before proposing a production API, manually classify actual candidates against Git source diffs, measure precision and ambiguity, and compare reviewer effort against existing history diff reports. Delete the experiment if the signal is not demonstrably useful; do not add a new runtime dependency merely because the results look plausible.
+
+
+## Frozen historical corpus (selected before execution)
+
+The first real-history run compared 0.22.5 with the PR head and found 17 structural events and **zero** retarget candidates. To test whether that was merely an uninformative adjacent pair, compare three fixed, non-overlapping release intervals, selected from publicly available source-changing commits before observing any probe output:
+
+| Case | Before commit | After commit | Motivation |
+| --- | --- | --- | --- |
+| 0.19.0 → 0.20.0 | `555c3ad40cb8023444695219fbfb79a119767f46` | `96bffea331cec063adba37e6659e5f3760202f9b` | 11 changed src/ files across 12 commits; rename/removal work |
+| 0.21.0 → 0.22.0 | `52c901f42f338bb6c1f29d5512873b05a751cdba` | `91e631249f3e3bcfd8b5783f600f2a6d8818cab2` | 2 changed src/ files across 10 commits; owner preparation and graph mechanics |
+| 0.22.0 → 0.22.5 | `91e631249f3e3bcfd8b5783f600f2a6d8818cab2` | `5e5b179176ce8b9fa961c795daf84d1c692bc064` | 43 changed src/ files across 41 commits; real broad implementation history |
+
+All endpoints are pinned exact Git commit SHAs (not moving branches or annotated tag objects). Each independent matrix job builds both historical source revisions using the same current PR build implementation, emits the original `history diff` plus candidate evidence, and checks repeated output parity. This is a **measurement corpus**, not a set of guaranteed positive retargets.
+
+Acceptance for usefulness requires a candidate tied to independently inspectable real source evolution, and improvement versus the existing event report; zero candidates across the corpus is evidence in favour of **not** adding the experimental classifier to production.
