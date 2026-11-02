@@ -89,7 +89,8 @@ jobs:
             if (($diff["truncated"] ?? true) || !is_int($diff["event_count"] ?? null)
                 || !is_int($probe["candidate_count"] ?? null)
                 || !is_int($probe["ambiguous_group_count"] ?? null)
-                || ($probe["evidence_level"] ?? null) !== "UNVERIFIED") {
+                || ($probe["evidence_level"] ?? null) !== "UNVERIFIED"
+                || ($probe["schema_version"] ?? null) !== 2) {
               throw new RuntimeException("Incomplete or falsely authoritative comparison evidence.");
             }
             $summary = "## Experimental semantic retarget probe\n\n";
@@ -194,6 +195,7 @@ jobs:
             if (($diff["truncated"] ?? true)
                 || ($diff["event_count"] ?? 0) < 1
                 || ($probe["evidence_level"] ?? null) !== "UNVERIFIED"
+                || ($probe["schema_version"] ?? null) !== 2
                 || ($probe["before_map_digest"] ?? null) !== ($diff["before_map_digest"] ?? null)
                 || ($probe["after_map_digest"] ?? null) !== ($diff["after_map_digest"] ?? null)) {
               throw new RuntimeException("Invalid frozen history comparison evidence.");
@@ -203,10 +205,48 @@ jobs:
             $summary .= "- Original history events: **" . $diff["event_count"] . "**\n";
             $summary .= "- Relation added/removed: **" . ($counts["relation_added"] ?? 0) . " / " . ($counts["relation_removed"] ?? 0) . "**\n";
             $summary .= "- Retarget candidates (UNVERIFIED): **" . $probe["candidate_count"] . "**\n";
-            $summary .= "- Ambiguous groups: **" . $probe["ambiguous_group_count"] . "**\n";
+            $summary .= "- Ambiguous call groups: **" . $probe["ambiguous_group_count"] . "**\n";
+            $summary .= "- Excluded non-call changes: **" . $probe["suppressed_non_call_group_count"] . "**\n";
+            $summary .= "- Possible method renames (NOT retargets): **" . $probe["possible_rename_count"] . "**\n";
+            $summary .= "- Repeated call-target migration groups: **" . $probe["repeated_migration_group_count"] . "**\n";
             $summary .= "- Repeated classification: byte-identical; no inference of identity or authority.\n";
+
+            // Frozen falsification corpus: assertions are grounded in source
+            // changes verified before adding this second classifier version.
+            if ($argv[3] === "019-to-020" && (
+                $probe["candidate_count"] !== 0
+                || $probe["suppressed_non_call_group_count"] < 3
+            )) {
+              throw new RuntimeException("Known property-set additions were classified as calls.");
+            }
+            if ($argv[3] === "021-to-022" && (
+                $probe["possible_rename_count"] < 1
+                || $probe["candidate_count"] !== 0
+            )) {
+              throw new RuntimeException("Known method rename was not separated.");
+            }
+            if ($argv[3] === "022-to-0225") {
+              $found = false;
+              foreach ($probe["repeated_migrations"] as $migration) {
+                if (str_ends_with($migration["from_target_ids"], "IndexReader::read")
+                    && str_ends_with($migration["to_target_ids"], "IndexReader::readForRoot")
+                    && $migration["occurrence_count"] >= 2) {
+                  $found = true;
+                }
+              }
+              if (!$found) {
+                throw new RuntimeException("Known source-backed call-target migration was not grouped.");
+              }
+            }
+
             file_put_contents((string) getenv("GITHUB_STEP_SUMMARY"), $summary, FILE_APPEND);
             echo $summary;
+            foreach (array_slice($probe["possible_renames"], 0, 5) as $rename) {
+              echo "POSSIBLE_RENAME " . json_encode($rename, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+            }
+            foreach (array_slice($probe["repeated_migrations"], 0, 10) as $migration) {
+              echo "MIGRATION " . json_encode($migration, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
+            }
             foreach (array_slice($probe["candidates"], 0, 10) as $candidate) {
               echo json_encode($candidate, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";
             }
