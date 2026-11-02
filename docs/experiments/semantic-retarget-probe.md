@@ -43,3 +43,21 @@ The first real-history run compared 0.22.5 with the PR head and found 17 structu
 All endpoints are pinned exact Git commit SHAs (not moving branches or annotated tag objects). Each independent matrix job builds both historical source revisions using the same current PR build implementation, emits the original `history diff` plus candidate evidence, and checks repeated output parity. This is a **measurement corpus**, not a set of guaranteed positive retargets.
 
 Acceptance for usefulness requires a candidate tied to independently inspectable real source evolution, and improvement versus the existing event report; zero candidates across the corpus is evidence in favour of **not** adding the experimental classifier to production.
+
+
+## Second iteration: falsify semantic claims, not just run a classifier
+
+The frozen real-history corpus falsified the generic matcher: all three 0.19→0.20 candidates were **property-set additions**, not call retargets. A 0.21→0.22 candidate came from a removed method (`buildMissing`) and an added method (`rebuild`), which suggests a **possible rename**, rather than an unrelated implementation change. A repeated change from `IndexReader::read` to `readForRoot` in 0.22→0.22.5 was independently verified in source.
+
+The revised experimental projection (`schema_version: 2`) therefore:
+
+- Counts only `calls` relations with a method source as retarget candidates. Excludes grouped property declarations and other non-call relations explicitly.
+- Separates single-target pairs backed by `method_removed` plus `method_added` into `possible_renames` with **UNVERIFIED** status. This is a *heuristic signal*, never proof of method identity.
+- Groups repeated call-target changes by identical old/new target IDs and analysis context, with the caller source IDs exposed. It does not flatten multi-target relations.
+- Keeps ambiguous pairings separate, refuses incomplete history diffs and retains full before/after SHA-256 map digest provenance.
+
+CI asserts these three **preselected** cases by exact historical commit identity. It must reject the earlier property-set false positives, separate the old/new method lifecycle evidence, and group a known real `read`→`readForRoot` migration. Assertions are not added merely to follow a favourable output.
+
+### Evaluation bar and remaining limits
+
+Positive results mean the classifier recognizes selected historical patterns, not that it improves code review. The grouping still cannot prove individual call-site identity or inferred rename equivalence. A future product change requires independent manual evaluation against the original diff: precision, false-positive rate, missed meaningful changes and time/attention saved. A non-call relation group suppressed by this experiment may still be useful *structural* evolution, already represented in the existing history diff. If the comparative benefit remains absent, close the draft and delete the proof rather than retaining experimental machinery as a permanent maintenance burden.
