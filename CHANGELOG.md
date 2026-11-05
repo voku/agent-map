@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.22.6 - 2026-11-05
+
+### Fixed
+
+- Preserve the project's own PHPStan `excludePaths` (both keyed and legacy flat forms) when generating the agent-map analysis overlay; generated exclusions must not accidentally expose project-excluded paths. Add a real PHPStan regression covering both configuration forms.
+- Avoid generating invalid PHP `use` declarations when method-copy and method-scaffold type expressions contain unions, intersections, nullable types, builtin/pseudo-types, or generic annotations. Extract importable class names individually and cover nullable/builtin and generic cases.
+
+### Changed
+
+- Prune default-excluded directories when discovering PHPStan analysis scope instead of traversing their PHP sources, with dedicated exclusion-pruning regression coverage.
+
 ## 0.22.5 - 2026-10-29
 
 ### Changed
