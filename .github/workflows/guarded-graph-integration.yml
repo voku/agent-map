@@ -96,7 +96,7 @@ jobs:
             printf '%s,%s,%s,%s\n' "${{ matrix.php }}" "$sample" "$guarded_ms" "$replacement_ms" >> "$RUNNER_TEMP/graph-build-paired.csv"
           done
           echo "Measurements are same-runner alternating single-file-comment edits, not full statistical speedup claims."
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: graph-build-paired-php-${{ matrix.php }}
