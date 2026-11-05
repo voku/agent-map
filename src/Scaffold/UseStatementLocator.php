@@ -15,12 +15,83 @@ final readonly class UseStatementLocator
         'string', 'int', 'float', 'bool', 'array', 'iterable', 'callable',
         'void', 'never', 'null', 'object', 'false', 'true', 'mixed',
         'self', 'static', 'parent',
+        'list', 'scalar', 'resource', 'numeric', 'array-key',
+        'class-string', 'callable-string', 'non-empty-string',
+        'positive-int', 'negative-int', 'non-negative-int', 'non-positive-int',
     ];
 
     public function isBuiltinType(string $type): bool
     {
         $clean = ltrim(strtolower(trim($type)), '?');
-        return in_array($clean, self::BUILTIN_TYPES, true);
+        if (in_array($clean, self::BUILTIN_TYPES, true)) {
+            return true;
+        }
+
+        if (str_contains($clean, '|') || str_contains($clean, '&')) {
+            $parts = preg_split('/[|&]/', $clean);
+            if ($parts !== false) {
+                foreach ($parts as $part) {
+                    if (!$this->isBuiltinType($part)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
+
+        if (($pos = strpos($clean, '<')) !== false) {
+            $base = substr($clean, 0, $pos);
+            if (in_array($base, self::BUILTIN_TYPES, true)) {
+                return true;
+            }
+        }
+
+        while (str_ends_with($clean, '[]')) {
+            $clean = substr($clean, 0, -2);
+            if (in_array($clean, self::BUILTIN_TYPES, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Extracts individual class FQNs that might need importing from a type expression.
+     *
+     * Handles unions (A|B), intersections (A&B), generics (Collection<A, B>, array<K, V>),
+     * array brackets (A[]), and nullable (?A).
+     *
+     * @return list<string>
+     */
+    public function extractClassTypes(string $typeExpression): array
+    {
+        $typeExpression = trim($typeExpression);
+        if ($typeExpression === '') {
+            return [];
+        }
+
+        $tokens = preg_split('/[|&<>,()\[\]\s]+/', $typeExpression, -1, PREG_SPLIT_NO_EMPTY);
+        if ($tokens === false) {
+            return [];
+        }
+
+        $classes = [];
+        foreach ($tokens as $token) {
+            $token = ltrim(trim($token), '?\\');
+            if ($token === '' || $this->isBuiltinType($token)) {
+                continue;
+            }
+            if (is_numeric($token) || str_starts_with($token, "'") || str_starts_with($token, '"')) {
+                continue;
+            }
+            if (preg_match('/^[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff\\\\]*$/', $token) === 1) {
+                $classes[] = $token;
+            }
+        }
+
+        return array_values(array_unique($classes));
     }
 
     /**
@@ -29,7 +100,7 @@ final readonly class UseStatementLocator
     public function findUseInsertion(string $source, string $typeFqn): ?array
     {
         $typeFqn = ltrim(trim($typeFqn), '\\');
-        if ($typeFqn === '' || $this->isBuiltinType($typeFqn)) {
+        if ($typeFqn === '' || $this->isBuiltinType($typeFqn) || preg_match('/^[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff\\\\]*$/', $typeFqn) !== 1) {
             return null;
         }
 

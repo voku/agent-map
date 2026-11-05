@@ -88,15 +88,15 @@ final readonly class MethodScaffoldPlanner
         // Check types for use statement insertion
         $typesToCheck = [];
         if ($returnType !== null) {
-            $cleanRet = ltrim(trim($returnType), '?');
-            if (!$useLocator->isBuiltinType($cleanRet)) {
-                $typesToCheck[] = $cleanRet;
+            foreach ($useLocator->extractClassTypes($returnType) as $type) {
+                $typesToCheck[] = $type;
             }
         }
         foreach ($parameters as $param) {
-            if (preg_match('/^\??([A-Za-z0-9_\\\\]+)\s+\$/', trim($param), $matches) === 1) {
-                if (!$useLocator->isBuiltinType($matches[1])) {
-                    $typesToCheck[] = $matches[1];
+            $typeOnly = preg_replace('/\s*\$[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*(\s*=.*)?$/', '', trim($param)) ?? '';
+            if ($typeOnly !== '') {
+                foreach ($useLocator->extractClassTypes($typeOnly) as $type) {
+                    $typesToCheck[] = $type;
                 }
             }
         }

@@ -157,13 +157,17 @@ final readonly class MethodCopyPlanner
         // Check types for use statement insertion in destination
         $typesToCheck = [];
         $retType = $method->method->resolvedReturnType ?? $method->method->nativeReturnType;
-        if ($retType !== null && !$useLocator->isBuiltinType($retType)) {
-            $typesToCheck[] = $retType;
+        if ($retType !== null) {
+            foreach ($useLocator->extractClassTypes($retType) as $type) {
+                $typesToCheck[] = $type;
+            }
         }
         foreach ($method->method->parameters as $param) {
             $pType = $param->resolvedType ?? $param->nativeType;
-            if ($pType !== null && !$useLocator->isBuiltinType($pType)) {
-                $typesToCheck[] = $pType;
+            if ($pType !== null) {
+                foreach ($useLocator->extractClassTypes($pType) as $type) {
+                    $typesToCheck[] = $type;
+                }
             }
         }
 

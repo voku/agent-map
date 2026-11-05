@@ -513,6 +513,45 @@ PHP);
         self::assertStringNotContainsString("\r", $this->applyEdits($dest, $plan->edits));
     }
 
+    public function testCopyMethodWithUnionTypesAndGenericAnnotationsDoesNotGenerateInvalidUseStatements(): void
+    {
+        $this->write('SourceWithUnion.php', <<<'PHP'
+<?php
+
+namespace App;
+
+final class SourceWithUnion
+{
+    /**
+     * @param ?int $multiplier
+     * @return array<string, mixed>
+     */
+    public static function computeScaled(?int $multiplier = null): array
+    {
+        return ['multiplier' => $multiplier ?? 1];
+    }
+}
+PHP);
+        $dest = <<<'PHP'
+<?php
+
+namespace Elsewhere;
+
+final class DestWithUnion
+{
+}
+PHP;
+        $this->write('DestWithUnion.php', $dest);
+
+        $plan = $this->plan('App\\SourceWithUnion::computeScaled', 'Elsewhere\\DestWithUnion');
+
+        self::assertSame(PlanStatus::SAFE, $plan->status, implode("\n", $plan->blockers));
+        $applied = $this->applyEdits($dest, $plan->edits);
+        self::assertStringNotContainsString('use int', $applied);
+        self::assertStringNotContainsString('use array', $applied);
+        self::assertStringContainsString('function computeScaled(?int $multiplier = null): array', $applied);
+    }
+
     /** @param list<\voku\AgentMap\Plan\PlanEdit> $edits */
     private function applyEdits(string $source, array $edits): string
     {
