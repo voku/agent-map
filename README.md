@@ -27,6 +27,20 @@ vendor/bin/agent-map context 'App\Service\UserService::save' --format=toon
 
 The important output is not a grand graph for admiring in meetings. It is a bounded, source-backed edit context that `agent-loop` and `agent-recall-compiler` can use without asking an LLM to rediscover the repository first.
 
+## Where to work in this repository
+
+Map is the read-only navigation and planning owner. Open the files for the specific question rather than treating one generated index as all repository truth:
+
+| Concern | Source of truth |
+| --- | --- |
+| Structural and semantic extraction | [`src/Extract/`](src/Extract/) and [`src/PhpStan/`](src/PhpStan/) |
+| Indexing, provenance and reconciliation | [`src/Index/`](src/Index/), [`src/Evidence/`](src/Evidence/) and [`src/Reconcile/`](src/Reconcile/) |
+| Known-symbol context and discovery | [`src/Context/`](src/Context/), [`src/Discovery/`](src/Discovery/) and [`src/Search/`](src/Search/) |
+| Explicit refactoring plans | [`src/Plan/`](src/Plan/), [`src/Rename/`](src/Rename/), [`src/Move/`](src/Move/) and [`src/Removal/`](src/Removal/) |
+| Supported behavior and limits | [Stability policy](docs/stability.md), [navigation dogfood](docs/dogfood/map-navigation-evidence.md) and [`tests/`](tests/) |
+
+A Map plan records bounded source evidence. It never approves a mutation; stale or ambiguous facts must remain explicit.
+
 ## Boundaries
 
 `agent-map` owns:
