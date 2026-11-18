@@ -15,6 +15,7 @@ final readonly class IndexWriter
         private CanonicalArrayNormalizer $normalizer = new CanonicalArrayNormalizer(),
         private CanonicalToonEncoder $toonEncoder = new CanonicalToonEncoder(),
         private MapGraphIndex $graphIndex = new MapGraphIndex(),
+        private MapDigestMarker $digestMarker = new MapDigestMarker(),
     ) {
     }
 
@@ -76,6 +77,9 @@ final readonly class IndexWriter
                 @unlink($temporaryRelations);
                 throw new RuntimeException('Unable to publish relations index: ' . $relationsFile);
             }
+
+            // Record the digest for the bytes just published so readers need not recompute it.
+            $this->digestMarker->publish($file, $index->mapDigest());
 
             // SQLite is a disposable acceleration index. Canonical JSON/TOON publishes first; the
             // graph store records their byte fingerprint and readers reject an older generation.
