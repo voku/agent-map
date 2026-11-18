@@ -9,9 +9,13 @@ use WeakMap;
 /**
  * Lazily built lookup tables for one {@see AgentMapIndex} instance.
  *
- * An index is a deep-immutable value: the class and every entry it holds are
- * `readonly`, so a lookup table built once stays correct for the instance's
- * lifetime. Planners ask the same index for incoming/outgoing relations,
+ * An index is treated as a deep-immutable value: the class and every entry it
+ * holds are `readonly`, so a lookup table built once stays correct for the
+ * instance's lifetime. `readonly` does not freeze an array slot that is still
+ * a PHP reference (`$r = &$files[0]` before construction keeps `$r` writable),
+ * so a caller that builds an index from referenced arrays and then mutates
+ * them gets stale answers. Indexes decoded by IndexReader or built by
+ * AgentMapBuilder never contain references. Planners ask the same index for incoming/outgoing relations,
  * methods and symbols dozens of times per request; answering each with a
  * full scan of every relation or every file made a single edit-context plan
  * quadratic in practice and spent most of its time re-serialising the whole

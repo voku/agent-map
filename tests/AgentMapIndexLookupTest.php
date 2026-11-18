@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\LocalBindingEntry;
+use voku\AgentMap\Index\LocalExitEntry;
 use voku\AgentMap\Index\MethodEntry;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\SymbolEntry;
@@ -66,7 +67,51 @@ final class AgentMapIndexLookupTest extends TestCase
 
         self::assertSame(['b1', 'b3'], array_map(static fn (LocalBindingEntry $b): string => $b->id, $index->bindingsFor('method:App\A::run')));
         self::assertSame([], $index->bindingsFor('method:App\Nope::x'));
-        self::assertSame([], $index->exitsFor('method:App\A::run'));
+        self::assertSame(['e1', 'e3'], array_map(static fn (LocalExitEntry $e): string => $e->id, $index->exitsFor('method:App\A::run')));
+        self::assertSame(['e2'], array_map(static fn (LocalExitEntry $e): string => $e->id, $index->exitsFor('method:App\B::help')));
+        self::assertSame([], $index->exitsFor('method:App\Nope::x'));
+    }
+
+    public function testDigestMatchesTheUncachedDefinition(): void
+    {
+        $index = $this->index();
+        $data = $index->toArray();
+        unset($data['root']);
+        $expected = 'sha256:' . hash('sha256', json_encode($data, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+        self::assertSame($expected, $index->mapDigest());
+    }
+
+    public function testBuildingTablesDoesNotChangeEqualitySerialisationOrDump(): void
+    {
+        $fresh = $this->index();
+        $used = $this->index();
+        $before = [$used->toArray(), serialize($used), var_export($used, true)];
+
+        $this->touchEveryLookup($used);
+
+        self::assertEquals($fresh, $used);
+        self::assertSame($before, [$used->toArray(), serialize($used), var_export($used, true)]);
+        self::assertSame(serialize($fresh), serialize($used));
+    }
+
+    public function testTablesAreIsolatedPerIndexInstance(): void
+    {
+        $small = $this->index();
+        $large = $this->index(extraRelation: true);
+
+        // Warm the smaller index first: a shared table would leak its answers into the other index.
+        $this->touchEveryLookup($small);
+        self::assertSame([], $small->outgoing('method:App\B::help'));
+        self::assertCount(1, $large->outgoing('method:App\B::help'));
+        self::assertCount(1, $large->incoming('method:App\A::run'));
+        self::assertSame([], $small->incoming('method:App\A::run'));
+        self::assertNotSame($small->mapDigest(), $large->mapDigest());
+
+        // An index rebuilt from the other's serialised form gets its own, equally correct tables.
+        $copy = AgentMapIndex::fromArray($large->toArray());
+        self::assertEquals($large->outgoing('method:App\B::help'), $copy->outgoing('method:App\B::help'));
+        self::assertSame($large->mapDigest(), $copy->mapDigest());
     }
 
     public function testMapDigestIsStableAndMatchesAnEqualIndex(): void
@@ -121,7 +166,25 @@ final class AgentMapIndexLookupTest extends TestCase
                 new LocalBindingEntry('b2', 'method:App\B::help', '$y', 'src/B.php', 3, 3, 'int', 'literal'),
                 new LocalBindingEntry('b3', 'method:App\A::run', '$z', 'src/A.php', 5, 5, 'int', 'literal'),
             ],
+            localExits: [
+                new LocalExitEntry('e1', 'method:App\A::run', 'return', 'src/A.php', 9, 9, 'int'),
+                new LocalExitEntry('e2', 'method:App\B::help', 'throw', 'src/B.php', 4, 4, 'RuntimeException'),
+                new LocalExitEntry('e3', 'method:App\A::run', 'return', 'src/A.php', 10, 10, 'null'),
+            ],
         );
+    }
+
+    private function touchEveryLookup(AgentMapIndex $index): void
+    {
+        $index->incoming('method:App\B::help');
+        $index->outgoing('method:App\A::run');
+        $index->resolvedMethodById('method:App\B::help');
+        $index->symbolById('class:App\B');
+        $index->symbolById('type:App\B');
+        $index->file('src/A.php');
+        $index->bindingsFor('method:App\A::run');
+        $index->exitsFor('method:App\A::run');
+        $index->mapDigest();
     }
 
     /** @return list<RelationEntry> */
