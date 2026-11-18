@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Template reference scanning is now pluggable through `voku\AgentMap\Reference\Template\TemplateDialect`. `NonPhpReferenceScanner` takes an optional list of dialects (default: Blade, Twig, Smarty) so projects with other engines, file suffixes or Smarty delimiters (`new SmartyDialect('<{', '}>')`) can plug in their own. See `docs/experiments/template-engine-evidence.md`.
+- Smarty template boundaries now follow the Smarty 5 lexer: `{* ... *}` comments and `{literal}...{/literal}` blocks are no longer reported as template references, nested tags (`{$a[{$b}]}`, `{"x{$y}"}`) and quoted delimiters no longer end a tag early, and auto-literal (`{ ` followed by whitespace) is respected.
+- Smarty `.name` (array access) and Blade `->name` (a property) are no longer reported as a possible call of the getter `getName()` / `isName()` / `hasName()`; only Twig's attribute lookup reaches getters.
 - Answer `AgentMapIndex::incoming()`, `outgoing()`, `resolvedMethodById()`, `symbolById()`, `file()`, `bindingsFor()`, `exitsFor()` and `mapDigest()` from lookup tables built once per immutable index instead of rescanning every relation/file (and re-serialising the whole map for the digest) on each call. Tables live in a `WeakMap` and never change index state, equality or serialisation. On a 376-file / 29,473-relation self map, 400 sequential `EditContextPlanner::plan()` calls in one process went from 286 ms to 54 ms per plan (PHP 8.3, single local run) with byte-identical JSON output; a single cold plan is unchanged because it still builds the tables and the digest once. The tables add about 5.2 MB to a 39 MB loaded index; peak memory for the 400-plan run is unchanged at 114 MB.
 
 ## 0.22.6 - 2026-11-05

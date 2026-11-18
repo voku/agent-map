@@ -8,9 +8,15 @@ use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
+use voku\AgentMap\Reference\Template\RegexTemplateDialect;
+use voku\AgentMap\Reference\Template\SmartyDialect;
+use voku\AgentMap\Reference\Template\TemplateDialect;
 
 /**
- * Finds mentions of a PHP symbol in Markdown documents and Twig / Smarty / Blade templates.
+ * Finds mentions of a PHP symbol in Markdown documents and in templates.
+ *
+ * Template engines are pluggable {@see TemplateDialect}s; the default set covers Twig, Blade and Smarty with their
+ * default settings. A project with other delimiters, suffixes or engines passes its own list.
  *
  * Text matching is not semantics: a template variable has no static type and prose is ambiguous.
  * Every hit therefore carries a confidence and the report only lists residue for a later, separately
@@ -26,8 +32,20 @@ final class NonPhpReferenceScanner
     private const HISTORICAL_FILES = ['changelog', 'upgrading', 'changes', 'history', 'news', 'releases', 'release_notes'];
     private const MAX_FILE_BYTES = 1_000_000;
 
-    public function __construct(private readonly int $maxReferences = 200)
+    /** @var list<TemplateDialect> */
+    private readonly array $dialects;
+
+    /** @param list<TemplateDialect>|null $dialects checked in order, the first that handles a file wins; null = defaults */
+    public function __construct(private readonly int $maxReferences = 200, ?array $dialects = null)
     {
+        $this->dialects = $dialects ?? self::defaultDialects();
+    }
+
+    /** @return list<TemplateDialect> */
+    public static function defaultDialects(): array
+    {
+        // Blade first: `.blade.php` must not be mistaken for anything else.
+        return [RegexTemplateDialect::blade(), RegexTemplateDialect::twig(), new SmartyDialect()];
     }
 
     public function scan(string $root, ReferenceTarget ...$targets): NonPhpReferenceReport
@@ -40,7 +58,7 @@ final class NonPhpReferenceScanner
         $references = [];
         $total = 0;
         $scanned = 0;
-        foreach ($this->files($realRoot) as $relative => $engine) {
+        foreach ($this->files($realRoot) as $relative => $dialect) {
             $source = @file_get_contents($realRoot . '/' . $relative);
             if (!is_string($source) || $source === '') {
                 continue;
@@ -49,9 +67,9 @@ final class NonPhpReferenceScanner
             $historical = $this->isHistorical($relative);
             $found = [];
             foreach ($targets as $target) {
-                $hits = $engine === 'markdown'
+                $hits = $dialect === null
                     ? $this->markdown($source, $relative, $target, $historical)
-                    : $this->template($source, $relative, $target, $historical);
+                    : $this->template($source, $relative, $target, $historical, $dialect);
                 foreach ($hits as $hit) {
                     $found[$hit->startFilePos . ':' . $hit->endFilePos] ??= $hit;
                 }
@@ -68,7 +86,7 @@ final class NonPhpReferenceScanner
         return new NonPhpReferenceReport($references, $total, $scanned);
     }
 
-    /** @return array<string, string> relative path => engine (markdown|template), sorted by path */
+    /** @return array<string, TemplateDialect|null> relative path => dialect (null for Markdown), sorted by path */
     private function files(string $root): array
     {
         $files = [];
@@ -83,16 +101,18 @@ final class NonPhpReferenceScanner
             if (!$file->isFile() || $file->isLink() || $file->getSize() > self::MAX_FILE_BYTES) {
                 continue;
             }
+            $relative = ltrim(str_replace('\\', '/', substr($file->getPathname(), strlen($root))), '/');
             $name = strtolower($file->getFilename());
-            $engine = match (true) {
-                str_ends_with($name, '.md'), str_ends_with($name, '.markdown') => 'markdown',
-                str_ends_with($name, '.twig'), str_ends_with($name, '.tpl'), str_ends_with($name, '.blade.php') => 'template',
-                default => null,
-            };
-            if ($engine === null) {
+            if (str_ends_with($name, '.md') || str_ends_with($name, '.markdown')) {
+                $files[$relative] = null;
                 continue;
             }
-            $files[ltrim(str_replace('\\', '/', substr($file->getPathname(), strlen($root))), '/')] = $engine;
+            foreach ($this->dialects as $dialect) {
+                if ($dialect->handles($relative)) {
+                    $files[$relative] = $dialect;
+                    break;
+                }
+            }
         }
         ksort($files, SORT_STRING);
 
@@ -145,25 +165,15 @@ final class NonPhpReferenceScanner
     }
 
     /** @return list<NonPhpReference> */
-    private function template(string $source, string $path, ReferenceTarget $target, bool $historical): array
+    private function template(string $source, string $path, ReferenceTarget $target, bool $historical, TemplateDialect $dialect): array
     {
-        $regions = [];
-        $patterns = str_ends_with(strtolower($path), '.tpl')
-            ? ['/\{(?!\s)[^{}]*\}/s']
-            : ['/\{\{.*?\}\}/s', '/\{%.*?%\}/s', '/\{#.*?#\}/s', '/\{!!.*?!!\}/s', '/@\w+\([^\n]*\)/'];
-        foreach ($patterns as $pattern) {
-            if (preg_match_all($pattern, $source, $hits, PREG_OFFSET_CAPTURE) > 0) {
-                foreach ($hits[0] as [$text, $position]) {
-                    $regions[] = [$position, $position + strlen($text)];
-                }
-            }
-        }
+        $regions = $dialect->codeRegions($source);
         if ($regions === []) {
             return [];
         }
 
         $found = [];
-        foreach ($this->matches($source, $target, false) as [$position, $text, $confidence]) {
+        foreach ($this->matches($source, $target, false, $dialect->attributeReachesGetter()) as [$position, $text, $confidence]) {
             if (!$this->within($position, $regions)) {
                 continue;
             }
@@ -185,7 +195,7 @@ final class NonPhpReferenceScanner
     /**
      * @return list<array{int, string, string, bool}> position, matched text, confidence, only-inside-code
      */
-    private function matches(string $text, ReferenceTarget $target, bool $markdown): array
+    private function matches(string $text, ReferenceTarget $target, bool $markdown, bool $attributeReachesGetter = false): array
     {
         $segments = array_map(static fn (string $segment): string => preg_quote($segment, '/'), explode('\\', $target->classFqn));
         $fqcn = '\\\\?' . implode('\\\\{1,2}', $segments);
@@ -207,8 +217,8 @@ final class NonPhpReferenceScanner
         $this->collect($hits, '/(?:->|::|\.)' . $member . '(?!\w)/', $text, NonPhpReference::CONFIDENCE_MEMBER_NAME_ONLY, $markdown);
         if ($markdown) {
             $this->collect($hits, '/(?<![\w$>:.])' . $member . '\s*\(/', $text, NonPhpReference::CONFIDENCE_MEMBER_NAME_ONLY, true);
-        } elseif (preg_match('/^(?:get|is|has)([A-Z]\w*)$/', $target->member, $getter) === 1) {
-            // Twig and Smarty reach getName()/isName()/hasName() through the attribute `.name`.
+        } elseif ($attributeReachesGetter && preg_match('/^(?:get|is|has)([A-Z]\w*)$/', $target->member, $getter) === 1) {
+            // Twig reaches getName()/isName()/hasName() through the attribute `.name`; Smarty and Blade do not.
             $this->collect($hits, '/(?:->|\.)' . preg_quote(lcfirst($getter[1]), '/') . '(?!\w)/', $text, NonPhpReference::CONFIDENCE_MEMBER_NAME_ONLY, false);
         }
 
