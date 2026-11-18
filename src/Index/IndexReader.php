@@ -118,6 +118,7 @@ final class IndexReader
             throw new RuntimeException('Invalid agent-map index: ' . $file);
         }
 
+        $relationsBytes = null;
         if ($loadRelations) {
             $relationsFile = $this->resolveRelationsFile($file, $data);
             if ($relationsFile === null) {
@@ -135,6 +136,7 @@ final class IndexReader
             if (is_file($relationsFile)) {
                 $relationsContent = file_get_contents($relationsFile);
                 if (is_string($relationsContent)) {
+                    $relationsBytes = $relationsContent;
                     $relToon = str_ends_with(strtolower($relationsFile), '.toon');
                     $relData = $relToon ? $this->decodeToon($relationsContent) : $this->decodeJson($relationsContent);
                     if ($relData === null) {
@@ -175,6 +177,13 @@ final class IndexReader
         }
 
         $index = AgentMapIndex::fromArray($data);
+        // Only a complete load is the map the writer hashed; a partial one keeps computing its own digest.
+        if ($sections === null && is_string($relationsBytes)) {
+            $digest = (new MapDigestMarker())->verifiedDigest($file, $content, $relationsBytes);
+            if ($digest !== null) {
+                AgentMapIndexLookup::for($index)->seedMapDigest($digest);
+            }
+        }
         self::cacheIndex($cacheKey, $index);
 
         return $index;

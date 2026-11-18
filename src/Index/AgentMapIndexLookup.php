@@ -197,6 +197,16 @@ final class AgentMapIndexLookup
         return $this->exitsByOwner[$ownerId] ?? [];
     }
 
+    /**
+     * Supplies a digest that is already known for exactly this index's content, such as the
+     * build-time value a reader verified against the artifact bytes it decoded. The caller
+     * is responsible for that guarantee; a later mapDigest() call returns this value.
+     */
+    public function seedMapDigest(string $mapDigest): void
+    {
+        $this->mapDigest ??= $mapDigest;
+    }
+
     /** @param callable(): string $compute */
     public function mapDigest(callable $compute): string
     {
