@@ -49,10 +49,12 @@ final readonly class MapGraphIndex
 
     /**
      * @param array{revision: string, fingerprint: string}|null $previousIdentity
+     * @param string|null $mapDigest digest of the published map when the caller already knows it;
+     *                               defaults to the digest of `$index`
      */
-    public function rebuild(AgentMapIndex $index, string $indexFile, ?array $previousIdentity = null): void
+    public function rebuild(AgentMapIndex $index, string $indexFile, ?array $previousIdentity = null, ?string $mapDigest = null): void
     {
-        $mapDigest = $index->mapDigest();
+        $mapDigest ??= $index->mapDigest();
         $this->publishGeneration($indexFile, $mapDigest);
 
         $fingerprint = $this->fingerprint->forIndexFile($indexFile);

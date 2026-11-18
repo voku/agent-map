@@ -38,6 +38,8 @@ final readonly class IndexWriter
 
         try {
             $format ??= str_ends_with(strtolower($file), '.toon') ? 'toon' : 'json';
+            // A torn publish below must not leave the previous build's digest marker in place.
+            $this->digestMarker->discard($file);
             $payload = $index->toArray();
 
             $relationsFile = MapArtifactPaths::relationsFileFor($file);
@@ -78,14 +80,21 @@ final readonly class IndexWriter
                 throw new RuntimeException('Unable to publish relations index: ' . $relationsFile);
             }
 
-            // Record the digest for the bytes just published so readers need not recompute it.
-            $this->digestMarker->publish($file, $index->mapDigest());
+            // Record the digest a reader computes from the bytes just published. The canonical
+            // writer normalises nested maps (for example it sorts template keys), so the in-memory
+            // index can hash differently from the map every later reader decodes. Release the
+            // serialised payloads first: the read-back holds a second full copy of the map.
+            unset($payload, $relationsPayload);
+            IndexReader::clearCache();
+            $publishedDigest = (new IndexReader())->read($file)->mapDigest();
+            $this->digestMarker->publish($file, $publishedDigest);
 
             // SQLite is a disposable acceleration index. Canonical JSON/TOON publishes first; the
             // graph store records their byte fingerprint and readers reject an older generation.
             // Keep the writer lock through rebuild so the in-memory index, canonical artifacts and
             // graph provenance cannot be mixed with another writer's generation.
-            $this->graphIndex->rebuild($index, $file, $previousGraphIdentity);
+            // The graph revision is the same published digest, so it agrees with what readers compute.
+            $this->graphIndex->rebuild($index, $file, $previousGraphIdentity, $publishedDigest);
             clearstatcache(true, $file);
             clearstatcache(true, $relationsFile);
             IndexReader::clearCache();

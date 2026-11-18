@@ -38,7 +38,9 @@ final readonly class MapDigestMarker
      * Records the digest of the artifacts currently published at `$indexFile`.
      *
      * Call it after both artifacts are renamed into place and while holding the writer
-     * lock. Failure is not fatal: without a marker readers simply recompute the digest.
+     * lock, with the digest of the map decoded from those artifacts (not of the in-memory
+     * index that was serialised). Failure is not fatal: without a marker readers simply
+     * recompute the digest.
      */
     public function publish(string $indexFile, string $mapDigest): void
     {
@@ -63,6 +65,14 @@ final readonly class MapDigestMarker
         if (@file_put_contents($temporary, $content) === false || !@rename($temporary, $markerFile)) {
             @unlink($temporary);
             // Never leave a previous build's marker behind a failed publish.
+            @unlink($markerFile);
+        }
+    }
+
+    public function discard(string $indexFile): void
+    {
+        $markerFile = MapArtifactPaths::mapDigestFor($indexFile);
+        if (is_file($markerFile)) {
             @unlink($markerFile);
         }
     }

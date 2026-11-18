@@ -54,7 +54,6 @@ final class MapDigestMarkerTest extends TestCase
             (new IndexWriter())->write($index, $file);
 
             $marker = $this->marker($file);
-            self::assertSame($this->computedDigest($index), $marker['map_digest'], $name);
 
             // Without the marker the reader recomputes; with it the reader trusts it. Both must agree.
             $withMarker = $this->read($file)->mapDigest();
@@ -65,6 +64,44 @@ final class MapDigestMarkerTest extends TestCase
             self::assertSame($recomputed, $withMarker, $name);
             self::assertSame($marker['map_digest'], $recomputed, $name);
         }
+    }
+
+    public function testMarkerRecordsTheDigestOfTheNormalisedArtifactNotTheInMemoryIndex(): void
+    {
+        // The canonical writer sorts nested map keys, so this index hashes differently in memory
+        // than the map every reader decodes. The marker has to agree with the reader.
+        $index = $this->index();
+        self::assertSame(['Z', 'A'], array_keys($index->files[0]->symbols[0]->templates));
+
+        foreach (['php-symbols.json', 'php-symbols.toon'] as $name) {
+            $file = $this->root . '/' . $name;
+            (new IndexWriter())->write($index, $file);
+            $marker = $this->marker($file)['map_digest'];
+
+            unlink(MapArtifactPaths::mapDigestFor($file));
+            $read = $this->read($file);
+
+            self::assertSame(['A', 'Z'], array_keys($read->files[0]->symbols[0]->templates), $name);
+            self::assertNotSame($this->computedDigest($index), $this->computedDigest($read), $name . ': fixture must exercise normalisation');
+            self::assertSame($this->computedDigest($read), $marker, $name);
+
+            // The graph generation is stamped with the same published digest.
+            $generation = json_decode((string) file_get_contents(MapArtifactPaths::graphGenerationFor($file)), true);
+            self::assertSame($marker, is_array($generation) ? ($generation['map_digest'] ?? null) : null, $name);
+        }
+    }
+
+    public function testRewriteDiscardsThePreviousMarkerBeforePublishing(): void
+    {
+        $file = $this->root . '/php-symbols.json';
+        $writer = new IndexWriter();
+        $writer->write($this->index(), $file);
+        $this->forgeMarkerDigest($file);
+
+        $writer->write($this->index(extraRelation: true), $file);
+
+        self::assertNotSame(self::FORGED, $this->marker($file)['map_digest']);
+        self::assertSame($this->computedDigest($this->read($file)), $this->marker($file)['map_digest']);
     }
 
     public function testReaderUsesTheMarkerOnlyForTheExactBytesItRecords(): void
@@ -179,7 +216,7 @@ final class MapDigestMarkerTest extends TestCase
     private function index(bool $extraRelation = false): AgentMapIndex
     {
         $method = new MethodEntry('validate', 'public', 2, 4, nativeReturnType: '?object', resolvedReturnType: 'User|null', reconciliationStatus: 'semantic_enrichment');
-        $symbol = new SymbolEntry('class', 'Validator', 'Demo\\Validator', 1, 5, [$method], reconciliationStatus: 'confirmed');
+        $symbol = new SymbolEntry('class', 'Validator', 'Demo\\Validator', 1, 5, [$method], templates: ['Z' => 'object', 'A' => 'object'], reconciliationStatus: 'confirmed');
         $relations = [
             RelationEntry::create('method:Demo\\Caller::run', 'calls', ['method:Demo\\Validator::validate'], 'src/Caller.php', 10, 10, 'phpstan_resolved', 'Demo\\Validator', 'User|null', 120, 150),
         ];
