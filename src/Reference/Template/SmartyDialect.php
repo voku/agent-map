@@ -36,6 +36,16 @@ final readonly class SmartyDialect implements TemplateDialect
         return 'smarty';
     }
 
+    public function leftDelimiter(): string
+    {
+        return $this->leftDelimiter;
+    }
+
+    public function rightDelimiter(): string
+    {
+        return $this->rightDelimiter;
+    }
+
     public function handles(string $relativePath): bool
     {
         $name = strtolower($relativePath);

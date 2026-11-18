@@ -1,7 +1,8 @@
 # Template engine evidence
 
-Status: design note plus a first, shipped slice (pluggable dialects for residue scanning). Nothing here changes plan
-status, edits, blockers or blind spots: template evidence stays residue until a stronger tier is measured.
+Status: design note plus two shipped slices: pluggable dialects for residue scanning (tier 1), and an experimental
+Smarty 5 evidence API for tiers 2 and 3. Nothing here changes plan status, edits, blockers or blind spots, the Map
+schema or the CLI: template evidence stays residue until a stronger tier is measured.
 
 ## Question
 
@@ -47,7 +48,7 @@ $scanner = new NonPhpReferenceScanner(200, [
 ]);
 ```
 
-## Tier 2: parser-backed template facts (proposed)
+## Tier 2: parser-backed template facts (Smarty: experimental API; other engines: proposed)
 
 A template adapter turns one engine's files into one normalized fact set:
 
@@ -74,7 +75,7 @@ Preferred source per engine, strongest first:
    included in the PHP index.
 4. **Tier 1 dialects** remain the fallback.
 
-## Tier 3: typed render context (proposed)
+## Tier 3: typed render context (Smarty: experimental API, static types only; other engines: proposed)
 
 The step that turns residue into evidence is the PHP side that renders a template:
 
@@ -104,12 +105,50 @@ Static extraction of those registrations gives `|price` → `Fmt::price()` edges
 can list every template use. A registration whose callback is not statically resolvable is reported as
 `unavailable`.
 
+## Smarty 5 experimental API
+
+```php
+use voku\AgentMap\Reference\Template\Smarty\SmartyEvidenceBuilder;
+use voku\AgentMap\Reference\Template\SmartyDialect;
+
+$report = (new SmartyEvidenceBuilder(new SmartyDialect('{', '}'), templateDirs: ['templates']))->build($projectRoot);
+$report->referencesTo('App\\Model\\User', 'getName'); // list<SmartyTypedReference>
+$report->gaps;                                         // what could not be resolved
+$report->toArray();                                    // schema `agent-map-smarty-evidence@experimental`
+```
+
+It reads files only and never loads Smarty. Pieces, each usable on its own:
+
+- `SmartyTemplateAnalyzer`: per template, `TemplateFact`s for tag names, `{include}` / `{extends}` (static target or
+  dynamic, `u=$user` arguments), `$var->member` accesses, modifiers and static references, with exact byte ranges.
+- `SmartyRenderSiteExtractor`: per PHP file, `display()` / `fetch()` sites with the variables `assign()`ed to the same
+  receiver in the same function (including `createTemplate()` children), and `registerPlugin()` / `registerClass()` /
+  `addExtension()` registrations with resolved callbacks. A site is kept only when its receiver is statically a
+  Smarty object or its template name is a Smarty template, because `display()` / `fetch()` are common method names.
+- `SmartyEvidenceBuilder`: joins both, flows variables through includes and extends, and reports typed references
+  (`render_context_typed`, `registered_plugin`, `static_reference`) plus gaps (`dynamic_render`, `dynamic_include`,
+  `dynamic_extends`, `unknown_template`, `untyped_variable`, `unresolved_registration`).
+
+Not covered yet, by design of this slice:
+
+- types that need inference: method return values, `{foreach $users as $user}` element types, `@var` annotations.
+  These become gaps (`untyped_variable`), not guesses; a PHPStan-backed pass is the natural next step;
+- members after the first one in a chain (`$user->getAddress()->getCity()` reports only `getAddress`);
+- `assign()` and `display()` on the same receiver in different functions (a base controller that assigns and a
+  child that displays);
+- Smarty 3/4 differences (unregistered PHP functions used as modifiers are not modelled).
+
 ## Mutation side (`agent-edit`, proposed)
 
-- Validate edited templates with the engine (Smarty compile without execution, Twig `Environment::parse()`), using the
+Today agent-edit needs nothing new to *apply* a template change: a host can turn template references into a
+`source_edit_plan` with `find` anchors (or exact text from the byte ranges) and `expected_source_sha256`. What agent-edit
+cannot do yet is *validate* a template or *prove* that every template use was changed. Those need:
+
+
+- validation of edited templates with the engine (Smarty compile without execution, Twig `Environment::parse()`), using the
   project's configured delimiters and registered plugins. Without a configured engine the result is `unvalidated`,
   never `passed`.
-- Map-backed template plans only once measured demand exists: template move (file + includes + render sites), and
+- Map-backed template plans, only once measured demand exists: template move (file + includes + render sites), and
   template-variable rename (the `assign()` key plus every use in the template and its includes).
 
 ## Measurement before promotion
