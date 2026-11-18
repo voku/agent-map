@@ -186,68 +186,44 @@ final readonly class AgentMapIndex
     /** @return list<RelationEntry> */
     public function incoming(string $symbolId, ?string $kind = null): array
     {
-        $matches = [];
-        foreach ($this->relations as $relation) {
-            if (($kind === null || $relation->kind === $kind) && in_array($symbolId, $relation->targetIds, true)) {
-                $matches[] = $relation;
-            }
-        }
-
-        return $matches;
+        return $this->ofKind(AgentMapIndexLookup::for($this)->incoming($this, $symbolId), $kind);
     }
 
     /** @return list<RelationEntry> */
     public function outgoing(string $symbolId, ?string $kind = null): array
     {
-        $matches = [];
-        foreach ($this->relations as $relation) {
-            if ($relation->sourceId === $symbolId && ($kind === null || $relation->kind === $kind)) {
-                $matches[] = $relation;
-            }
+        return $this->ofKind(AgentMapIndexLookup::for($this)->outgoing($this, $symbolId), $kind);
+    }
+
+    /**
+     * @param list<RelationEntry> $relations
+     * @return list<RelationEntry>
+     */
+    private function ofKind(array $relations, ?string $kind): array
+    {
+        if ($kind === null) {
+            return $relations;
         }
 
-        return $matches;
+        return array_values(array_filter($relations, static fn (RelationEntry $relation): bool => $relation->kind === $kind));
     }
 
     public function resolvedMethodById(string $id): ?ResolvedMethod
     {
-        foreach ($this->files as $file) {
-            foreach ($file->symbols as $symbol) {
-                foreach ($symbol->methods as $method) {
-                    if ($symbol->methodId($method) === $id) {
-                        return new ResolvedMethod($id, $file, $symbol, $method);
-                    }
-                }
-            }
-        }
+        $match = AgentMapIndexLookup::for($this)->method($this, $id);
 
-        return null;
+        return $match === null ? null : new ResolvedMethod($id, $match[0], $match[1], $match[2]);
     }
 
     /** @return array{file: FileEntry, symbol: SymbolEntry}|null */
     public function symbolById(string $id): ?array
     {
+        $lookup = AgentMapIndexLookup::for($this);
         if (str_starts_with($id, 'type:')) {
-            $fqn = substr($id, 5);
-            foreach ($this->files as $file) {
-                foreach ($file->symbols as $symbol) {
-                    if (ltrim($symbol->fqn, '\\') === ltrim($fqn, '\\')) {
-                        return ['file' => $file, 'symbol' => $symbol];
-                    }
-                }
-            }
-            return null;
+            return $lookup->symbolByFqn($this, substr($id, 5));
         }
 
-        foreach ($this->files as $file) {
-            foreach ($file->symbols as $symbol) {
-                if ($symbol->id() === $id) {
-                    return ['file' => $file, 'symbol' => $symbol];
-                }
-            }
-        }
-
-        return null;
+        return $lookup->symbol($this, $id);
     }
 
     public function file(string $path): ?FileEntry
@@ -256,13 +232,7 @@ final readonly class AgentMapIndex
         if (str_starts_with($path, './')) {
             $path = substr($path, 2);
         }
-        foreach ($this->files as $file) {
-            if ($file->path === $path) {
-                return $file;
-            }
-        }
-
-        return null;
+        return AgentMapIndexLookup::for($this)->file($this, $path);
     }
 
     /** @return list<array{path: string, reason: string}> */
@@ -457,6 +427,13 @@ final readonly class AgentMapIndex
 
     public function mapDigest(): string
     {
+        // The digest covers the whole map; serialising it again for every caller of an
+        // immutable index cost more than the rest of an edit-context plan put together.
+        return AgentMapIndexLookup::for($this)->mapDigest($this->computeMapDigest(...));
+    }
+
+    private function computeMapDigest(): string
+    {
         $data = $this->toArray();
         unset($data['root']);
         $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
@@ -484,14 +461,7 @@ final readonly class AgentMapIndex
      */
     public function bindingsFor(string $ownerId): array
     {
-        $matches = [];
-        foreach ($this->localBindings as $binding) {
-            if ($binding->ownerId === $ownerId) {
-                $matches[] = $binding;
-            }
-        }
-
-        return $matches;
+        return AgentMapIndexLookup::for($this)->bindings($this, $ownerId);
     }
 
     /**
@@ -499,14 +469,7 @@ final readonly class AgentMapIndex
      */
     public function exitsFor(string $ownerId): array
     {
-        $matches = [];
-        foreach ($this->localExits as $exit) {
-            if ($exit->ownerId === $ownerId) {
-                $matches[] = $exit;
-            }
-        }
-
-        return $matches;
+        return AgentMapIndexLookup::for($this)->exits($this, $ownerId);
     }
 
     /** @param array<string, mixed> $data */
