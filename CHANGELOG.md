@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- Require `voku/agent-graph ^0.3.3`, which opens read-only graphs with `Pdo\Sqlite::*` constants on PHP 8.4+. This removes the two PHP 8.5 deprecations (`PDO::SQLITE_ATTR_OPEN_FLAGS` / `PDO::SQLITE_OPEN_READONLY`) every read-only graph open triggered in this suite.
+
 ### Changed
 
 - Answer `AgentMapIndex::incoming()`, `outgoing()`, `resolvedMethodById()`, `symbolById()`, `file()`, `bindingsFor()`, `exitsFor()` and `mapDigest()` from lookup tables built once per immutable index instead of rescanning every relation/file (and re-serialising the whole map for the digest) on each call. Tables live in a `WeakMap` and never change index state, equality or serialisation. On a 376-file / 29,473-relation self map, 400 sequential `EditContextPlanner::plan()` calls in one process went from 286 ms to 54 ms per plan (PHP 8.3, single local run) with byte-identical JSON output; a single cold plan is unchanged because it still builds the tables and the digest once. The tables add about 5.2 MB to a 39 MB loaded index; peak memory for the 400-plan run is unchanged at 114 MB.
