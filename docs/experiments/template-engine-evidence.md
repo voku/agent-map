@@ -138,6 +138,44 @@ Not covered yet, by design of this slice:
   child that displays);
 - Smarty 3/4 differences (unregistered PHP functions used as modifiers are not modelled).
 
+## Real-world validation (Smarty)
+
+The experimental Smarty API was run over two pinned public code bases, with no project-specific configuration:
+
+| Corpus | Commit | Templates | Facts | Registrations | References | Gaps | Time |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Piwigo (gallery application, PHP + Smarty) | `2224114` (2026-11-09) | 146 | 5,687 | 44 | 3,207 | 61 | 4 s |
+| PrestaShop `classic-theme` (templates only) | `a04ea34` (2026-10-26) | 186 | 2,608 | 0 | 0 | 22 | <1 s |
+
+What was checked:
+
+- **Exact positions.** Each of the 3,207 Piwigo references was re-read from its file: the byte range holds exactly
+  the reported text, and the reported line is the line of its first byte. There were 0 mismatches.
+- **Recall.** The references per registered plugin equal a grep over the same templates once `{* ... *}`
+  comments and `{literal}` blocks are removed. That gives 2,695 `translate` modifiers and 192 `combine_script`
+  tags in both counts.
+  A plain grep reports 42 more `translate` calls and 1 more `combine_script`. All of them sit inside comments, often
+  inside an HTML attribute (`{*title="{'Edit'|@translate}"*}`): text search would report them as live call sites.
+- **Resolution.** All 44 `registerPlugin()` calls in Piwigo were found. They are made on a `$this->smarty`
+  property and use the legacy `array('Template', 'method')` / `array(&$this, 'method')` callbacks. Every
+  reference resolves to the registered PHP symbol, and none is ambiguous.
+  `SmartyLegacyIdiomsTest` locks these shapes in with a fixture written for the test: `|@modifier`, modifiers in
+  attribute values, block plugins, commented-out calls.
+
+Gaps the run made visible:
+
+- **Wrapper classes hide the render context.** Piwigo renders through its own `Template` class
+  (`$template->assign()`, 565 calls), not through a `Smarty` receiver, so the API finds no render site. All 52
+  `$var->member` accesses therefore stay `untyped_variable` gaps instead of typed references. That is correct
+  fail-closed behavior, but it means typed member references need either a typed wrapper or a configuration that
+  names the wrapper's assign/display methods. This is not built: one project's wrapper is not evidence for a generic
+  contract.
+- **Plugins registered outside the analysed tree stay unresolved.** PrestaShop registers `{l s=...}` (568 uses)
+  and its other plugins in the core repository, not in the theme. A theme-only checkout yields tag facts but no
+  references, as it should. Analysing the theme together with the core resolves them.
+- **Dynamic layouts.** `{extends file=$layout}` and `{include file="module:...$var.tpl"}` are reported as
+  `dynamic_extends` / `dynamic_include` gaps (PrestaShop: 20 of 22 gaps).
+
 ## Mutation side (`agent-edit`, proposed)
 
 Today agent-edit needs nothing new to *apply* a template change: a host can turn template references into a
