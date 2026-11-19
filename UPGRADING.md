@@ -1,5 +1,12 @@
 # Upgrading
 
+## `.phtml` templates are indexed
+
+The map now includes `.phtml` files under `--paths` (default `.`). A project with plain PHP templates gets more files,
+symbols and call relations in its map, and rename/removal plans can include template call sites, or refuse with a
+blocker when a template call cannot be pinned to one exact token. Exclude templates you do not want analysed with
+`--exclude`, for example `--exclude='~\.phtml$~'`. Rebuild existing maps to pick the templates up.
+
 ## agent-graph 0.3.0 and Simple-PHP-Code-Parser 0.22.13
 
 agent-map now requires `voku/agent-graph ^0.3.0` (SQLite relation schema v2) and

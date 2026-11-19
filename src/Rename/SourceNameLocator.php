@@ -43,10 +43,17 @@ final class SourceNameLocator
         return $this->one($matches, $path, $lineStart, $lineEnd, 'method declaration', $expected);
     }
 
-    /** @return array{start_file_pos: int, end_file_pos: int, actual: string} */
-    public function call(string $path, int $lineStart, int $lineEnd, string $expected): array
+    /**
+     * `$startFilePos` / `$endFilePos` are the byte range of the call expression the evidence was recorded for. When a
+     * line holds several calls with the same method name (`$a->total() + $b->total()`), only that range tells them
+     * apart; without it, or when it names no single call, the line alone must be unambiguous.
+     *
+     * @return array{start_file_pos: int, end_file_pos: int, actual: string}
+     */
+    public function call(string $path, int $lineStart, int $lineEnd, string $expected, ?int $startFilePos = null, ?int $endFilePos = null): array
     {
         $matches = [];
+        $exact = [];
         foreach ($this->nodes($path) as $node) {
             if (!$node instanceof MethodCall && !$node instanceof NullsafeMethodCall && !$node instanceof StaticCall) {
                 continue;
@@ -57,10 +64,14 @@ final class SourceNameLocator
             if ($node->getStartLine() !== $lineStart || $node->getEndLine() !== $lineEnd) {
                 continue;
             }
-            $matches[] = $this->position($path, $node->name, $expected);
+            $position = $this->position($path, $node->name, $expected);
+            $matches[] = $position;
+            if ($startFilePos !== null && $endFilePos !== null && $node->getStartFilePos() === $startFilePos && $node->getEndFilePos() === $endFilePos) {
+                $exact[] = $position;
+            }
         }
 
-        return $this->one($matches, $path, $lineStart, $lineEnd, 'method call', $expected);
+        return $this->one(count($exact) === 1 ? $exact : $matches, $path, $lineStart, $lineEnd, 'method call', $expected);
     }
 
     /**

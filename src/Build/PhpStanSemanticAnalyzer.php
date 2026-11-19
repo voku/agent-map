@@ -10,6 +10,7 @@ use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
+use voku\AgentMap\IO\PhpFileFinder;
 use Throwable;
 use voku\AgentMap\MapArtifactPaths;
 
@@ -245,6 +246,11 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
         // An own result cache directory keeps repeated map builds incremental without invalidating
         // the cache of the surrounding project configuration, which analyses different rules.
         $content .= '    tmpDir: ' . json_encode(str_replace('\\', '/', $cacheDirectory), JSON_THROW_ON_ERROR) . "\n";
+        // Analyse every suffix the map indexes; NEON merges this list with PHPStan's default and the project's own.
+        $content .= "    fileExtensions:\n";
+        foreach (PhpFileFinder::EXTENSIONS as $extension) {
+            $content .= '        - ' . ltrim($extension, '.') . "\n";
+        }
         $content .= "    paths:\n";
         foreach ($absolutePaths as $absolutePath) {
             $content .= '        - ' . json_encode(str_replace('\\', '/', $absolutePath), JSON_THROW_ON_ERROR) . "\n";
@@ -335,7 +341,7 @@ final readonly class PhpStanSemanticAnalyzer implements SemanticAnalyzer
                 ),
             );
             foreach ($iterator as $item) {
-                if (!$item->isFile() || !str_ends_with($item->getFilename(), '.php')) {
+                if (!$item->isFile() || !PhpFileFinder::isPhpSource($item->getFilename())) {
                     continue;
                 }
                 $absolute = realpath($item->getPathname());

@@ -6,8 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.24.0 - 2026-11-19
+
+### Added
+
+- Plain PHP templates (`.phtml`) are indexed as PHP source next to `.php`: the structural map records them, the PHPStan backend analyses them (the generated configuration adds `fileExtensions: [php, phtml]`), and `changed` picks them up from Git. Their calls are real call sites, so a rename or removal plan now covers a template that calls the target, for example `<?= page_title('home') ?>` or `<?= $view->heading() ?>` with a `/** @var \App\View $view */` hint, instead of publishing a plan that leaves the template calling a name that no longer exists. Calls the planner cannot pin to one exact token fail closed as before. `PhpFileFinder::EXTENSIONS` and `PhpFileFinder::isPhpSource()` name the indexed suffixes.
+
+### Documentation
+
+- Real-world validation of the experimental Smarty API on Piwigo and PrestaShop's classic theme (pinned commits), in `docs/experiments/template-engine-evidence.md`. On Piwigo all 3,207 references have exact byte ranges and match a comment-aware grep, all 44 `registerPlugin()` calls resolve, and plain grep would report 42 more live call sites that are commented out. The run also shows the gaps: render context hidden behind a project's own Smarty wrapper class, plugins registered outside the analysed tree or through a project helper around `registerPlugin()`, and dynamic layouts. `SmartyLegacyIdiomsTest` covers the legacy idioms the run exercised.
+
 ### Fixed
 
+- Method and function rename plans no longer block when one line holds two calls of the same name, such as `$invoice->total() + $cart->total()` or `fee(1) + fee(2)`. Call relations now keep their byte range in their identity, so two call sites on one line stay two relations instead of being merged into one, and the planners use that range to pick the exact token. Before, the line alone was ambiguous and the whole plan was blocked. Without a recorded range, the line must still be unambiguous, as before. Relation IDs of PHPStan-backed maps change; rebuild maps to compare them. Found by the agent-edit route benchmark.
 - Release tag workflow: capture the target `CHANGELOG.md` once and match in-shell instead of `git show | grep -Fq` under `pipefail`. That pipeline fails with SIGPIPE (141) as soon as `grep` matches early in a changelog larger than the pipe buffer, reporting a present release section as missing. It failed 6/6 locally from 100 KB up and already blocked a voku/agent-learning release check at 75 KB (lesson from voku/agent-loop finding `2026-09-19.95209d`). `tests/ReleaseTagWorkflowTest.php` runs the real workflow script against a real repository with a local bare `origin`.
 
 ## 0.23.0 - 2026-11-19

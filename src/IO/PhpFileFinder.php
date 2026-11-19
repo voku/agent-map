@@ -12,6 +12,15 @@ use SplFileInfo;
 
 final readonly class PhpFileFinder
 {
+    /**
+     * File name suffixes indexed as PHP source. `.phtml` holds plain PHP templates (Laminas, Magento, Plates, hand-rolled
+     * views): their calls into application code are real call sites, so a rename or removal that ignored them would
+     * miss usages.
+     *
+     * @var list<string>
+     */
+    public const EXTENSIONS = ['.php', '.phtml'];
+
     /** @var list<string> */
     private const DEFAULT_EXCLUDES = [
         '~(^|/)vendor(/|$)~',
@@ -98,7 +107,7 @@ final readonly class PhpFileFinder
             return;
         }
 
-        if (!str_ends_with($absolute, '.php')) {
+        if (!self::isPhpSource($absolute)) {
             return;
         }
 
@@ -108,6 +117,18 @@ final readonly class PhpFileFinder
         }
 
         $files[$relative] = $relative;
+    }
+
+    /** Whether a path names a file this finder indexes as PHP source (see EXTENSIONS). */
+    public static function isPhpSource(string $path): bool
+    {
+        foreach (self::EXTENSIONS as $extension) {
+            if (str_ends_with($path, $extension)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function isDefaultExcludedDirectory(SplFileInfo $directory): bool
