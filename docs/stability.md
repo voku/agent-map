@@ -71,6 +71,10 @@ and Twig, Smarty and Blade templates (`template_reference_candidate`). Each entr
 `class_member_qualified`, `code_name` or `member_name_only`), an exact `path` / `line` / byte range / `matched` text, and `historical`
 for changelog-style files. The block also states `total`, `truncated` and `scanned_files`.
 
+Which files count as templates, and which parts of them are template code, is decided by pluggable
+`voku\AgentMap\Reference\Template\TemplateDialect`s (default: Blade, Twig, Smarty with default delimiters). Comments are
+skipped except Twig `{# #}` (it carries `@var` type hints); Smarty `{literal}` blocks are text.
+
 This is **residue evidence, never edit authority**. A text match does not prove the text means the symbol (a template variable has no
 static type, prose is ambiguous), so it never changes `status`, `edits`, `blind_spots` or `blockers`: a plan that is `safe` for PHP stays
 `safe`. A host uses the list as the worklist for a separate, governed cleanup of the non-PHP mentions, and can re-run the scan afterwards to

@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.23.0 - 2026-11-19
+
+### Added
+
+- Template reference scanning is now pluggable through `voku\AgentMap\Reference\Template\TemplateDialect`. `NonPhpReferenceScanner` takes an optional list of dialects (default: Blade, Twig, Smarty) so projects with other engines, file suffixes or Smarty delimiters (`new SmartyDialect('<{', '}>')`) can plug in their own. See `docs/experiments/template-engine-evidence.md`.
+- Experimental Smarty 5 evidence API in `voku\AgentMap\Reference\Template\Smarty`: `SmartyEvidenceBuilder` joins template facts (`{include}` / `{extends}`, `$var->member`, modifiers, tags, static references) with the PHP that renders templates (`assign()` + `display()` / `fetch()`, `createTemplate()`) and registers plugins (`registerPlugin()`, `registerClass()`, `addExtension()`), and reports typed references such as `{$user->getName()}` → `App\Model\User::getName()` together with explicit gaps for everything it cannot resolve. Static types only; not part of the Map schema, CLI or plan contracts. See `docs/experiments/template-engine-evidence.md`.
+
+### Fixed
+
+- Smarty template boundaries now follow the Smarty 5 lexer: `{* ... *}` comments and `{literal}...{/literal}` blocks are no longer reported as template references, nested tags (`{$a[{$b}]}`, `{"x{$y}"}`) and quoted delimiters no longer end a tag early, and auto-literal (`{ ` followed by whitespace) is respected.
+- Smarty `.name` (array access) and Blade `->name` (a property) are no longer reported as a possible call of the getter `getName()` / `isName()` / `hasName()`; only Twig's attribute lookup reaches getters.
+
 ## 0.22.7 - 2026-11-19
 
 ### Fixed
