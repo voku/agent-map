@@ -144,7 +144,7 @@ final readonly class FunctionRenamePlanner
                 continue;
             }
             try {
-                $position = $locator->call($relation->file, $relation->lineStart, $relation->lineEnd, $symbol->name);
+                $position = $locator->call($relation->file, $relation->lineStart, $relation->lineEnd, $symbol->name, $relation->startFilePos, $relation->endFilePos);
                 $edits[] = new PlanEdit(
                     path: $relation->file,
                     sourceSha256: $callFile->sha256,

@@ -53,6 +53,11 @@ final readonly class RelationEntry
             $receiverType ?? '',
             $resultType ?? '',
         ]);
+        // Two calls of the same target on one line (`fee(1) + fee(2)`) are two call sites: their byte ranges keep them
+        // apart, so neither is merged away. Relations without a recorded range keep their line-based identity.
+        if ($startFilePos !== null && $endFilePos !== null) {
+            $identity .= "\0" . $startFilePos . "\0" . $endFilePos;
+        }
 
         return new self(
             id: 'relation:' . hash('sha256', $identity),

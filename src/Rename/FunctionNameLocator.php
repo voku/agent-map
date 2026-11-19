@@ -42,10 +42,16 @@ final class FunctionNameLocator
         return $this->one($matches, $path, $lineStart, $lineEnd, 'function declaration', $expected);
     }
 
-    /** @return array{start_file_pos: int, end_file_pos: int, actual: string} */
-    public function call(string $path, int $lineStart, int $lineEnd, string $expected): array
+    /**
+     * `$startFilePos` / `$endFilePos` are the byte range of the recorded call; they tell apart several calls of the same
+     * function on one line. Without them, or when they name no single call, the line alone must be unambiguous.
+     *
+     * @return array{start_file_pos: int, end_file_pos: int, actual: string}
+     */
+    public function call(string $path, int $lineStart, int $lineEnd, string $expected, ?int $startFilePos = null, ?int $endFilePos = null): array
     {
         $matches = [];
+        $exact = [];
         foreach ($this->nodes($path) as $node) {
             if (!$node instanceof FuncCall || !$node->name instanceof Name) {
                 continue;
@@ -58,10 +64,14 @@ final class FunctionNameLocator
             if ($node->getStartLine() !== $lineStart || $node->getEndLine() !== $lineEnd) {
                 continue;
             }
-            $matches[] = $this->position($path, $node->name, $expected, 'function call');
+            $position = $this->position($path, $node->name, $expected, 'function call');
+            $matches[] = $position;
+            if ($startFilePos !== null && $endFilePos !== null && $node->getStartFilePos() === $startFilePos && $node->getEndFilePos() === $endFilePos) {
+                $exact[] = $position;
+            }
         }
 
-        return $this->one($matches, $path, $lineStart, $lineEnd, 'function call', $expected);
+        return $this->one(count($exact) === 1 ? $exact : $matches, $path, $lineStart, $lineEnd, 'function call', $expected);
     }
 
     /** Confirms that unresolved call evidence at this range is specifically a dynamic FuncCall. */
