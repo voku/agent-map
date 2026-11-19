@@ -68,8 +68,11 @@ jobs:
               echo "CHANGELOG.md has no release section for $version" >&2
               exit 1
             fi
-            if ! git show "${target}:CHANGELOG.md" | grep -Fq "## [$version] - " \
-              && ! git show "${target}:CHANGELOG.md" | grep -Fq "## $version - "; then
+            # Capture once and match in-shell: under pipefail, `git show | grep -q` fails with SIGPIPE (141)
+            # once grep exits early on a CHANGELOG larger than the pipe buffer (voku/agent-loop finding.2026-09-19.95209d).
+            target_changelog="$(git show "${target}:CHANGELOG.md")"
+            if [[ "$target_changelog" != *"## [$version] - "* \
+              && "$target_changelog" != *"## $version - "* ]]; then
               echo "Release target $target does not contain the $version changelog section" >&2
               exit 1
             fi
