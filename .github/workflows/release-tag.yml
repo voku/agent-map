@@ -54,6 +54,16 @@ jobs:
               [[ "$existing" == "$target" ]] || { echo "Tag $version exists at $existing, expected $target" >&2; exit 1; }
               continue
             fi
+            # The tag is created at the marker's target, so the target must be the release snapshot: it may differ
+            # from the frozen main only in release markers. Otherwise commits that landed on main after the target
+            # (between preparing the release and merging the marker) would be silently missing from the tag.
+            outside_markers="$(git diff --name-only "$target" "$frozen_main" -- . ':(exclude).release/*.json')"
+            if [[ -n "$outside_markers" ]]; then
+              echo "Release target $target differs from frozen main $frozen_main outside .release/*.json:" >&2
+              echo "$outside_markers" >&2
+              echo "Point .release/$version.json at the current main commit that contains the $version changelog section." >&2
+              exit 1
+            fi
             if ! grep -Fq "## [$version] - " CHANGELOG.md && ! grep -Fq "## $version - " CHANGELOG.md; then
               echo "CHANGELOG.md has no release section for $version" >&2
               exit 1
