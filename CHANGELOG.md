@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.22.7 - 2026-11-19
+
 ### Fixed
 
 - Require `voku/agent-graph ^0.3.3`, which opens read-only graphs with `Pdo\Sqlite::*` constants on PHP 8.4+. This removes the two PHP 8.5 deprecations (`PDO::SQLITE_ATTR_OPEN_FLAGS` / `PDO::SQLITE_OPEN_READONLY`) every read-only graph open triggered in this suite.
