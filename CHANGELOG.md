@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.23.0 - 2026-11-19
+
+### Added
+
+- Template reference scanning is now pluggable through `voku\AgentMap\Reference\Template\TemplateDialect`. `NonPhpReferenceScanner` takes an optional list of dialects (default: Blade, Twig, Smarty) so projects with other engines, file suffixes or Smarty delimiters (`new SmartyDialect('<{', '}>')`) can plug in their own. See `docs/experiments/template-engine-evidence.md`.
+- Experimental Smarty 5 evidence API in `voku\AgentMap\Reference\Template\Smarty`: `SmartyEvidenceBuilder` joins template facts (`{include}` / `{extends}`, `$var->member`, modifiers, tags, static references) with the PHP that renders templates (`assign()` + `display()` / `fetch()`, `createTemplate()`) and registers plugins (`registerPlugin()`, `registerClass()`, `addExtension()`), and reports typed references such as `{$user->getName()}` → `App\Model\User::getName()` together with explicit gaps for everything it cannot resolve. Static types only; not part of the Map schema, CLI or plan contracts. See `docs/experiments/template-engine-evidence.md`.
+
+### Fixed
+
+- Smarty template boundaries now follow the Smarty 5 lexer: `{* ... *}` comments and `{literal}...{/literal}` blocks are no longer reported as template references, nested tags (`{$a[{$b}]}`, `{"x{$y}"}`) and quoted delimiters no longer end a tag early, and auto-literal (`{ ` followed by whitespace) is respected.
+- Smarty `.name` (array access) and Blade `->name` (a property) are no longer reported as a possible call of the getter `getName()` / `isName()` / `hasName()`; only Twig's attribute lookup reaches getters.
+
 ## 0.22.7 - 2026-11-19
 
 ### Fixed
@@ -14,10 +26,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Experimental Smarty 5 evidence API in `voku\AgentMap\Reference\Template\Smarty`: `SmartyEvidenceBuilder` joins template facts (`{include}` / `{extends}`, `$var->member`, modifiers, tags, static references) with the PHP that renders templates (`assign()` + `display()` / `fetch()`, `createTemplate()`) and registers plugins (`registerPlugin()`, `registerClass()`, `addExtension()`), and reports typed references such as `{$user->getName()}` → `App\Model\User::getName()` together with explicit gaps for everything it cannot resolve. Static types only; not part of the Map schema, CLI or plan contracts. See `docs/experiments/template-engine-evidence.md`.
-- Template reference scanning is now pluggable through `voku\AgentMap\Reference\Template\TemplateDialect`. `NonPhpReferenceScanner` takes an optional list of dialects (default: Blade, Twig, Smarty) so projects with other engines, file suffixes or Smarty delimiters (`new SmartyDialect('<{', '}>')`) can plug in their own. See `docs/experiments/template-engine-evidence.md`.
-- Smarty template boundaries now follow the Smarty 5 lexer: `{* ... *}` comments and `{literal}...{/literal}` blocks are no longer reported as template references, nested tags (`{$a[{$b}]}`, `{"x{$y}"}`) and quoted delimiters no longer end a tag early, and auto-literal (`{ ` followed by whitespace) is respected.
-- Smarty `.name` (array access) and Blade `->name` (a property) are no longer reported as a possible call of the getter `getName()` / `isName()` / `hasName()`; only Twig's attribute lookup reaches getters.
 - Answer `AgentMapIndex::incoming()`, `outgoing()`, `resolvedMethodById()`, `symbolById()`, `file()`, `bindingsFor()`, `exitsFor()` and `mapDigest()` from lookup tables built once per immutable index instead of rescanning every relation/file (and re-serialising the whole map for the digest) on each call. Tables live in a `WeakMap` and never change index state, equality or serialisation. On a 376-file / 29,473-relation self map, 400 sequential `EditContextPlanner::plan()` calls in one process went from 286 ms to 54 ms per plan (PHP 8.3, single local run) with byte-identical JSON output; a single cold plan is unchanged because it still builds the tables and the digest once. The tables add about 5.2 MB to a 39 MB loaded index; peak memory for the 400-plan run is unchanged at 114 MB.
 - Record the map digest at build time in a `map-digest.json` sidecar (`<name>.map-digest.json` for custom index names) together with xxh128 hashes of the published symbols and relations files. A full index read reuses the recorded digest only when both hashes match the bytes it decoded; older maps without the sidecar, edited or copied artifacts, symbols/relations pairs from different builds, malformed markers and partial reads all compute the digest as before. The recorded value is the digest a reader computes from the published bytes: the writer reads the artifacts back, because canonical normalisation (for example sorted template keys) can make the in-memory index hash differently. The graph generation marker and graph revision now use that same published digest. This costs each write roughly 0.5 s and 50 MB extra peak memory on the self map; unchanged maps are not rewritten. The digest formula and the map schema are unchanged. A single `agent-map context` call on the 378-file / 29,746-relation self map went from about 640 ms to about 410 ms (median of five local runs, PHP 8.3) with byte-identical output.
 
