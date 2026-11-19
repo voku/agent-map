@@ -94,6 +94,35 @@ final readonly class MethodNodeRemover
         ) !== null;
     }
 
+    /**
+     * Byte ranges of the first-class callables `$o->name(...)` and `C::name(...)` in a file. They are the only callable
+     * shape the map also records as resolved call relations, so a planner can match them against that evidence.
+     *
+     * @return list<array{start_file_pos: int, end_file_pos: int}>
+     */
+    public function firstClassCallableRanges(string $path, string $name): array
+    {
+        $ranges = [];
+        foreach ((new NodeFinder())->find(
+            PhpCodeParser::getAstFromString($this->source($path)),
+            fn (Node $node): bool => $node instanceof Node\Expr\CallLike && $node->isFirstClassCallable() && $this->callLikeNamesMethod($node, $name),
+        ) as $node) {
+            $ranges[] = ['start_file_pos' => $node->getStartFilePos(), 'end_file_pos' => $node->getEndFilePos()];
+        }
+
+        return $ranges;
+    }
+
+    /** Whether the file names the method as a callable in a shape other than first-class callable syntax. */
+    public function hasNonFirstClassCallableReference(string $path, string $name): bool
+    {
+        return (new NodeFinder())->findFirst(
+            PhpCodeParser::getAstFromString($this->source($path)),
+            fn (Node $node): bool => $this->isCallableReference($node, $name)
+                && !($node instanceof Node\Expr\CallLike && $node->isFirstClassCallable()),
+        ) !== null;
+    }
+
     private function isCallableReference(Node $node, string $name): bool
     {
         // Only genuine callable shapes, not any string that happens to share the

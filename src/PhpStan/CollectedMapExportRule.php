@@ -19,6 +19,7 @@ use voku\AgentMap\PhpStan\Collector\ForeachCollector;
 use voku\AgentMap\PhpStan\Collector\FunctionCallCollector;
 use voku\AgentMap\PhpStan\Collector\FunctionCollector;
 use voku\AgentMap\PhpStan\Collector\InstantiationCollector;
+use voku\AgentMap\PhpStan\Collector\MethodCallableCollector;
 use voku\AgentMap\PhpStan\Collector\MethodCallCollector;
 use voku\AgentMap\PhpStan\Collector\NullsafeMethodCallCollector;
 use voku\AgentMap\PhpStan\Collector\NullsafePropertyFetchCollector;
@@ -26,6 +27,7 @@ use voku\AgentMap\PhpStan\Collector\PropertyDeclarationCollector;
 use voku\AgentMap\PhpStan\Collector\PropertyFetchCollector;
 use voku\AgentMap\PhpStan\Collector\ReturnCollector;
 use voku\AgentMap\PhpStan\Collector\StaticCallCollector;
+use voku\AgentMap\PhpStan\Collector\StaticMethodCallableCollector;
 use voku\AgentMap\PhpStan\Collector\StaticPropertyFetchCollector;
 use voku\AgentMap\PhpStan\Collector\ThrowCollector;
 
@@ -52,6 +54,8 @@ final readonly class CollectedMapExportRule implements Rule
             MethodCallCollector::class,
             NullsafeMethodCallCollector::class,
             StaticCallCollector::class,
+            MethodCallableCollector::class,
+            StaticMethodCallableCollector::class,
             FunctionCallCollector::class,
             InstantiationCollector::class,
             PropertyDeclarationCollector::class,

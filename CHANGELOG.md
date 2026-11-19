@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+Found while preparing route-experiment Run 2 in voku/agent-edit. Each one blocked or downgraded a rename that the map can prove; each has a regression test that fails without the fix.
+
+- A nullsafe call `$repo->maybe()?->amount()` resolves on the non-null receiver. The call was projected with the receiver `Product|null`, which has no class reflection of its own, so it was recorded as a dynamic call next to the resolved one, and every rename of `Product::amount()` came back `review_required` with a false `dynamic_method_name` blind spot. Nullsafe property fetches resolve the same way. (`NullsafeCallRenameTest`)
+- First-class callables `$bundle->amount(...)` and `Bundle::make(...)` are recorded as resolved call relations with their byte range. PHPStan replaces them with callable nodes, so they used to leave no relation, and any first-class callable of the method's name blocked the rename ("building a callable is not a call relation"). The rename now rewrites a resolved one. An unresolved one (for example on a `mixed` receiver) and every other callable shape, `[$o, 'name']` or `'Class::name'`, still block. Callers queries now list these references too; method removal still refuses a method that a callable names. (`FirstClassCallableRenameTest`)
+- An interface method implemented by an anonymous class (`new class implements Provider`, common in test doubles) joins the rename family instead of blocking it as "crosses an unindexed method contract". PHPStan records the anonymous method's override with its file and lines, so the plan gets an exact declaration edit, rewrites calls on the anonymous object, and lists the `method:AnonymousClass…` member in `family`. A replacement name that the anonymous class already declares is a collision blocker. On voku/agent-recall-compiler, `RecallProvider::collect` → `gather` is now a safe plan of 62 edits in 25 files. It applies with agent-edit 0.8.1, verifies, and keeps the suite green. (`AnonymousClassRenameFamilyTest`)
+
 ## 0.24.0 - 2026-11-19
 
 ### Added

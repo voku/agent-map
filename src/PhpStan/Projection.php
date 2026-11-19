@@ -32,6 +32,7 @@ use PHPStan\Reflection\ExtendedMethodReflection;
 use PHPStan\Reflection\ExtendedParameterReflection;
 use PHPStan\Reflection\FunctionReflection;
 use PHPStan\Reflection\ParametersAcceptor;
+use PHPStan\Type\TypeCombinator;
 
 final readonly class Projection
 {
@@ -83,10 +84,13 @@ final readonly class Projection
     public static function methodCall(MethodCall|NullsafeMethodCall $node, Scope $scope): array
     {
         $receiverType = $scope->getType($node->var);
+        // `?->` only dispatches on the non-null part; `T|null` has no object class reflections of its own, so the
+        // call would otherwise be recorded as dynamic and mark every rename of T's method for review.
+        $dispatchType = $node instanceof NullsafeMethodCall ? TypeCombinator::removeNull($receiverType) : $receiverType;
         $targets = [];
         if ($node->name instanceof Node\Identifier) {
             $methodName = $node->name->toString();
-            foreach ($receiverType->getObjectClassReflections() as $classReflection) {
+            foreach ($dispatchType->getObjectClassReflections() as $classReflection) {
                 if (!$classReflection->hasMethod($methodName)) {
                     continue;
                 }
@@ -109,10 +113,11 @@ final readonly class Projection
     public static function propertyAccess(PropertyFetch|NullsafePropertyFetch $node, Scope $scope): array
     {
         $receiverType = $scope->getType($node->var);
+        $dispatchType = $node instanceof NullsafePropertyFetch ? TypeCombinator::removeNull($receiverType) : $receiverType;
         $targets = [];
         if ($node->name instanceof Node\Identifier) {
             $propertyName = $node->name->toString();
-            $property = $scope->getInstancePropertyReflection($receiverType, $propertyName);
+            $property = $scope->getInstancePropertyReflection($dispatchType, $propertyName);
             if ($property !== null) {
                 $targets[] = 'property:' . $property->getDeclaringClass()->getName() . '::$' . $propertyName;
             }
