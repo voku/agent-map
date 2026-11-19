@@ -133,7 +133,7 @@ There is one analysis path and one map model. JSON and TOON are serializers, not
 ### Build options
 
 - `--root`: repository root, default current directory;
-- `--paths`: comma-separated PHP files or directories, default `.`;
+- `--paths`: comma-separated PHP files or directories, default `.`; directories contribute `.php` and `.phtml` (plain PHP template) files;
 - `--out`: map file, default `.agent-map/php-symbols.json`;
 - `--format`: `json` or `toon`, default `json`;
 - `--phpstan-config`: explicit PHPStan configuration when the PHPStan backend is available;

@@ -1075,6 +1075,12 @@ final readonly class AgentMapApplication
         return array_slice($entrypoints, 0, 10);
     }
 
+    /** @return list<string> git pathspecs for every suffix the map indexes */
+    private static function phpPathspecs(): array
+    {
+        return array_map(static fn (string $extension): string => '*' . $extension, PhpFileFinder::EXTENSIONS);
+    }
+
     /**
      * @return list<string>
      */
@@ -1085,10 +1091,10 @@ final readonly class AgentMapApplication
         }
 
         $files = [
-            ...$this->gitChangedPhpFiles($root, ['diff', '--name-only', $base . '...HEAD', '--', '*.php'], true),
-            ...$this->gitChangedPhpFiles($root, ['diff', '--name-only', '--', '*.php']),
-            ...$this->gitChangedPhpFiles($root, ['diff', '--cached', '--name-only', '--', '*.php']),
-            ...$this->gitChangedPhpFiles($root, ['ls-files', '--others', '--exclude-standard', '--', '*.php']),
+            ...$this->gitChangedPhpFiles($root, ['diff', '--name-only', $base . '...HEAD', '--', ...self::phpPathspecs()], true),
+            ...$this->gitChangedPhpFiles($root, ['diff', '--name-only', '--', ...self::phpPathspecs()]),
+            ...$this->gitChangedPhpFiles($root, ['diff', '--cached', '--name-only', '--', ...self::phpPathspecs()]),
+            ...$this->gitChangedPhpFiles($root, ['ls-files', '--others', '--exclude-standard', '--', ...self::phpPathspecs()]),
         ];
 
         $files = array_values(array_unique($files));
@@ -1132,7 +1138,7 @@ final readonly class AgentMapApplication
         $files = [];
         foreach (explode("\n", trim((string) $stdout)) as $line) {
             $line = trim($line);
-            if ($line !== '' && str_ends_with($line, '.php')) {
+            if ($line !== '' && PhpFileFinder::isPhpSource($line)) {
                 $files[] = str_replace('\\', '/', $line);
             }
         }
