@@ -53,7 +53,7 @@ final class CollectedRecordSorterTest extends TestCase
         $expected = $records;
         usort($expected, static function (array $left, array $right): int {
             return ((string) $left['record_type']) <=> ((string) $right['record_type'])
-                ?: ((string) ($left['file'] ?? '')) <=> ((string) ($right['file'] ?? ''))
+                ?: ((string) $left['file']) <=> ((string) $right['file'])
                 ?: ((int) ($left['line_start'] ?? 0)) <=> ((int) ($right['line_start'] ?? 0))
                 ?: ((string) ($left['name'] ?? $left['kind'] ?? '')) <=> ((string) ($right['name'] ?? $right['kind'] ?? ''))
                 ?: ((string) ($left['source_id'] ?? '')) <=> ((string) ($right['source_id'] ?? ''));

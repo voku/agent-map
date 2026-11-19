@@ -56,4 +56,4 @@ For changes touching rename/removal planning or optional semantic enrichment, al
 
 ## Releases
 
-Releases are marker-driven. `.release/<version>.json` must point to a release-ready ancestor commit whose own `CHANGELOG.md` contains the version. Existing tags are immutable.
+Releases are marker-driven. `.release/<version>.json` must point to a release-ready ancestor commit whose own `CHANGELOG.md` contains the version, and that commit may differ from `main` at the time the marker lands only in `.release/*.json`: if anything else merged in between, point the marker at the newer commit. Existing tags are immutable.
