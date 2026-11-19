@@ -123,7 +123,10 @@ final readonly class SmartyDialect implements TemplateDialect
         $stack = ['tag'];
         for ($index = $from; $index < $length; ++$index) {
             $char = $source[$index];
-            $context = $stack[array_key_last($stack)];
+            $context = end($stack);
+            if ($context === false) {
+                break;
+            }
             if ($context !== 'tag') {
                 if ($char === '\\') {
                     ++$index;

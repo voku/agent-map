@@ -51,7 +51,7 @@ final readonly class SmartyRenderSiteExtractor
         $sites = [];
         $registrations = [];
         $finder = new NodeFinder();
-        /** @var list<array{list<Node>, Stmt\ClassLike|null, Node\FunctionLike|null}> $scopes */
+        /** @var list<array{array<Node>, Stmt\ClassLike|null, Node\FunctionLike|null}> $scopes */
         $scopes = [[$statements, null, null]];
         /** @var list<Stmt\ClassLike> $classes */
         $classes = $finder->findInstanceOf($statements, Stmt\ClassLike::class);
@@ -82,7 +82,7 @@ final readonly class SmartyRenderSiteExtractor
     }
 
     /**
-     * @param list<Node> $body
+     * @param array<Node> $body
      * @return array{list<SmartyRenderSite>, list<SmartyPluginRegistration>}
      */
     private function scope(string $path, string $source, array $body, ?Stmt\ClassLike $class, ?Node\FunctionLike $function): array
@@ -175,7 +175,7 @@ final readonly class SmartyRenderSiteExtractor
     /**
      * Nodes of one scope in source order, without descending into nested functions, closures or classes.
      *
-     * @param list<Node> $nodes
+     * @param array<Node> $nodes
      * @return list<Node>
      */
     private function nodesInScope(array $nodes): array
@@ -218,7 +218,7 @@ final readonly class SmartyRenderSiteExtractor
         $variables = [];
         if ($first instanceof Expr\Array_) {
             foreach ($first->items as $item) {
-                if ($item !== null && $item->key instanceof String_) {
+                if ($item->key instanceof String_) {
                     $variables[$item->key->value] = $this->variable($item->value, $source, $types, $properties);
                 }
             }
@@ -345,8 +345,8 @@ final readonly class SmartyRenderSiteExtractor
             return ltrim($callback->value, '\\');
         }
         if ($callback instanceof Expr\Array_ && count($callback->items) === 2) {
-            $target = $callback->items[0]?->value;
-            $method = $callback->items[1]?->value;
+            $target = $callback->items[0]->value;
+            $method = $callback->items[1]->value;
             if (!$method instanceof String_) {
                 return null;
             }

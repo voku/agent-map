@@ -63,7 +63,7 @@ final readonly class SmartyTemplateAnalyzer
         $variables = $this->mask($inner, false);
         if (preg_match_all('/\$(?!smarty\b)(\w+)\s*->\s*(\w+)(\s*\()?/', $variables, $hits, PREG_OFFSET_CAPTURE | PREG_SET_ORDER) > 0) {
             foreach ($hits as $hit) {
-                $facts[] = $this->fact(TemplateFact::KIND_VARIABLE_MEMBER, $path, $source, $offset + $hit[0][1], strlen(rtrim($hit[0][0], " \t\r\n(")), $hit[1][0], $hit[2][0], isset($hit[3]) && $hit[3][0] !== '');
+                $facts[] = $this->fact(TemplateFact::KIND_VARIABLE_MEMBER, $path, $source, $offset + $hit[0][1], strlen(rtrim($hit[0][0], " \t\r\n(")), $hit[1][0], $hit[2][0], isset($hit[3]));
             }
         }
 
@@ -75,7 +75,7 @@ final readonly class SmartyTemplateAnalyzer
         }
         if (preg_match_all('/(?<![\w\\\\$>:.])(\\\\?[A-Za-z_]\w*(?:\\\\[A-Za-z_]\w*)*)\s*::\s*(\$?\w+)(\s*\()?/', $code, $hits, PREG_OFFSET_CAPTURE | PREG_SET_ORDER) > 0) {
             foreach ($hits as $hit) {
-                $facts[] = $this->fact(TemplateFact::KIND_STATIC_REFERENCE, $path, $source, $offset + $hit[0][1], strlen(rtrim($hit[0][0], " \t\r\n(")), ltrim($hit[1][0], '\\'), $hit[2][0], isset($hit[3]) && $hit[3][0] !== '');
+                $facts[] = $this->fact(TemplateFact::KIND_STATIC_REFERENCE, $path, $source, $offset + $hit[0][1], strlen(rtrim($hit[0][0], " \t\r\n(")), ltrim($hit[1][0], '\\'), $hit[2][0], isset($hit[3]));
             }
         }
 
