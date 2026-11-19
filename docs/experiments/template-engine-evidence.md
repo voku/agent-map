@@ -172,7 +172,11 @@ Gaps the run made visible:
   contract.
 - **Plugins registered outside the analysed tree stay unresolved.** PrestaShop registers `{l s=...}` (568 uses)
   and its other plugins in the core repository, not in the theme. A theme-only checkout yields tag facts but no
-  references, as it should. Analysing the theme together with the core resolves them.
+  references, as it should.
+- **Registration through a project helper is not followed.** PrestaShop's core registers its plugins through its own
+  `smartyRegisterFunction()` helper, which forwards variable arguments to `registerPlugin()`. The extractor reads only
+  direct `registerPlugin()` calls with a literal plugin type, so adding the core does not resolve `{l}` either. Core
+  resolution has not been validated for any PrestaShop version.
 - **Dynamic layouts.** `{extends file=$layout}` and `{include file="module:...$var.tpl"}` are reported as
   `dynamic_extends` / `dynamic_include` gaps (PrestaShop: 20 of 22 gaps).
 

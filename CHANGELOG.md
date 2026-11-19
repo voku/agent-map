@@ -6,13 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.24.0 - 2026-11-19
+
 ### Added
 
 - Plain PHP templates (`.phtml`) are indexed as PHP source next to `.php`: the structural map records them, the PHPStan backend analyses them (the generated configuration adds `fileExtensions: [php, phtml]`), and `changed` picks them up from Git. Their calls are real call sites, so a rename or removal plan now covers a template that calls the target, for example `<?= page_title('home') ?>` or `<?= $view->heading() ?>` with a `/** @var \App\View $view */` hint, instead of publishing a plan that leaves the template calling a name that no longer exists. Calls the planner cannot pin to one exact token fail closed as before. `PhpFileFinder::EXTENSIONS` and `PhpFileFinder::isPhpSource()` name the indexed suffixes.
 
 ### Documentation
 
-- Real-world validation of the experimental Smarty API on Piwigo and PrestaShop's classic theme (pinned commits), in `docs/experiments/template-engine-evidence.md`. On Piwigo all 3,207 references have exact byte ranges and match a comment-aware grep, all 44 `registerPlugin()` calls resolve, and plain grep would report 42 more live call sites that are commented out. The run also shows the gaps: render context hidden behind a project's own Smarty wrapper class, plugins registered outside the analysed tree, and dynamic layouts. `SmartyLegacyIdiomsTest` covers the legacy idioms the run exercised.
+- Real-world validation of the experimental Smarty API on Piwigo and PrestaShop's classic theme (pinned commits), in `docs/experiments/template-engine-evidence.md`. On Piwigo all 3,207 references have exact byte ranges and match a comment-aware grep, all 44 `registerPlugin()` calls resolve, and plain grep would report 42 more live call sites that are commented out. The run also shows the gaps: render context hidden behind a project's own Smarty wrapper class, plugins registered outside the analysed tree or through a project helper around `registerPlugin()`, and dynamic layouts. `SmartyLegacyIdiomsTest` covers the legacy idioms the run exercised.
 
 ### Fixed
 
