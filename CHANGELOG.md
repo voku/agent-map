@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Fixed
+
+- Release tag workflow: capture the target `CHANGELOG.md` once and match in-shell instead of `git show | grep -Fq` under `pipefail`. That pipeline fails with SIGPIPE (141) as soon as `grep` matches early in a changelog larger than the pipe buffer, reporting a present release section as missing. It failed 6/6 locally from 100 KB up and already blocked a voku/agent-learning release check at 75 KB (lesson from voku/agent-loop finding `2026-09-19.95209d`). `tests/ReleaseTagWorkflowTest.php` runs the real workflow script against a real repository with a local bare `origin`.
+
 ## 0.23.0 - 2026-11-19
 
 ### Added
