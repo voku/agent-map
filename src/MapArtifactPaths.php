@@ -104,6 +104,21 @@ final readonly class MapArtifactPaths
         return $indexFile . '.graph-generation.json';
     }
 
+    /** Build-time map digest bound to the published artifact bytes; see MapDigestMarker. */
+    public static function mapDigestFor(string $indexFile): string
+    {
+        $dir = dirname($indexFile);
+        $base = basename($indexFile);
+        if ($base === 'php-symbols.json' || $base === 'php-symbols.toon') {
+            return $dir . '/map-digest.json';
+        }
+        if (str_ends_with(strtolower($base), '.json') || str_ends_with(strtolower($base), '.toon')) {
+            return $dir . '/' . substr($base, 0, -5) . '.map-digest.json';
+        }
+
+        return $indexFile . '.map-digest.json';
+    }
+
     public static function writerLockFor(string $indexFile): string
     {
         return $indexFile . '.lock';
