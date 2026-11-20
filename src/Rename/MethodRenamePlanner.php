@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace voku\AgentMap\Rename;
 
 use InvalidArgumentException;
+use PhpParser\Node;
+use PhpParser\Node\Stmt\Class_;
+use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\NodeFinder;
 use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\RelationEntry;
@@ -16,6 +20,7 @@ use voku\AgentMap\Plan\PlanProvenance;
 use voku\AgentMap\Plan\PlanStaleEvidence;
 use voku\AgentMap\Reference\NonPhpReferenceScanner;
 use voku\AgentMap\Reference\ReferenceTarget;
+use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 /** Builds a read-only, fail-closed rename plan for one PHP method family. */
 final readonly class MethodRenamePlanner
@@ -54,7 +59,7 @@ final readonly class MethodRenamePlanner
             return $this->result($map, $seed, $originalName, $replacementName, [$seed->id => $seed], [], $blindSpots, $staleEvidence, $blockers);
         }
 
-        [$family, $familyBlockers] = $this->family($map, $seed);
+        [$family, $anonymous, $familyBlockers] = $this->family($map, $seed);
         $blockers = [...$blockers, ...$familyBlockers];
         foreach ($family as $method) {
             if ($method->owner->kind === 'trait') {
@@ -62,15 +67,19 @@ final readonly class MethodRenamePlanner
             }
         }
         $blockers = [...$blockers, ...$this->collisionBlockers($map, $family, $replacementName)];
+        $blockers = [...$blockers, ...$this->anonymousCollisionBlockers($map, $anonymous, $originalName, $replacementName)];
 
         // A callable is not a call relation. Renaming only the declaration while
         // `[$this, 'name']` or `'Class::name'` still names the old method leaves
         // source that parses and then fatals, so the rename is refused for the
-        // same reason removal refuses it.
+        // same reason removal refuses it. First-class callable syntax is the
+        // exception when the map resolved it: it is recorded as a call relation
+        // with its byte range, and the relation loop below rewrites it.
         $nodeRemover = new MethodNodeRemover($map->root);
         foreach ($family as $method) {
             foreach ($map->files as $file) {
-                if ($nodeRemover->hasCallableReference($file->path, $method->method->name)) {
+                if ($nodeRemover->hasNonFirstClassCallableReference($file->path, $method->method->name)
+                    || !$this->firstClassCallablesAreResolved($map, $nodeRemover, $file->path, $method->method->name)) {
                     $blockers[] = sprintf(
                         'A callable naming this method exists in indexed source %s; building a callable is not a call relation, so the rename cannot prove every reference is rewritten.',
                         $file->path,
@@ -82,7 +91,7 @@ final readonly class MethodRenamePlanner
         $blockers = array_values(array_unique($blockers));
 
         if ($blockers !== []) {
-            return $this->result($map, $seed, $originalName, $replacementName, $family, [], $blindSpots, $staleEvidence, $blockers);
+            return $this->result($map, $seed, $originalName, $replacementName, $family, [], $blindSpots, $staleEvidence, $blockers, array_keys($anonymous));
         }
 
         $locator = new SourceNameLocator($map->root);
@@ -113,7 +122,39 @@ final readonly class MethodRenamePlanner
             }
         }
 
-        $familyIds = array_fill_keys(array_keys($family), true);
+        // An anonymous class has no symbol in the structural index, but PHPStan names its methods and records their
+        // overrides with file and lines, so the declaration is located exactly like a named one.
+        foreach ($anonymous as $anonymousId => $member) {
+            $file = $map->file($member['path']);
+            if ($file === null) {
+                $blockers[] = 'Anonymous rename family member is outside the indexed files: ' . $anonymousId;
+                continue;
+            }
+            try {
+                $position = $locator->declaration($member['path'], $member['line_start'], $member['line_end'], $originalName);
+                $edits[] = new PlanEdit(
+                    path: $member['path'],
+                    sourceSha256: $file->sha256,
+                    startFilePos: $position['start_file_pos'],
+                    endFilePos: $position['end_file_pos'],
+                    lineStart: $member['line_start'],
+                    lineEnd: $member['line_end'],
+                    expected: $position['actual'],
+                    replacement: $replacementName,
+                    role: 'declaration',
+                    symbolId: $anonymousId,
+                    resolution: 'phpstan_resolved',
+                );
+            } catch (RuntimeException $exception) {
+                $blockers[] = $exception->getMessage();
+            }
+        }
+
+        $familyIds = array_fill_keys([...array_keys($family), ...array_keys($anonymous)], true);
+        $anonymousOwners = array_values(array_unique(array_map(
+            static fn (string $anonymousId): string => substr($anonymousId, strlen('method:'), (int) strpos($anonymousId, '::') - strlen('method:')),
+            array_keys($anonymous),
+        )));
         foreach ($map->relations as $relation) {
             if ($relation->kind !== 'calls') {
                 continue;
@@ -124,7 +165,7 @@ final readonly class MethodRenamePlanner
                 static fn (string $targetId): bool => isset($familyIds[$targetId]),
             ));
             if ($familyTargets === []) {
-                $this->recordDynamicBlindSpot($relation, $family, $blindSpots);
+                $this->recordDynamicBlindSpot($relation, $family, $blindSpots, $anonymousOwners);
                 continue;
             }
 
@@ -183,15 +224,16 @@ final readonly class MethodRenamePlanner
         $blockers = [...$blockers, ...$this->overlapBlockers($edits)];
         $blockers = array_values(array_unique($blockers));
 
-        return $this->result($map, $seed, $originalName, $replacementName, $family, $edits, $blindSpots, $staleEvidence, $blockers);
+        return $this->result($map, $seed, $originalName, $replacementName, $family, $edits, $blindSpots, $staleEvidence, $blockers, array_keys($anonymous));
     }
 
     /**
-     * @return array{0: array<string, ResolvedMethod>, 1: list<string>}
+     * @return array{0: array<string, ResolvedMethod>, 1: array<string, array{path: string, line_start: int, line_end: int}>, 2: list<string>}
      */
     private function family(AgentMapIndex $map, ResolvedMethod $seed): array
     {
         $family = [$seed->id => $seed];
+        $anonymous = [];
         $blockers = [];
         $queue = [$seed->id];
 
@@ -210,11 +252,18 @@ final readonly class MethodRenamePlanner
                 }
 
                 foreach ($candidates as $candidateId) {
-                    if (isset($family[$candidateId])) {
+                    if (isset($family[$candidateId]) || isset($anonymous[$candidateId])) {
                         continue;
                     }
                     $candidate = $map->resolvedMethodById($candidateId);
                     if ($candidate === null) {
+                        // `new class implements Contract` overrides through its own relation, which carries the method's
+                        // file and lines. Any other unindexed member stays a blocker.
+                        if ($relation->sourceId === $candidateId && self::isAnonymousMethodId($candidateId)) {
+                            $anonymous[$candidateId] = ['path' => $relation->file, 'line_start' => $relation->lineStart, 'line_end' => $relation->lineEnd];
+                            $queue[] = $candidateId;
+                            continue;
+                        }
                         $blockers[] = 'Rename family crosses an unindexed method contract: ' . $candidateId;
                         continue;
                     }
@@ -225,8 +274,99 @@ final readonly class MethodRenamePlanner
         }
 
         ksort($family, SORT_STRING);
+        ksort($anonymous, SORT_STRING);
 
-        return [$family, array_values(array_unique($blockers))];
+        return [$family, $anonymous, array_values(array_unique($blockers))];
+    }
+
+    private static function isAnonymousMethodId(string $methodId): bool
+    {
+        return preg_match('/^method:AnonymousClass[0-9a-f]{32}::[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*$/', $methodId) === 1;
+    }
+
+    /**
+     * The replacement name must not already be a method of the anonymous class, nor of a type it extends, implements
+     * or uses. Its methods are not in the symbol index, so the class is read from source: the owner is the one
+     * anonymous class that directly declares the target method at its recorded lines. No such class, more than one,
+     * or a related type outside the index blocks the rename.
+     *
+     * @param array<string, array{path: string, line_start: int, line_end: int}> $anonymous
+     * @return list<string>
+     */
+    private function anonymousCollisionBlockers(AgentMapIndex $map, array $anonymous, string $originalName, string $replacementName): array
+    {
+        $blockers = [];
+        foreach ($anonymous as $anonymousId => $member) {
+            $source = @file_get_contents(rtrim($map->root, '/') . '/' . $member['path']);
+            $owners = [];
+            if (is_string($source)) {
+                $owners = (new NodeFinder())->find(
+                    PhpCodeParser::getAstFromString($source),
+                    static fn (Node $node): bool => $node instanceof Class_
+                        && $node->name === null
+                        && array_filter(
+                            $node->getMethods(),
+                            static fn (ClassMethod $method): bool => strcasecmp($method->name->toString(), $originalName) === 0
+                                && $method->getStartLine() === $member['line_start']
+                                && $method->getEndLine() === $member['line_end'],
+                        ) !== [],
+                );
+            }
+            if (count($owners) !== 1 || !$owners[0] instanceof Class_) {
+                $blockers[] = 'Anonymous rename family member could not be located in exactly one anonymous class: ' . $anonymousId;
+                continue;
+            }
+            foreach ($owners[0]->getMethods() as $method) {
+                if (strcasecmp($method->name->toString(), $replacementName) === 0) {
+                    $blockers[] = sprintf('Replacement name would collide with method %s of anonymous class %s.', $method->name->toString(), $anonymousId);
+                }
+            }
+            $blockers = [...$blockers, ...$this->anonymousRelatedTypeCollisions($map, $anonymousId, $replacementName)];
+        }
+
+        return $blockers;
+    }
+
+    /**
+     * Types the anonymous class extends, implements or uses, and their indexed ancestors, must not declare the
+     * replacement name; a related type that is not indexed cannot be checked and blocks.
+     *
+     * @return list<string>
+     */
+    private function anonymousRelatedTypeCollisions(AgentMapIndex $map, string $anonymousId, string $replacementName): array
+    {
+        $ownerId = 'class:' . substr($anonymousId, strlen('method:'), (int) strpos($anonymousId, '::') - strlen('method:'));
+        $types = [];
+        $queue = [$ownerId];
+        for ($offset = 0; isset($queue[$offset]); ++$offset) {
+            foreach ($map->relations as $relation) {
+                if ($relation->sourceId !== $queue[$offset] || !in_array($relation->kind, ['extends', 'implements', 'uses_trait'], true)) {
+                    continue;
+                }
+                foreach ($relation->targetIds as $targetId) {
+                    if (!isset($types[$targetId])) {
+                        $types[$targetId] = true;
+                        $queue[] = $targetId;
+                    }
+                }
+            }
+        }
+
+        $blockers = [];
+        foreach (array_keys($types) as $typeId) {
+            $resolved = $map->symbolById($typeId);
+            if ($resolved === null) {
+                $blockers[] = sprintf('Anonymous class %s relates to a type outside the index (%s), so a replacement-name collision cannot be ruled out.', $ownerId, $typeId);
+                continue;
+            }
+            foreach ($resolved['symbol']->methods as $method) {
+                if (strcasecmp($method->name, $replacementName) === 0) {
+                    $blockers[] = sprintf('Replacement name would collide with method %s inherited by anonymous class %s.', $resolved['symbol']->methodId($method), $ownerId);
+                }
+            }
+        }
+
+        return $blockers;
     }
 
     /**
@@ -316,6 +456,32 @@ final readonly class MethodRenamePlanner
         return $blockers;
     }
 
+    /**
+     * Every first-class callable of the name in the file is a resolved call relation of the family, or of no family
+     * member at all (another class's method of the same name), so the relation loop handles it exactly.
+     */
+    private function firstClassCallablesAreResolved(AgentMapIndex $map, MethodNodeRemover $nodeRemover, string $path, string $name): bool
+    {
+        foreach ($nodeRemover->firstClassCallableRanges($path, $name) as $range) {
+            $resolved = false;
+            foreach ($map->relations as $relation) {
+                if ($relation->kind === 'calls'
+                    && $relation->file === $path
+                    && $relation->startFilePos === $range['start_file_pos']
+                    && $relation->endFilePos === $range['end_file_pos']
+                    && $relation->resolution === 'phpstan_resolved') {
+                    $resolved = true;
+                    break;
+                }
+            }
+            if (!$resolved) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /** @param array<string, true> $types */
     private function addIndexedType(AgentMapIndex $map, array &$types, string $typeId): bool
     {
@@ -331,14 +497,16 @@ final readonly class MethodRenamePlanner
     /**
      * @param array<string, ResolvedMethod> $family
      * @param list<PlanBlindSpot> $blindSpots
+     * @param list<string> $anonymousOwners
      */
-    private function recordDynamicBlindSpot(RelationEntry $relation, array $family, array &$blindSpots): void
+    private function recordDynamicBlindSpot(RelationEntry $relation, array $family, array &$blindSpots, array $anonymousOwners = []): void
     {
         if ($relation->resolution !== 'dynamic' || $relation->receiverType === null) {
             return;
         }
-        foreach ($family as $method) {
-            if (!$this->receiverTypeContainsOwner($relation->receiverType, $method->owner->fqn)) {
+        $owners = [...array_map(static fn (ResolvedMethod $method): string => $method->owner->fqn, array_values($family)), ...$anonymousOwners];
+        foreach ($owners as $owner) {
+            if (!$this->receiverTypeContainsOwner($relation->receiverType, $owner)) {
                 continue;
             }
             $blindSpots[] = new PlanBlindSpot(
@@ -413,6 +581,7 @@ final readonly class MethodRenamePlanner
      * @param list<PlanBlindSpot> $blindSpots
      * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
+     * @param list<string> $anonymousIds
      */
     private function result(
         AgentMapIndex $map,
@@ -424,8 +593,9 @@ final readonly class MethodRenamePlanner
         array $blindSpots,
         array $staleEvidence,
         array $blockers,
+        array $anonymousIds = [],
     ): MethodRenamePlan {
-        $familyIds = array_keys($family);
+        $familyIds = [...array_keys($family), ...$anonymousIds];
         sort($familyIds, SORT_STRING);
         $blockers = array_values(array_unique($blockers));
         $blindSpots = $this->uniqueBlindSpots($blindSpots);
