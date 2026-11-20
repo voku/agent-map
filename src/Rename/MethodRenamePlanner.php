@@ -5,10 +5,6 @@ declare(strict_types=1);
 namespace voku\AgentMap\Rename;
 
 use InvalidArgumentException;
-use PhpParser\Node;
-use PhpParser\Node\Stmt\Class_;
-use PhpParser\Node\Stmt\ClassMethod;
-use PhpParser\NodeFinder;
 use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\RelationEntry;
@@ -20,7 +16,6 @@ use voku\AgentMap\Plan\PlanProvenance;
 use voku\AgentMap\Plan\PlanStaleEvidence;
 use voku\AgentMap\Reference\NonPhpReferenceScanner;
 use voku\AgentMap\Reference\ReferenceTarget;
-use voku\SimplePhpParser\Parsers\PhpCodeParser;
 
 /** Builds a read-only, fail-closed rename plan for one PHP method family. */
 final readonly class MethodRenamePlanner
@@ -152,7 +147,7 @@ final readonly class MethodRenamePlanner
 
         $familyIds = array_fill_keys([...array_keys($family), ...array_keys($anonymous)], true);
         $anonymousOwners = array_values(array_unique(array_map(
-            static fn (string $anonymousId): string => substr($anonymousId, strlen('method:'), (int) strpos($anonymousId, '::') - strlen('method:')),
+            static fn (string $anonymousId): string => AnonymousMethod::ownerFqn($anonymousId),
             array_keys($anonymous),
         )));
         foreach ($map->relations as $relation) {
@@ -259,7 +254,7 @@ final readonly class MethodRenamePlanner
                     if ($candidate === null) {
                         // `new class implements Contract` overrides through its own relation, which carries the method's
                         // file and lines. Any other unindexed member stays a blocker.
-                        if ($relation->sourceId === $candidateId && self::isAnonymousMethodId($candidateId)) {
+                        if ($relation->sourceId === $candidateId && AnonymousMethod::isId($candidateId)) {
                             $anonymous[$candidateId] = ['path' => $relation->file, 'line_start' => $relation->lineStart, 'line_end' => $relation->lineEnd];
                             $queue[] = $candidateId;
                             continue;
@@ -279,11 +274,6 @@ final readonly class MethodRenamePlanner
         return [$family, $anonymous, array_values(array_unique($blockers))];
     }
 
-    private static function isAnonymousMethodId(string $methodId): bool
-    {
-        return preg_match('/^method:AnonymousClass[0-9a-f]{32}::[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*$/', $methodId) === 1;
-    }
-
     /**
      * The replacement name must not already be a method of the anonymous class, nor of a type it extends, implements
      * or uses. Its methods are not in the symbol index, so the class is read from source: the owner is the one
@@ -297,26 +287,12 @@ final readonly class MethodRenamePlanner
     {
         $blockers = [];
         foreach ($anonymous as $anonymousId => $member) {
-            $source = @file_get_contents(rtrim($map->root, '/') . '/' . $member['path']);
-            $owners = [];
-            if (is_string($source)) {
-                $owners = (new NodeFinder())->find(
-                    PhpCodeParser::getAstFromString($source),
-                    static fn (Node $node): bool => $node instanceof Class_
-                        && $node->name === null
-                        && array_filter(
-                            $node->getMethods(),
-                            static fn (ClassMethod $method): bool => strcasecmp($method->name->toString(), $originalName) === 0
-                                && $method->getStartLine() === $member['line_start']
-                                && $method->getEndLine() === $member['line_end'],
-                        ) !== [],
-                );
-            }
-            if (count($owners) !== 1 || !$owners[0] instanceof Class_) {
+            $owners = AnonymousMethod::owners($map->root, $member['path'], $originalName, $member['line_start'], $member['line_end']);
+            if (count($owners) !== 1) {
                 $blockers[] = 'Anonymous rename family member could not be located in exactly one anonymous class: ' . $anonymousId;
                 continue;
             }
-            foreach ($owners[0]->getMethods() as $method) {
+            foreach ($owners[0]['class']->getMethods() as $method) {
                 if (strcasecmp($method->name->toString(), $replacementName) === 0) {
                     $blockers[] = sprintf('Replacement name would collide with method %s of anonymous class %s.', $method->name->toString(), $anonymousId);
                 }
@@ -335,7 +311,7 @@ final readonly class MethodRenamePlanner
      */
     private function anonymousRelatedTypeCollisions(AgentMapIndex $map, string $anonymousId, string $replacementName): array
     {
-        $ownerId = 'class:' . substr($anonymousId, strlen('method:'), (int) strpos($anonymousId, '::') - strlen('method:'));
+        $ownerId = 'class:' . AnonymousMethod::ownerFqn($anonymousId);
         $types = [];
         $queue = [$ownerId];
         for ($offset = 0; isset($queue[$offset]); ++$offset) {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace voku\AgentMap\Rename;
 
 use InvalidArgumentException;
+use PhpParser\Node\Expr\Variable;
 use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\RelationEntry;
@@ -76,8 +77,9 @@ final readonly class ParameterRenamePlanner
             );
         }
 
-        [$family, $familyBlockers] = $this->family($map, $seed);
+        [$family, $anonymous, $familyBlockers] = $this->family($map, $seed);
         $blockers = [...$blockers, ...$familyBlockers];
+        $blockers = [...$blockers, ...$this->anonymousParameterBlockers($map, $anonymous, $seed->method->name, $originalName, $replacementName, $parameterIndex)];
         foreach ($family as $method) {
             if ($method->owner->kind === 'trait') {
                 $blockers[] = 'Trait method parameter rename is blocked until trait adaptation contracts are represented: ' . $method->id;
@@ -109,7 +111,7 @@ final readonly class ParameterRenamePlanner
         }
         $blockers = array_values(array_unique($blockers));
         if ($blockers !== []) {
-            return $this->result($map, $seed, $originalName, $replacementName, $parameterIndex, $family, [], $blindSpots, $staleEvidence, $blockers);
+            return $this->result($map, $seed, $originalName, $replacementName, $parameterIndex, $family, [], $blindSpots, $staleEvidence, $blockers, array_keys($anonymous));
         }
 
         if ($this->familyIsExternallyCallable($family)) {
@@ -185,7 +187,65 @@ final readonly class ParameterRenamePlanner
             }
         }
 
-        $familyIds = array_fill_keys(array_keys($family), true);
+        // Anonymous implementations: same exact declaration and reference edits, located through the overrides
+        // relation's file and lines because the class has no indexed symbol.
+        foreach ($anonymous as $anonymousId => $member) {
+            $file = $map->file($member['path']);
+            if ($file === null) {
+                $blockers[] = 'Anonymous parameter family member is outside the indexed files: ' . $anonymousId;
+                continue;
+            }
+            try {
+                $position = $locator->declaration($member['path'], $member['line_start'], $member['line_end'], $seed->method->name, $originalName, $parameterIndex);
+                $edits[] = new PlanEdit(
+                    path: $member['path'],
+                    sourceSha256: $file->sha256,
+                    startFilePos: $position['start_file_pos'],
+                    endFilePos: $position['end_file_pos'],
+                    lineStart: $position['line'],
+                    lineEnd: $position['line'],
+                    expected: $position['actual'],
+                    replacement: '$' . $replacementName,
+                    role: 'parameter_declaration',
+                    symbolId: $anonymousId,
+                    resolution: 'parser_exact',
+                );
+                $references = $locator->references($member['path'], $member['line_start'], $member['line_end'], $seed->method->name, $originalName, $replacementName);
+                if ($references['replacement_references'] !== []) {
+                    $blockers[] = sprintf(
+                        'Replacement variable $%s already exists in method scope %s at %s:%d; renaming would merge local bindings.',
+                        $replacementName,
+                        $anonymousId,
+                        $member['path'],
+                        $references['replacement_references'][0]['line'],
+                    );
+                    continue;
+                }
+                foreach ($references['references'] as $reference) {
+                    $edits[] = new PlanEdit(
+                        path: $member['path'],
+                        sourceSha256: $file->sha256,
+                        startFilePos: $reference['start_file_pos'],
+                        endFilePos: $reference['end_file_pos'],
+                        lineStart: $reference['line'],
+                        lineEnd: $reference['line'],
+                        expected: $reference['actual'],
+                        replacement: '$' . $replacementName,
+                        role: 'parameter_reference',
+                        symbolId: $anonymousId,
+                        resolution: 'parser_exact',
+                    );
+                }
+            } catch (RuntimeException $exception) {
+                $blockers[] = $exception->getMessage();
+            }
+        }
+
+        $familyIds = array_fill_keys([...array_keys($family), ...array_keys($anonymous)], true);
+        $anonymousOwners = array_values(array_unique(array_map(
+            static fn (string $anonymousId): string => AnonymousMethod::ownerFqn($anonymousId),
+            array_keys($anonymous),
+        )));
         foreach ($map->relations as $relation) {
             if ($relation->kind !== 'calls') {
                 continue;
@@ -196,7 +256,7 @@ final readonly class ParameterRenamePlanner
                 static fn (string $targetId): bool => isset($familyIds[$targetId]),
             ));
             if ($familyTargets === []) {
-                $this->recordDynamicBlindSpot($relation, $family, $locator, $originalName, $replacementName, $blindSpots, $blockers);
+                $this->recordDynamicBlindSpot($relation, $family, $locator, $originalName, $replacementName, $blindSpots, $blockers, $anonymousOwners);
                 continue;
             }
 
@@ -291,13 +351,14 @@ final readonly class ParameterRenamePlanner
         $blockers = [...$blockers, ...$this->overlapBlockers($edits)];
         $blockers = array_values(array_unique($blockers));
 
-        return $this->result($map, $seed, $originalName, $replacementName, $parameterIndex, $family, $edits, $blindSpots, $staleEvidence, $blockers);
+        return $this->result($map, $seed, $originalName, $replacementName, $parameterIndex, $family, $edits, $blindSpots, $staleEvidence, $blockers, array_keys($anonymous));
     }
 
-    /** @return array{0: array<string, ResolvedMethod>, 1: list<string>} */
+    /** @return array{0: array<string, ResolvedMethod>, 1: array<string, array{path: string, line_start: int, line_end: int}>, 2: list<string>} */
     private function family(AgentMapIndex $map, ResolvedMethod $seed): array
     {
         $family = [$seed->id => $seed];
+        $anonymous = [];
         $blockers = [];
         $queue = [$seed->id];
 
@@ -316,11 +377,16 @@ final readonly class ParameterRenamePlanner
                 }
 
                 foreach ($candidates as $candidateId) {
-                    if (isset($family[$candidateId])) {
+                    if (isset($family[$candidateId]) || isset($anonymous[$candidateId])) {
                         continue;
                     }
                     $candidate = $map->resolvedMethodById($candidateId);
                     if ($candidate === null) {
+                        if ($relation->sourceId === $candidateId && AnonymousMethod::isId($candidateId)) {
+                            $anonymous[$candidateId] = ['path' => $relation->file, 'line_start' => $relation->lineStart, 'line_end' => $relation->lineEnd];
+                            $queue[] = $candidateId;
+                            continue;
+                        }
                         $blockers[] = 'Parameter family crosses an unindexed method contract: ' . $candidateId;
                         continue;
                     }
@@ -331,8 +397,44 @@ final readonly class ParameterRenamePlanner
         }
 
         ksort($family, SORT_STRING);
+        ksort($anonymous, SORT_STRING);
 
-        return [$family, array_values(array_unique($blockers))];
+        return [$family, $anonymous, array_values(array_unique($blockers))];
+    }
+
+    /**
+     * Each anonymous member must be declared by exactly one anonymous class, expose the same parameter at the same
+     * position, and not already use the replacement name for another parameter.
+     *
+     * @param array<string, array{path: string, line_start: int, line_end: int}> $anonymous
+     * @return list<string>
+     */
+    private function anonymousParameterBlockers(AgentMapIndex $map, array $anonymous, string $methodName, string $originalName, string $replacementName, int $parameterIndex): array
+    {
+        $blockers = [];
+        foreach ($anonymous as $anonymousId => $member) {
+            $owners = AnonymousMethod::owners($map->root, $member['path'], $methodName, $member['line_start'], $member['line_end']);
+            if (count($owners) !== 1) {
+                $blockers[] = 'Anonymous parameter family member could not be located in exactly one anonymous class: ' . $anonymousId;
+                continue;
+            }
+            $names = [];
+            foreach ($owners[0]['method']->params as $index => $param) {
+                $names[$index] = $param->var instanceof Variable && is_string($param->var->name) ? $param->var->name : null;
+            }
+            if (($names[$parameterIndex] ?? null) !== $originalName) {
+                $actual = isset($names[$parameterIndex]) ? '$' . $names[$parameterIndex] : 'missing';
+                $blockers[] = sprintf('Method family parameter %d is not consistently named $%s: %s exposes %s.', $parameterIndex, $originalName, $anonymousId, $actual);
+                continue;
+            }
+            foreach ($names as $index => $name) {
+                if ($index !== $parameterIndex && $name === $replacementName) {
+                    $blockers[] = sprintf('Replacement parameter $%s collides with parameter %d on %s.', $replacementName, $index, $anonymousId);
+                }
+            }
+        }
+
+        return $blockers;
     }
 
     /** @param array<string, ResolvedMethod> $family */
@@ -351,6 +453,7 @@ final readonly class ParameterRenamePlanner
      * @param array<string, ResolvedMethod> $family
      * @param list<PlanBlindSpot> $blindSpots
      * @param list<string> $blockers
+     * @param list<string> $anonymousOwners
      */
     private function recordDynamicBlindSpot(
         RelationEntry $relation,
@@ -360,14 +463,15 @@ final readonly class ParameterRenamePlanner
         string $replacementName,
         array &$blindSpots,
         array &$blockers,
+        array $anonymousOwners = [],
     ): void {
         if ($relation->resolution !== 'dynamic' || $relation->receiverType === null) {
             return;
         }
 
         $matchesFamily = false;
-        foreach ($family as $method) {
-            if ($this->receiverTypeContainsOwner($relation->receiverType, $method->owner->fqn)) {
+        foreach ([...array_map(static fn (ResolvedMethod $method): string => $method->owner->fqn, array_values($family)), ...$anonymousOwners] as $owner) {
+            if ($this->receiverTypeContainsOwner($relation->receiverType, $owner)) {
                 $matchesFamily = true;
                 break;
             }
@@ -456,6 +560,7 @@ final readonly class ParameterRenamePlanner
      * @param list<PlanBlindSpot> $blindSpots
      * @param list<PlanStaleEvidence> $staleEvidence
      * @param list<string> $blockers
+     * @param list<string> $anonymousIds
      */
     private function result(
         AgentMapIndex $map,
@@ -468,8 +573,9 @@ final readonly class ParameterRenamePlanner
         array $blindSpots,
         array $staleEvidence,
         array $blockers,
+        array $anonymousIds = [],
     ): ParameterRenamePlan {
-        $familyIds = array_keys($family);
+        $familyIds = [...array_keys($family), ...$anonymousIds];
         sort($familyIds, SORT_STRING);
         $blockers = array_values(array_unique($blockers));
         $blindSpots = $this->uniqueBlindSpots($blindSpots);

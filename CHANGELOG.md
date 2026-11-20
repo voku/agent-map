@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.24.2 - 2026-11-20
+
+### Fixed
+
+- Parameter rename plans accept anonymous implementations of the interface, as method rename plans do since 0.24.1. Before, `new class implements Provider` blocked the plan as "crosses an unindexed method contract". The anonymous member joins `family` with exact declaration, reference and named-argument edits. If no anonymous class, or more than one, declares the method at its recorded lines, the plan blocks. It also blocks when the parameter at that position has another name, or when another parameter already uses the replacement name. Dynamic dispatch on the anonymous receiver keeps the plan `review_required`. The anonymous-owner lookup is now shared by both planners (`AnonymousMethod`). (`AnonymousClassParameterRenameTest`)
+
 ## 0.24.1 - 2026-11-20
 
 ### Fixed
