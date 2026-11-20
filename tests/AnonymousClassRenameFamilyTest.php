@@ -106,4 +106,95 @@ PHP);
         self::assertSame(MethodRenamePlan::STATUS_BLOCKED, $plan->status);
         self::assertNotEmpty(array_filter($plan->blockers, static fn (string $blocker): bool => str_contains($blocker, 'of anonymous class')), json_encode($plan->toArray()) ?: '');
     }
+
+    /** The owner is the anonymous class that declares the target, not an outer one whose method spans the same lines. */
+    public function testTheCollisionCheckUsesTheClassThatDeclaresTheTarget(): void
+    {
+        file_put_contents($this->root . '/src/Usage.php', <<<'PHP'
+<?php
+
+namespace Shop;
+
+final class Usage
+{
+    public function make(): Provider
+    {
+        $outer = new class {
+            public function build(): Provider { return new class implements Provider { public function gather(): int { return 0; } public function collect(): int {
+                return 1;
+            } }; }
+        };
+
+        return $outer->build();
+    }
+}
+PHP);
+
+        $plan = (new MethodRenamePlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Shop\\Provider::collect', 'gather');
+
+        self::assertSame(MethodRenamePlan::STATUS_BLOCKED, $plan->status, json_encode($plan->toArray()) ?: '');
+        self::assertNotEmpty(array_filter($plan->blockers, static fn (string $blocker): bool => str_contains($blocker, 'of anonymous class')));
+    }
+
+    public function testAMethodTheAnonymousClassInheritsIsACollision(): void
+    {
+        file_put_contents($this->root . '/src/Base.php', <<<'PHP'
+<?php
+
+namespace Shop;
+
+abstract class Base
+{
+    final public function gather(): int
+    {
+        return 9;
+    }
+}
+PHP);
+        $path = $this->root . '/src/Usage.php';
+        file_put_contents($path, str_replace('new class implements Provider', 'new class extends Base implements Provider', (string) file_get_contents($path)));
+
+        $plan = (new MethodRenamePlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Shop\\Provider::collect', 'gather');
+
+        self::assertSame(MethodRenamePlan::STATUS_BLOCKED, $plan->status, json_encode($plan->toArray()) ?: '');
+        self::assertNotEmpty(array_filter($plan->blockers, static fn (string $blocker): bool => str_contains($blocker, 'inherited by anonymous class')));
+    }
+
+    public function testAnInheritedMethodWithAnotherNameStillAllowsTheRename(): void
+    {
+        file_put_contents($this->root . '/src/Base.php', <<<'PHP'
+<?php
+
+namespace Shop;
+
+abstract class Base
+{
+    public function describe(): string
+    {
+        return 'base';
+    }
+}
+PHP);
+        $path = $this->root . '/src/Usage.php';
+        file_put_contents($path, str_replace('new class implements Provider', 'new class extends Base implements Provider', (string) file_get_contents($path)));
+
+        $plan = (new MethodRenamePlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Shop\\Provider::collect', 'gather');
+
+        self::assertSame(MethodRenamePlan::STATUS_SAFE, $plan->status, json_encode($plan->toArray()) ?: '');
+    }
+
+    public function testDynamicDispatchOnTheAnonymousReceiverRequiresReview(): void
+    {
+        $path = $this->root . '/src/Usage.php';
+        file_put_contents($path, str_replace(
+            "                return 2;\n            }\n",
+            "                return 2;\n            }\n\n            public function call(string \$name): int\n            {\n                return \$this->{\$name}();\n            }\n",
+            (string) file_get_contents($path),
+        ));
+
+        $plan = (new MethodRenamePlanner())->plan((new AgentMapBuilder())->build($this->root, ['src'], []), 'Shop\\Provider::collect', 'gather');
+
+        self::assertSame(MethodRenamePlan::STATUS_REVIEW_REQUIRED, $plan->status, json_encode($plan->toArray()) ?: '');
+        self::assertSame('dynamic_method_name', $plan->blindSpots[0]->kind ?? null);
+    }
 }

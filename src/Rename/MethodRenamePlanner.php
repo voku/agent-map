@@ -67,7 +67,7 @@ final readonly class MethodRenamePlanner
             }
         }
         $blockers = [...$blockers, ...$this->collisionBlockers($map, $family, $replacementName)];
-        $blockers = [...$blockers, ...$this->anonymousCollisionBlockers($map, $anonymous, $replacementName)];
+        $blockers = [...$blockers, ...$this->anonymousCollisionBlockers($map, $anonymous, $originalName, $replacementName)];
 
         // A callable is not a call relation. Renaming only the declaration while
         // `[$this, 'name']` or `'Class::name'` still names the old method leaves
@@ -151,6 +151,10 @@ final readonly class MethodRenamePlanner
         }
 
         $familyIds = array_fill_keys([...array_keys($family), ...array_keys($anonymous)], true);
+        $anonymousOwners = array_values(array_unique(array_map(
+            static fn (string $anonymousId): string => substr($anonymousId, strlen('method:'), (int) strpos($anonymousId, '::') - strlen('method:')),
+            array_keys($anonymous),
+        )));
         foreach ($map->relations as $relation) {
             if ($relation->kind !== 'calls') {
                 continue;
@@ -161,7 +165,7 @@ final readonly class MethodRenamePlanner
                 static fn (string $targetId): bool => isset($familyIds[$targetId]),
             ));
             if ($familyTargets === []) {
-                $this->recordDynamicBlindSpot($relation, $family, $blindSpots);
+                $this->recordDynamicBlindSpot($relation, $family, $blindSpots, $anonymousOwners);
                 continue;
             }
 
@@ -281,36 +285,83 @@ final readonly class MethodRenamePlanner
     }
 
     /**
-     * The replacement name must not already be a method of the anonymous class. Its methods are not in the symbol
-     * index, so the class is read from source; a class that cannot be found blocks the rename.
+     * The replacement name must not already be a method of the anonymous class, nor of a type it extends, implements
+     * or uses. Its methods are not in the symbol index, so the class is read from source: the owner is the one
+     * anonymous class that directly declares the target method at its recorded lines. No such class, more than one,
+     * or a related type outside the index blocks the rename.
      *
      * @param array<string, array{path: string, line_start: int, line_end: int}> $anonymous
      * @return list<string>
      */
-    private function anonymousCollisionBlockers(AgentMapIndex $map, array $anonymous, string $replacementName): array
+    private function anonymousCollisionBlockers(AgentMapIndex $map, array $anonymous, string $originalName, string $replacementName): array
     {
         $blockers = [];
         foreach ($anonymous as $anonymousId => $member) {
             $source = @file_get_contents(rtrim($map->root, '/') . '/' . $member['path']);
-            $owner = null;
+            $owners = [];
             if (is_string($source)) {
-                $owner = (new NodeFinder())->findFirst(
+                $owners = (new NodeFinder())->find(
                     PhpCodeParser::getAstFromString($source),
                     static fn (Node $node): bool => $node instanceof Class_
                         && $node->name === null
                         && array_filter(
                             $node->getMethods(),
-                            static fn (ClassMethod $method): bool => $method->getStartLine() === $member['line_start'] && $method->getEndLine() === $member['line_end'],
+                            static fn (ClassMethod $method): bool => strcasecmp($method->name->toString(), $originalName) === 0
+                                && $method->getStartLine() === $member['line_start']
+                                && $method->getEndLine() === $member['line_end'],
                         ) !== [],
                 );
             }
-            if (!$owner instanceof Class_) {
-                $blockers[] = 'Anonymous rename family member could not be located in source: ' . $anonymousId;
+            if (count($owners) !== 1 || !$owners[0] instanceof Class_) {
+                $blockers[] = 'Anonymous rename family member could not be located in exactly one anonymous class: ' . $anonymousId;
                 continue;
             }
-            foreach ($owner->getMethods() as $method) {
+            foreach ($owners[0]->getMethods() as $method) {
                 if (strcasecmp($method->name->toString(), $replacementName) === 0) {
                     $blockers[] = sprintf('Replacement name would collide with method %s of anonymous class %s.', $method->name->toString(), $anonymousId);
+                }
+            }
+            $blockers = [...$blockers, ...$this->anonymousRelatedTypeCollisions($map, $anonymousId, $replacementName)];
+        }
+
+        return $blockers;
+    }
+
+    /**
+     * Types the anonymous class extends, implements or uses, and their indexed ancestors, must not declare the
+     * replacement name; a related type that is not indexed cannot be checked and blocks.
+     *
+     * @return list<string>
+     */
+    private function anonymousRelatedTypeCollisions(AgentMapIndex $map, string $anonymousId, string $replacementName): array
+    {
+        $ownerId = 'class:' . substr($anonymousId, strlen('method:'), (int) strpos($anonymousId, '::') - strlen('method:'));
+        $types = [];
+        $queue = [$ownerId];
+        for ($offset = 0; isset($queue[$offset]); ++$offset) {
+            foreach ($map->relations as $relation) {
+                if ($relation->sourceId !== $queue[$offset] || !in_array($relation->kind, ['extends', 'implements', 'uses_trait'], true)) {
+                    continue;
+                }
+                foreach ($relation->targetIds as $targetId) {
+                    if (!isset($types[$targetId])) {
+                        $types[$targetId] = true;
+                        $queue[] = $targetId;
+                    }
+                }
+            }
+        }
+
+        $blockers = [];
+        foreach (array_keys($types) as $typeId) {
+            $resolved = $map->symbolById($typeId);
+            if ($resolved === null) {
+                $blockers[] = sprintf('Anonymous class %s relates to a type outside the index (%s), so a replacement-name collision cannot be ruled out.', $ownerId, $typeId);
+                continue;
+            }
+            foreach ($resolved['symbol']->methods as $method) {
+                if (strcasecmp($method->name, $replacementName) === 0) {
+                    $blockers[] = sprintf('Replacement name would collide with method %s inherited by anonymous class %s.', $resolved['symbol']->methodId($method), $ownerId);
                 }
             }
         }
@@ -446,14 +497,16 @@ final readonly class MethodRenamePlanner
     /**
      * @param array<string, ResolvedMethod> $family
      * @param list<PlanBlindSpot> $blindSpots
+     * @param list<string> $anonymousOwners
      */
-    private function recordDynamicBlindSpot(RelationEntry $relation, array $family, array &$blindSpots): void
+    private function recordDynamicBlindSpot(RelationEntry $relation, array $family, array &$blindSpots, array $anonymousOwners = []): void
     {
         if ($relation->resolution !== 'dynamic' || $relation->receiverType === null) {
             return;
         }
-        foreach ($family as $method) {
-            if (!$this->receiverTypeContainsOwner($relation->receiverType, $method->owner->fqn)) {
+        $owners = [...array_map(static fn (ResolvedMethod $method): string => $method->owner->fqn, array_values($family)), ...$anonymousOwners];
+        foreach ($owners as $owner) {
+            if (!$this->receiverTypeContainsOwner($relation->receiverType, $owner)) {
                 continue;
             }
             $blindSpots[] = new PlanBlindSpot(
