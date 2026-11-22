@@ -6,6 +6,7 @@ namespace voku\AgentMap\Cli;
 
 use InvalidArgumentException;
 use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
+use voku\AgentMap\IO\SourceLanguage;
 use voku\AgentMap\MapArtifactPaths;
 
 final readonly class CliOptions
@@ -15,6 +16,7 @@ final readonly class CliOptions
      * @param list<string> $scanPaths
      * @param list<string> $excludes
      * @param 'auto'|'structural'|'phpstan' $backend
+     * @param list<string> $languages
      */
     public function __construct(
         public string $command,
@@ -49,6 +51,7 @@ final readonly class CliOptions
         public int $maxTypeDefinitions,
         public int $watchIntervalMilliseconds,
         public MapArtifactPaths $artifacts,
+        public array $languages = [SourceLanguage::PHP],
     ) {
     }
 
@@ -84,6 +87,7 @@ final readonly class CliOptions
             'method-limit' => '10',
             'base' => 'main',
             'backend' => 'auto',
+            'languages' => SourceLanguage::PHP,
             'phpstan-config' => '',
             'phpstan-memory-limit' => PhpStanSemanticAnalyzer::isAvailable() ? '2G' : '',
             'context-budget' => '60000',
@@ -195,6 +199,15 @@ final readonly class CliOptions
         if (!in_array($values['backend'], ['auto', 'structural', 'phpstan'], true)) {
             throw new InvalidArgumentException('Unknown backend: ' . $values['backend']);
         }
+        $languages = SourceLanguage::normalize(self::splitList($values['languages']));
+        if (!in_array(SourceLanguage::PHP, $languages, true)) {
+            // PHPStan is the semantic backend of PHP files only. Without PHP in scope there is
+            // nothing it could analyse, so the map must not carry its identity.
+            if ($values['backend'] === 'phpstan') {
+                throw new InvalidArgumentException('--backend=phpstan requires php in --languages.');
+            }
+            $values['backend'] = 'structural';
+        }
 
         return new self(
             command: $command,
@@ -229,6 +242,7 @@ final readonly class CliOptions
             maxTypeDefinitions: self::positiveInt('max-type-definitions', $values['max-type-definitions'], 0),
             watchIntervalMilliseconds: self::positiveInt('interval', $values['interval'], 50),
             artifacts: $artifacts,
+            languages: $languages,
         );
     }
 

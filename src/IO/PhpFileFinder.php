@@ -30,6 +30,13 @@ final readonly class PhpFileFinder
     ];
 
     /**
+     * @param list<string> $extensions file name suffixes this finder indexes; PHP source by default
+     */
+    public function __construct(private array $extensions = self::EXTENSIONS)
+    {
+    }
+
+    /**
      * @param list<string> $paths
      * @param list<string> $excludes
      *
@@ -57,8 +64,14 @@ final readonly class PhpFileFinder
                 continue;
             }
 
+            // `dist/` and `build/` at the project root hold compiled TypeScript/JavaScript output by
+            // convention. A scope that names one of them, or anything inside, is an explicit request
+            // for those files and is honoured.
+            $skipCompiledOutput = preg_match('~^(?:dist|build)(/|$)~', $requestedScope) !== 1
+                && preg_match('~^(?:dist|build)(/|$)~', $resolvedScope) !== 1;
+
             if (is_file($absolutePath)) {
-                $this->addPhpFile($files, $root, $absolutePath, $patterns);
+                $this->addPhpFile($files, $root, $absolutePath, $patterns, $skipCompiledOutput);
                 continue;
             }
 
@@ -82,7 +95,7 @@ final readonly class PhpFileFinder
                     continue;
                 }
 
-                $this->addPhpFile($files, $root, $item->getPathname(), $patterns);
+                $this->addPhpFile($files, $root, $item->getPathname(), $patterns, $skipCompiledOutput);
             }
         }
 
@@ -95,7 +108,7 @@ final readonly class PhpFileFinder
      * @param array<string, string> $files
      * @param list<string> $patterns
      */
-    private function addPhpFile(array &$files, string $root, string $path, array $patterns): void
+    private function addPhpFile(array &$files, string $root, string $path, array $patterns, bool $skipCompiledOutput): void
     {
         $real = realpath($path);
         if (!is_string($real)) {
@@ -107,11 +120,18 @@ final readonly class PhpFileFinder
             return;
         }
 
-        if (!self::isPhpSource($absolute)) {
+        if (!$this->isIndexedSource($absolute)) {
             return;
         }
 
         $relative = ltrim(substr($absolute, strlen($root)), '/');
+        if (
+            $skipCompiledOutput
+            && SourceLanguage::ofPath($relative) === SourceLanguage::TYPESCRIPT
+            && preg_match('~^(?:dist|build)/~', $relative) === 1
+        ) {
+            return;
+        }
         if ($this->isExcluded($relative, $absolute, $patterns)) {
             return;
         }
@@ -123,6 +143,20 @@ final readonly class PhpFileFinder
     public static function isPhpSource(string $path): bool
     {
         foreach (self::EXTENSIONS as $extension) {
+            if (str_ends_with($path, $extension)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isIndexedSource(string $path): bool
+    {
+        if (SourceLanguage::isTypeScriptDeclarationFile($path)) {
+            return false;
+        }
+        foreach ($this->extensions as $extension) {
             if (str_ends_with($path, $extension)) {
                 return true;
             }

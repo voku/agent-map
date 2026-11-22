@@ -56,6 +56,8 @@ final readonly class MapWatcher
         callable $shouldStop,
         ?int $maxCycles = null,
     ): int {
+        $this->service->assertRefreshSupported($request);
+
         $refreshes = 0;
         $seen = $this->signature($request) ?? [];
 

@@ -8,32 +8,86 @@ use RuntimeException;
 use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
 use voku\AgentMap\Build\SemanticAnalyzer;
 use voku\AgentMap\Build\StructuralOnlySemanticAnalyzer;
+use voku\AgentMap\Extract\LanguageRoutingSymbolExtractor;
+use voku\AgentMap\Extract\ProjectRootAware;
 use voku\AgentMap\Extract\SimplePhpParserSymbolExtractor;
 use voku\AgentMap\Extract\SymbolExtractor;
+use voku\AgentMap\Extract\TypeScriptSymbolExtractor;
 use voku\AgentMap\IO\PhpFileFinder;
+use voku\AgentMap\IO\SourceLanguage;
 use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Reconcile\MapReconciler;
 
 final readonly class AgentMapBuilder
 {
-    private const STRUCTURAL_BACKEND = 'simple-php-code-parser';
+    /**
+     * Structural backend identity per indexed language.
+     *
+     * @var array<string, string>
+     */
+    private const STRUCTURAL_BACKENDS = [
+        SourceLanguage::PHP => 'simple-php-code-parser',
+        SourceLanguage::TYPESCRIPT => 'typescript-compiler',
+    ];
 
     /** Raise this whenever the cached structural payload changes shape. */
     private const STRUCTURAL_CACHE_VERSION = 1;
 
     private SemanticAnalyzer $semanticAnalyzer;
 
+    /** @var list<string> */
+    private array $languages;
+
+    /**
+     * @param list<string> $languages the languages `$finder` and `$extractor` cover; part of the
+     *                                backend identity. Use `forLanguages()` to get all three wired
+     *                                consistently.
+     */
     public function __construct(
         private PhpFileFinder $finder = new PhpFileFinder(),
         private SymbolExtractor $extractor = new SimplePhpParserSymbolExtractor(),
         ?SemanticAnalyzer $semanticAnalyzer = null,
         private MapReconciler $reconciler = new MapReconciler(),
         private ?MapArtifactPaths $artifacts = null,
+        array $languages = [SourceLanguage::PHP],
     ) {
         $this->semanticAnalyzer = $semanticAnalyzer
             ?? (PhpStanSemanticAnalyzer::isAvailable()
                 ? new PhpStanSemanticAnalyzer($artifacts)
                 : new StructuralOnlySemanticAnalyzer());
+        $this->languages = SourceLanguage::normalize($languages);
+    }
+
+    /**
+     * A builder that indexes exactly the given languages.
+     *
+     * `['php']` is the plain default builder. Enabling `typescript` adds the TypeScript/JavaScript
+     * suffixes to the finder and routes those files to the TypeScript compiler extractor.
+     *
+     * @param list<string> $languages
+     * @param string|null $typeScriptPath explicit `typescript` package directory, used when the
+     *                                    analysed project has none in its own `node_modules`
+     */
+    public static function forLanguages(
+        array $languages,
+        ?SemanticAnalyzer $semanticAnalyzer = null,
+        ?MapArtifactPaths $artifacts = null,
+        ?string $typeScriptPath = null,
+    ): self {
+        $languages = SourceLanguage::normalize($languages);
+        if ($languages === [SourceLanguage::PHP]) {
+            return new self(semanticAnalyzer: $semanticAnalyzer, artifacts: $artifacts);
+        }
+
+        return new self(
+            finder: new PhpFileFinder(SourceLanguage::extensions($languages)),
+            extractor: new LanguageRoutingSymbolExtractor(
+                typeScript: new TypeScriptSymbolExtractor(typeScriptPath: $typeScriptPath),
+            ),
+            semanticAnalyzer: $semanticAnalyzer,
+            artifacts: $artifacts,
+            languages: $languages,
+        );
     }
 
     /**
@@ -46,7 +100,38 @@ final readonly class AgentMapBuilder
      */
     public function backend(): string
     {
-        return self::STRUCTURAL_BACKEND . '+' . $this->semanticAnalyzer->backend();
+        $structural = array_map(static fn (string $language): string => self::STRUCTURAL_BACKENDS[$language], $this->languages);
+
+        return implode('+', $structural) . '+' . $this->semanticAnalyzer->backend();
+    }
+
+    /**
+     * The ` --languages=...` build option that reproduces a recorded backend identity, or an empty
+     * string for a PHP-only map. Recovery commands need it: rebuilding a map that indexed
+     * TypeScript without the option would silently drop every TypeScript file.
+     */
+    public static function languagesOptionForBackend(string $backend): string
+    {
+        $languages = self::languagesForBackend($backend);
+
+        return $languages === [SourceLanguage::PHP] ? '' : ' --languages=' . implode(',', $languages);
+    }
+
+    /**
+     * The languages a recorded backend identity says were indexed; PHP for identities that name
+     * none (maps written before languages existed, hand-built test maps).
+     *
+     * @return list<string>
+     */
+    public static function languagesForBackend(string $backend): array
+    {
+        $parts = explode('+', $backend);
+        $languages = array_keys(array_filter(
+            self::STRUCTURAL_BACKENDS,
+            static fn (string $structural): bool => in_array($structural, $parts, true),
+        ));
+
+        return $languages === [] ? [SourceLanguage::PHP] : $languages;
     }
 
     /**
@@ -92,12 +177,17 @@ final readonly class AgentMapBuilder
         }
 
         $relatives = $this->finder->find($realRoot, $paths, $excludes);
+        $extractor = $this->extractor instanceof ProjectRootAware
+            ? $this->extractor->withProjectRoot($realRoot)
+            : $this->extractor;
 
         $cache = $this->loadStructuralCache($realRoot);
         // Entries outside the current build scope stay in the cache: alternating between a narrow
         // and a wide scope should not force a full re-parse each time.
         $nextCache = $cache;
 
+        // An incremental build that touched no TypeScript file keeps the recorded compiler version.
+        $typeScriptVersion = $previous?->fingerprint?->typeScriptVersion;
         $sourceHashes = [];
         $cachedSymbols = [];
         $uncachedRelatives = [];
@@ -111,7 +201,12 @@ final readonly class AgentMapBuilder
             }
 
             $sourceHashes[$relative] = $sha256;
-            $symbols = $this->cachedSymbols($cache, $relative, $sha256);
+            // Only PHP symbols are a function of the file's own bytes. A TypeScript symbol's
+            // extends/implements identity also depends on the files its imports resolve to, so a
+            // hash-keyed cache entry could go stale without the file changing.
+            $symbols = self::languageOf($relative) === SourceLanguage::PHP
+                ? $this->cachedSymbols($cache, $relative, $sha256)
+                : null;
             if ($symbols === null) {
                 $uncachedRelatives[] = $relative;
                 $uncachedAbsolutes[] = $absolute;
@@ -121,7 +216,7 @@ final readonly class AgentMapBuilder
         }
 
         if ($uncachedRelatives !== []) {
-            $extracted = $this->extractor->extractMany($uncachedAbsolutes);
+            $extracted = $extractor->extractMany($uncachedAbsolutes);
             foreach ($uncachedRelatives as $index => $relative) {
                 $absolute = $uncachedAbsolutes[$index];
                 $result = $extracted[$absolute] ?? null;
@@ -129,14 +224,35 @@ final readonly class AgentMapBuilder
                     throw new RuntimeException('Parsing failed for ' . $relative . '.' . ($result?->error === null ? '' : ' ' . $result->error));
                 }
                 $cachedSymbols[$relative] = $result->symbols;
+                if ($result->toolVersion !== null && self::languageOf($relative) === SourceLanguage::TYPESCRIPT) {
+                    $typeScriptVersion = $result->toolVersion;
+                }
             }
         }
 
         $structuralFiles = [];
+        // The semantic backend is PHP-only: it is never handed a file of another language.
+        $phpRelatives = [];
         foreach ($relatives as $relative) {
             $sha256 = $sourceHashes[$relative];
             $symbols = $cachedSymbols[$relative];
+            $language = self::languageOf($relative);
 
+            if ($language !== SourceLanguage::PHP) {
+                $directory = dirname($relative);
+                $structuralFiles[] = new FileEntry(
+                    path: $relative,
+                    sha256: 'sha256:' . $sha256,
+                    // A module has no declared namespace; its directory is the nearest equivalent.
+                    namespace: $directory === '.' ? '' : $directory,
+                    symbols: $symbols,
+                    semanticStatus: 'pending',
+                    language: $language,
+                );
+                continue;
+            }
+
+            $phpRelatives[] = $relative;
             $nextCache[$relative] = [
                 'sha256' => $sha256,
                 'symbols' => array_map(static fn (SymbolEntry $symbol): array => $symbol->toArray(), $symbols),
@@ -156,7 +272,7 @@ final readonly class AgentMapBuilder
         $configuration = self::resolvePhpStanConfiguration($realRoot, $phpStanConfiguration);
         $semantic = $this->semanticAnalyzer->analyse(
             $realRoot,
-            $relatives,
+            $phpRelatives,
             $configuration,
             $phpStanMemoryLimit,
             $this->analyseDirectories($realRoot, $paths),
@@ -175,7 +291,9 @@ final readonly class AgentMapBuilder
         $composerLockHash = is_file($realRoot . '/composer.lock') ? hash_file('sha256', $realRoot . '/composer.lock') : false;
 
         return new AgentMapIndex(
-            schemaVersion: AgentMapIndex::SCHEMA_VERSION,
+            schemaVersion: $this->languages === [SourceLanguage::PHP]
+                ? AgentMapIndex::SCHEMA_VERSION
+                : AgentMapIndex::POLYGLOT_SCHEMA_VERSION,
             root: $realRoot,
             backend: $backend,
             files: $reconciled['files'],
@@ -187,6 +305,7 @@ final readonly class AgentMapBuilder
                 composerLockSha256: is_string($composerLockHash) ? 'sha256:' . $composerLockHash : 'sha256:none',
                 sourceDigest: 'sha256:' . hash('sha256', implode("\n", $sourceDigestParts)),
                 semanticScope: new SemanticScope($paths, $excludes, $scanPaths),
+                typeScriptVersion: $typeScriptVersion,
             ),
             localBindings: $reconciled['local_bindings'],
             localExits: $reconciled['local_exits'],
@@ -424,6 +543,12 @@ final readonly class AgentMapBuilder
         return str_starts_with($path, '/')
             || str_starts_with($path, '\\\\')
             || preg_match('~^[A-Za-z]:[\\\\/]~', $path) === 1;
+    }
+
+    /** Files no language claims are treated as PHP, as every finder result was before languages existed. */
+    private static function languageOf(string $relative): string
+    {
+        return SourceLanguage::ofPath($relative) ?? SourceLanguage::PHP;
     }
 
     /**

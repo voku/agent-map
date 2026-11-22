@@ -50,6 +50,14 @@ final readonly class MapPreparationService
             );
         }
 
+        if (AgentMapBuilder::languagesOptionForBackend($index->backend) !== '') {
+            throw new MapPreparationException(
+                reason: 'backend_mismatch',
+                recoveryCommand: $this->rebuildCommandFor($request, $index),
+                message: $this->unsupportedLanguagesMessage($request, $index),
+            );
+        }
+
         $normalized = $this->requestForExistingBackend($request, $index);
         try {
             return $this->refresh($normalized);
@@ -74,6 +82,14 @@ final readonly class MapPreparationService
     public function refresh(MapPreparationRequest $request): MapPreparationResult
     {
         $index = $this->reader->readForRoot($request->indexPath, $request->root);
+        if (AgentMapBuilder::languagesOptionForBackend($index->backend) !== '') {
+            // Refresh discovers and re-analyses PHP files only. Answering "up to date" for a map
+            // that also indexes another language would be a claim about files it never looked at.
+            throw new RuntimeException(
+                $this->unsupportedLanguagesMessage($request, $index)
+                . "\n  " . $this->rebuildCommandFor($request, $index),
+            );
+        }
 
         $structural = $request->backend === 'structural';
         $phpStanRefresh = !$structural
@@ -206,6 +222,53 @@ final readonly class MapPreparationService
             removedFiles: $removed,
             message: 'Refreshed ' . count($changed) . ' changed and dropped ' . $removed . ' removed file(s); '
                 . count($rebuilt->files) . ' file(s) indexed in ' . $request->outputPath,
+        );
+    }
+
+    /**
+     * Fails when the existing map indexes a language refresh does not cover.
+     *
+     * A watcher calls this before it starts: every later refresh would fail the same way, so
+     * logging one failure and then polling forever would look like a working watch.
+     */
+    public function assertRefreshSupported(MapPreparationRequest $request): void
+    {
+        if (!is_file($request->indexPath)) {
+            return;
+        }
+        try {
+            $index = $this->reader->readForRoot($request->indexPath, $request->root);
+        } catch (Throwable) {
+            return; // An unreadable map is prepare()'s to report.
+        }
+        if (AgentMapBuilder::languagesOptionForBackend($index->backend) !== '') {
+            throw new RuntimeException(
+                $this->unsupportedLanguagesMessage($request, $index)
+                . "\n  " . $this->rebuildCommandFor($request, $index),
+            );
+        }
+    }
+
+    private function unsupportedLanguagesMessage(MapPreparationRequest $request, AgentMapIndex $index): string
+    {
+        return 'Cannot refresh ' . $request->indexPath . ': it carries backend "' . $index->backend
+            . '" and refresh, watch and prepare cover PHP-only maps.'
+            . ($index->fingerprint?->semanticScope === null && !$request->pathsProvided
+                ? ' The map does not record the paths it was built from; replace --paths below with the original build scope.'
+                : '')
+            . ' Run a full build:';
+    }
+
+    /**
+     * The build that reproduces a map indexing more than PHP: its recorded scope and languages.
+     */
+    private function rebuildCommandFor(MapPreparationRequest $request, AgentMapIndex $index): string
+    {
+        return $this->fullBuildCommand(
+            $request,
+            null,
+            AgentMapBuilder::languagesOptionForBackend($index->backend),
+            $this->semanticScope($index, $request),
         );
     }
 
@@ -344,18 +407,24 @@ final readonly class MapPreparationService
         };
     }
 
-    private function fullBuildCommand(MapPreparationRequest $request, ?string $backend = null): string
-    {
+    private function fullBuildCommand(
+        MapPreparationRequest $request,
+        ?string $backend = null,
+        string $languagesOption = '',
+        ?SemanticScope $scope = null,
+    ): string {
+        $scope ??= new SemanticScope($request->paths, $request->excludes, $request->scanPaths);
         $command = 'agent-map build'
             . ' --root=' . self::shellArgument($request->root)
-            . ' --paths=' . self::shellArgument(implode(',', $request->paths))
-            . ' --out=' . self::shellArgument($request->outputPath);
+            . ' --paths=' . self::shellArgument(implode(',', $scope->paths))
+            . ' --out=' . self::shellArgument($request->outputPath)
+            . $languagesOption;
 
-        foreach ($request->excludes as $exclude) {
+        foreach ($scope->excludes as $exclude) {
             $command .= ' --exclude=' . self::shellArgument($exclude);
         }
-        if ($request->scanPaths !== []) {
-            $command .= ' --scan=' . self::shellArgument(implode(',', $request->scanPaths));
+        if ($scope->scanDirectories !== []) {
+            $command .= ' --scan=' . self::shellArgument(implode(',', $scope->scanDirectories));
         }
 
         $command .= ' --format=' . self::shellArgument($request->format);

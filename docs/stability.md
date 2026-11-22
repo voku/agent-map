@@ -45,6 +45,7 @@ whose per-capability verdicts are the measured basis for anything below marked *
 | surface | CLI | library | tier | note |
 | --- | --- | --- | --- | --- |
 | map build / incremental refresh | `build`, `refresh` | `AgentMapBuilder`, `IndexWriter`, `IndexReader` | stable | Every consumer runs it. Backends must stay explicit; structural-only is a supported backend, not a silent fallback. |
+| TypeScript/JavaScript declarations | `build --languages=php,typescript` | `AgentMapBuilder::forLanguages()`, `TypeScriptSymbolExtractor`, `LanguageRoutingSymbolExtractor`, `SourceLanguage` | experimental | First slice: declarations only, opt-in, syntax-only. No relations beyond `defines`/`declares_method`/`extends`/`implements`, no plans, no `refresh`. The `path#Name` identity and the symbol kinds `type_alias`/`constant` may still change. |
 | freshness / readiness | `stale` | `MapReadinessInspector`, `AgentMapIndex::staleEntries()` | stable | The precondition every other answer depends on. |
 | exact identity resolution | via other commands | `AgentMapIndex::resolveMethod()`, `symbolById()`, `file()` | stable | The cheapest correct answer agent-map has. |
 | bounded edit context | `context` | `EditContextPlanner`, `EditContextPlan`, `EditContextPolicy` | stable | The productive core: it produced every map range hit in the replay experiment, including the cross-file hit ranking alone missed. |
@@ -137,7 +138,8 @@ The compatibility rule is explicit and enforced: `AgentMapIndex::SCHEMA_VERSION`
 writes, `AgentMapIndex::SUPPORTED_SCHEMA_MAJOR` is what it reads. A map from any other major - older
 or newer - is rejected on read with a rebuild instruction, because a partially understood map answers
 "no callers" where it should answer "unknown". Additive minor versions within the supported major stay
-readable.
+readable. A build with a non-PHP language enabled writes `AgentMapIndex::POLYGLOT_SCHEMA_VERSION`
+(`2.1`: adds `files[].language`); PHP-only builds keep writing `2.0` unchanged.
 
 **Plan contracts.** Contract versions, the status vocabulary, the meaning of `review_required` versus
 `blocked`, edit hash/range semantics, JSON/TOON equivalence and exit codes, as listed above.

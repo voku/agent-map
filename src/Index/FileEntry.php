@@ -17,6 +17,7 @@ final readonly class FileEntry
         public string $namespace,
         public array $symbols,
         public string $semanticStatus = 'analysed',
+        public string $language = 'php',
     ) {
     }
 
@@ -30,6 +31,9 @@ final readonly class FileEntry
             'sha256' => $this->sha256,
             'namespace' => $this->namespace,
             'semantic_status' => $this->semanticStatus,
+            // Written only for non-PHP files: a PHP-only map keeps the exact bytes (and digest) it
+            // had before other languages existed, and a reader treats a missing value as PHP.
+            ...($this->language === 'php' ? [] : ['language' => $this->language]),
             'symbols' => array_map(static fn (SymbolEntry $symbol): array => $symbol->toArray(), $this->symbols),
         ];
     }
@@ -75,6 +79,7 @@ final readonly class FileEntry
             namespace: (string) ($data['namespace'] ?? ''),
             symbols: $symbols,
             semanticStatus: (string) ($data['semantic_status'] ?? 'unknown'),
+            language: is_string($data['language'] ?? null) && $data['language'] !== '' ? $data['language'] : 'php',
         );
     }
 }

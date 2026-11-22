@@ -21,8 +21,16 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: composer:v2
+      # The TypeScript/JavaScript extractor tests run the real compiler from node_modules.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
       - run: composer install --no-interaction --prefer-dist
       - run: composer ci
+        env:
+          AGENT_MAP_REQUIRE_TYPESCRIPT: '1'
 
   structural-without-phpstan:
     runs-on: ubuntu-latest

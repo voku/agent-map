@@ -13,6 +13,7 @@ use voku\AgentMap\Index\MethodEntry;
 use voku\AgentMap\Index\ParameterEntry;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\SymbolEntry;
+use voku\AgentMap\IO\SourceLanguage;
 
 final readonly class MapReconciler
 {
@@ -54,8 +55,25 @@ final readonly class MapReconciler
         $files = [];
         $knownSymbolIds = [];
         $knownFqns = [];
+        /** @var array<string, array<string, array<string, string>>> $otherLanguageIds language => FQN => kind => symbol id */
+        $otherLanguageIds = [];
 
         foreach ($structuralFiles as $file) {
+            if ($file->language !== SourceLanguage::PHP) {
+                // No semantic backend exists for this language: nothing to reconcile against, and
+                // "PHPStan produced no records" would be a false statement about a file it never saw.
+                // Kept out of `$knownFqns`: a name in one language never identifies a symbol of another.
+                foreach ($file->symbols as $symbol) {
+                    $knownSymbolIds[$symbol->id()] = true;
+                    $otherLanguageIds[$file->language][$symbol->fqn][$symbol->kind] = $symbol->id();
+                    foreach ($symbol->methods as $method) {
+                        $knownSymbolIds[$symbol->methodId($method)] = true;
+                    }
+                }
+                $files[$file->path] = new FileEntry($file->path, $file->sha256, $file->namespace, $file->symbols, 'structural_only', $file->language);
+                continue;
+            }
+
             $symbols = [];
             $semanticSeen = false;
             $missingSemanticDiagnostics = [];
@@ -151,7 +169,7 @@ final readonly class MapReconciler
             );
         }
 
-        $relations = $this->structuralRelations(array_values($files), $knownFqns);
+        $relations = $this->structuralRelations(array_values($files), $knownFqns, $otherLanguageIds);
         foreach ($semanticMethods as $methodId => $record) {
             $prototypeId = $record['prototype_id'] ?? null;
             if (!is_string($prototypeId) || $prototypeId === '') {
@@ -485,9 +503,10 @@ final readonly class MapReconciler
     /**
      * @param list<FileEntry> $files
      * @param array<string, string> $knownFqns
+     * @param array<string, array<string, array<string, string>>> $otherLanguageIds
      * @return list<RelationEntry>
      */
-    private function structuralRelations(array $files, array $knownFqns): array
+    private function structuralRelations(array $files, array $knownFqns, array $otherLanguageIds = []): array
     {
         $relations = [];
         foreach ($files as $file) {
@@ -495,6 +514,16 @@ final readonly class MapReconciler
                 $relations[] = RelationEntry::create('file:' . $file->path, 'defines', [$symbol->id()], $file->path, $symbol->lineStart, $symbol->lineEnd, 'structural_only');
                 foreach ($symbol->methods as $method) {
                     $relations[] = RelationEntry::create($symbol->id(), 'declares_method', [$symbol->methodId($method)], $file->path, $method->lineStart, $method->lineEnd, 'structural_only');
+                }
+                if ($file->language !== SourceLanguage::PHP) {
+                    $ids = $otherLanguageIds[$file->language] ?? [];
+                    foreach (['extends' => $symbol->extends, 'implements' => $symbol->implements] as $kind => $targets) {
+                        $allowed = $kind === 'extends' && $symbol->kind === 'class' ? ['class'] : ['interface', 'class'];
+                        foreach ($targets as $target) {
+                            $relations[] = $this->heritageRelation($symbol, $kind, $target, $allowed, $ids, $file->path);
+                        }
+                    }
+                    continue;
                 }
                 foreach ($symbol->extends as $target) {
                     $relations[] = RelationEntry::create($symbol->id(), 'extends', [$this->targetId($target, $knownFqns)], $file->path, $symbol->lineStart, $symbol->lineEnd, 'structural_only');
@@ -509,6 +538,30 @@ final readonly class MapReconciler
         }
 
         return $relations;
+    }
+
+    /**
+     * One extends/implements relation of a non-PHP symbol.
+     *
+     * The target is an exact id only when the extractor proved the declaration (the name is then
+     * the FQN of an indexed symbol of the same language) and that symbol has a kind the clause can
+     * name. Anything else is `unresolved:<kind>`, with the name as written kept in `receiverType`
+     * so it stays visible and two unresolved names of one symbol stay two relations. It is never a
+     * `type:` id: those name PHP types.
+     *
+     * @param list<string> $allowedKinds in order of preference
+     * @param array<string, array<string, string>> $ids FQN => kind => symbol id
+     */
+    private function heritageRelation(SymbolEntry $symbol, string $kind, string $target, array $allowedKinds, array $ids, string $path): RelationEntry
+    {
+        foreach ($allowedKinds as $allowedKind) {
+            $id = $ids[$target][$allowedKind] ?? null;
+            if ($id !== null && $id !== $symbol->id()) {
+                return RelationEntry::create($symbol->id(), $kind, [$id], $path, $symbol->lineStart, $symbol->lineEnd, 'structural_only');
+            }
+        }
+
+        return RelationEntry::create($symbol->id(), $kind, ['unresolved:' . $kind], $path, $symbol->lineStart, $symbol->lineEnd, 'structural_only', $target);
     }
 
     private function baseTypeName(string $type): string
