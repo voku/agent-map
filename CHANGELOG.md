@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.25.0 - 2026-11-22
+
 ### Added
 
 - Opt-in TypeScript/JavaScript declarations in the map: `agent-map build --languages=php,typescript` (or `--languages=typescript`). Top-level classes, interfaces, enums, functions, type aliases (`type_alias`) and `const` declarations (`constant`), with class/interface methods, parameter and return types as written, exact line ranges, `export` state in `attributes`, and `extends`/`implements` resolved where the declaration is provable from syntax (same file, or a relative import of a project file that declares and exports the name). Symbols are named `<file path>#<Name>`. `query`, `file`, `scope`, `related`, `summary` and the search index read them like PHP symbols. One Node process runs the TypeScript compiler API in syntax-only mode (`resources/typescript/extract-symbols.mjs`); it needs Node.js and the `typescript` npm package from `AGENT_MAP_TYPESCRIPT_PATH` or, only when no path is configured, the analysed project's `node_modules` (which executes that project's copy; a configured path that cannot be loaded fails the build instead of falling back), and the build fails with the reason when either is missing. The compiler version is recorded in the fingerprint (`typescript_version`). An unprovable `extends`/`implements` name targets `unresolved:extends`/`unresolved:implements` and never a symbol of another language or an incompatible kind. `.d.ts` files and the top-level `dist/` and `build/` directories are skipped; a `--paths` scope naming them is indexed. (`TypeScriptSupportTest`)
