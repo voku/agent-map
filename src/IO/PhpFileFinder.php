@@ -64,8 +64,14 @@ final readonly class PhpFileFinder
                 continue;
             }
 
+            // `dist/` and `build/` at the project root hold compiled TypeScript/JavaScript output by
+            // convention. A scope that names one of them, or anything inside, is an explicit request
+            // for those files and is honoured.
+            $skipCompiledOutput = preg_match('~^(?:dist|build)(/|$)~', $requestedScope) !== 1
+                && preg_match('~^(?:dist|build)(/|$)~', $resolvedScope) !== 1;
+
             if (is_file($absolutePath)) {
-                $this->addPhpFile($files, $root, $absolutePath, $patterns);
+                $this->addPhpFile($files, $root, $absolutePath, $patterns, $skipCompiledOutput);
                 continue;
             }
 
@@ -89,7 +95,7 @@ final readonly class PhpFileFinder
                     continue;
                 }
 
-                $this->addPhpFile($files, $root, $item->getPathname(), $patterns);
+                $this->addPhpFile($files, $root, $item->getPathname(), $patterns, $skipCompiledOutput);
             }
         }
 
@@ -102,7 +108,7 @@ final readonly class PhpFileFinder
      * @param array<string, string> $files
      * @param list<string> $patterns
      */
-    private function addPhpFile(array &$files, string $root, string $path, array $patterns): void
+    private function addPhpFile(array &$files, string $root, string $path, array $patterns, bool $skipCompiledOutput): void
     {
         $real = realpath($path);
         if (!is_string($real)) {
@@ -119,8 +125,11 @@ final readonly class PhpFileFinder
         }
 
         $relative = ltrim(substr($absolute, strlen($root)), '/');
-        // Compiled output of a TypeScript/JavaScript project is not its source.
-        if (SourceLanguage::ofPath($relative) === SourceLanguage::TYPESCRIPT && preg_match('~(^|/)(?:dist|build)/~', $relative) === 1) {
+        if (
+            $skipCompiledOutput
+            && SourceLanguage::ofPath($relative) === SourceLanguage::TYPESCRIPT
+            && preg_match('~^(?:dist|build)/~', $relative) === 1
+        ) {
             return;
         }
         if ($this->isExcluded($relative, $absolute, $patterns)) {

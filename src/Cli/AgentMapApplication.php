@@ -17,6 +17,7 @@ use voku\AgentMap\Index\IndexReader;
 use voku\AgentMap\Index\IndexWriter;
 use voku\AgentMap\Index\SemanticScope;
 use voku\AgentMap\IO\PhpFileFinder;
+use voku\AgentMap\IO\SourceLanguage;
 use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Prepare\MapPreparationRequest;
 use voku\AgentMap\Prepare\MapWatcher;
@@ -107,6 +108,7 @@ final readonly class AgentMapApplication
      */
     private function refresh(CliOptions $options): int
     {
+        self::assertPhpOnly($options);
         $format = match ($options->format) {
             'json' => 'json',
             'toon' => 'toon',
@@ -140,6 +142,7 @@ final readonly class AgentMapApplication
      */
     private function watch(CliOptions $options): int
     {
+        self::assertPhpOnly($options);
         $format = match ($options->format) {
             'json' => 'json',
             'toon' => 'toon',
@@ -197,6 +200,20 @@ final readonly class AgentMapApplication
         return 0;
     }
 
+    /**
+     * `refresh` and `watch` discover and re-analyse PHP files only; accepting `--languages` there
+     * would build or patch a PHP-only map while appearing to honour it.
+     */
+    private static function assertPhpOnly(CliOptions $options): void
+    {
+        if ($options->languages !== [SourceLanguage::PHP]) {
+            throw new RuntimeException(
+                $options->command . ' covers PHP-only maps; build or rebuild a map with other languages with: agent-map build --languages='
+                . implode(',', $options->languages),
+            );
+        }
+    }
+
     private function semanticInputsChanged(AgentMapIndex $index, CliOptions $options, SemanticScope $scope): bool
     {
         $fingerprint = $index->fingerprint;
@@ -233,7 +250,10 @@ final readonly class AgentMapApplication
         return preg_match('#^[A-Za-z0-9_@%+=:,./-]+$#', $value) === 1 ? $value : escapeshellarg($value);
     }
 
-    private function builder(CliOptions $options): AgentMapBuilder
+    /**
+     * @param list<string>|null $languages override of `--languages`
+     */
+    private function builder(CliOptions $options, ?array $languages = null): AgentMapBuilder
     {
         $semanticAnalyzer = match ($options->backend) {
             'auto' => null,
@@ -242,7 +262,7 @@ final readonly class AgentMapApplication
         };
 
         return AgentMapBuilder::forLanguages(
-            $options->languages,
+            $languages ?? $options->languages,
             $semanticAnalyzer,
             $options->artifacts,
         );
@@ -875,6 +895,9 @@ final readonly class AgentMapApplication
         }
         if ($index->backend !== $builder->backend()) {
             $structuralOnly = str_ends_with($index->backend, '+structural-only');
+            // What the printed command produces: it carries the map's own languages, so the
+            // identity it announces must be computed with them, not with this read's defaults.
+            $rebuiltBackend = $this->builder($options, AgentMapBuilder::languagesForBackend($index->backend))->backend();
 
             throw new RuntimeException(
                 'Cannot use ' . $options->index . ': it is stale in ' . count($index->staleEntries())
@@ -887,9 +910,9 @@ final readonly class AgentMapApplication
                 . ' --out=' . self::shellArgument($options->index)
                 . AgentMapBuilder::languagesOptionForBackend($index->backend)
                 . ($structuralOnly ? ' --backend=structural' : '')
-                . ($structuralOnly
+                . ($structuralOnly || $rebuiltBackend === $index->backend
                     ? ''
-                    : "\nThe rebuilt index will carry \"" . $builder->backend() . '", not "' . $index->backend . '".'),
+                    : "\nThe rebuilt index will carry \"" . $rebuiltBackend . '", not "' . $index->backend . '".'),
             );
         }
 
@@ -1224,9 +1247,10 @@ final readonly class AgentMapApplication
 
             --languages selects what is indexed (default: php). typescript adds TypeScript/JavaScript
             declarations (.ts .tsx .mts .cts .js .jsx .mjs .cjs) through the TypeScript compiler in
-            syntax-only mode; it needs Node.js and the "typescript" npm package in the project's
-            node_modules or at AGENT_MAP_TYPESCRIPT_PATH. Such a map is rebuilt with build; refresh,
-            watch and the rename/removal/move plans cover PHP only.
+            syntax-only mode; it needs Node.js and the "typescript" npm package at
+            AGENT_MAP_TYPESCRIPT_PATH or, failing that, in the project's node_modules (using the
+            project's copy executes code from the analysed project). Such a map is rebuilt with
+            build; refresh, watch and the rename/removal/move plans cover PHP only.
 
             --scan lists directories that only have to resolve symbols (never indexed): use it when the
             analysed scope references classes living outside it, otherwise their types stay unresolved.

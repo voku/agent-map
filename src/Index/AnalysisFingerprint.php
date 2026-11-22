@@ -17,12 +17,13 @@ final readonly class AnalysisFingerprint
         public string $sourceDigest,
         ?string $phpStanReference = null,
         public ?SemanticScope $semanticScope = null,
+        public ?string $typeScriptVersion = null,
     ) {
         $this->phpStanReference = $phpStanReference ?? self::runtimePhpStanReference($phpStanVersion);
     }
 
     /**
-     * @return array{phpstan_version: string, phpstan_reference: string, phpstan_config_sha256: string, composer_lock_sha256: string, source_digest: string, semantic_scope?: array{paths: list<string>, excludes: list<string>, scan_directories: list<string>, identity_sha256: string}}
+     * @return array{phpstan_version: string, phpstan_reference: string, phpstan_config_sha256: string, composer_lock_sha256: string, source_digest: string, semantic_scope?: array{paths: list<string>, excludes: list<string>, scan_directories: list<string>, identity_sha256: string}, typescript_version?: string}
      */
     public function toArray(): array
     {
@@ -36,12 +37,17 @@ final readonly class AnalysisFingerprint
         if ($this->semanticScope !== null) {
             $data['semantic_scope'] = $this->semanticScope->toArray();
         }
+        // The compiler that parsed the TypeScript/JavaScript files; absent when none were parsed,
+        // so a PHP-only fingerprint keeps its exact shape.
+        if ($this->typeScriptVersion !== null) {
+            $data['typescript_version'] = $this->typeScriptVersion;
+        }
 
         return $data;
     }
 
     /**
-     * @param array{phpstan_version?: mixed, phpstan_reference?: mixed, phpstan_config_sha256?: mixed, composer_lock_sha256?: mixed, source_digest?: mixed, semantic_scope?: mixed} $data
+     * @param array{phpstan_version?: mixed, phpstan_reference?: mixed, phpstan_config_sha256?: mixed, composer_lock_sha256?: mixed, source_digest?: mixed, semantic_scope?: mixed, typescript_version?: mixed} $data
      */
     public static function fromArray(array $data): self
     {
@@ -55,6 +61,9 @@ final readonly class AnalysisFingerprint
                 : 'unknown',
             semanticScope: is_array($data['semantic_scope'] ?? null)
                 ? SemanticScope::fromArray($data['semantic_scope'])
+                : null,
+            typeScriptVersion: is_string($data['typescript_version'] ?? null) && $data['typescript_version'] !== ''
+                ? $data['typescript_version']
                 : null,
         );
     }

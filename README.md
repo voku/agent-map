@@ -176,15 +176,21 @@ vendor/bin/agent-map query matchGesture
 vendor/bin/agent-map query 'src/recognition/matcher.ts#matchGesture'
 ```
 
-`typescript` covers `.ts .tsx .mts .cts .js .jsx .mjs .cjs`. Declaration files (`.d.ts`) and `dist/` and `build/` directories are skipped, next to the default excludes (`vendor`, `node_modules`, `.git`, `var/cache`).
+`typescript` covers `.ts .tsx .mts .cts .js .jsx .mjs .cjs`. Declaration files (`.d.ts`) are skipped, next to the default excludes (`vendor`, `node_modules`, `.git`, `var/cache`). The top-level `dist/` and `build/` directories are skipped as compiled output unless `--paths` names them or something inside them (`--paths=src,build`); a `dist` or `build` directory deeper in the tree is indexed like any other.
 
-Requirements: Node.js on `PATH` and the `typescript` npm package. It is loaded from the analysed project (`<root>/node_modules/typescript`), then from the directory named by `AGENT_MAP_TYPESCRIPT_PATH`. Loading the project's own compiler runs code from its `node_modules`, so enable this only for projects whose dependencies you trust. One Node process parses all files with the compiler API in syntax-only mode (`ts.createSourceFile`): no program, no type checker, no `tsconfig.json`. If Node or the compiler is missing the build fails and says so; nothing falls back to another parser.
+Requirements: Node.js on `PATH` and the `typescript` npm package. The directory named by `AGENT_MAP_TYPESCRIPT_PATH` is used first; without it, or when it cannot be loaded, the analysed project's own copy (`<root>/node_modules/typescript`) is used. **Using the project's copy executes code from the analysed project.** Set `AGENT_MAP_TYPESCRIPT_PATH` to a compiler you trust to avoid that for a project whose dependencies you do not trust:
+
+```bash
+AGENT_MAP_TYPESCRIPT_PATH=/opt/tools/node_modules/typescript vendor/bin/agent-map build --languages=typescript
+```
+
+The compiler's version is recorded in the map fingerprint (`typescript_version`), like PHPStan's. One Node process parses all files with the compiler API in syntax-only mode (`ts.createSourceFile`): no program, no type checker, no `tsconfig.json`. If Node or the compiler is missing the build fails and says so; nothing falls back to another parser.
 
 What the map gets in this first slice:
 
 - top-level `class`, `interface`, `enum`, `function`, plus the kinds `type_alias` and `constant` (top-level `const`; a `const` holding an arrow function or function expression is a `function`);
 - class and interface methods with visibility, `static`/`abstract`, parameter names, and parameter and return types as written in the source;
-- `extends` / `implements` and the matching structural relations. A name is resolved to a symbol when it is declared in the same file, or imported through a relative import from a project source file that declares and exports it. Package imports, globals, re-exporting barrels and mixin expressions keep the name as written;
+- `extends` / `implements` and the matching structural relations. A name is resolved to a symbol only when it is declared in the same file, or imported through a relative import from a project source file that declares and exports it, and only to a kind the clause can name: a class extends a class; `implements` and an interface's `extends` take an interface or a class. Everything else (package imports, globals, re-exporting barrels, mixin expressions, a type alias or constant of that name) keeps the name as written in the symbol, and its relation targets `unresolved:extends` / `unresolved:implements` with the written name in `receiver_type`. It never resolves to a PHP symbol of the same name;
 - exact 1-based line ranges;
 - `export` / `export default` in the symbol's `attributes`.
 
@@ -195,8 +201,19 @@ Not supported in this slice:
 - call relations, callers/callees and types resolved by a checker: PHPStan is never handed these files, and no TypeScript program is created;
 - rename, removal, move, copy and scaffold plans: they are PHP contracts and do not publish edits for TypeScript symbols (`function-rename-plan` refuses explicitly, the others stay blocked);
 - `refresh`, `watch` and the automatic repair of a stale map on read: rebuild such a map with `build --languages=...`;
-- nested declarations, `namespace` blocks, `let`/`var`, destructured `const`, accessors, properties, decorators, HTML and CSS. Of several declarations with one kind and name (overloads, merged interfaces) one is kept: the implementation for functions, the first otherwise;
+- HTML and CSS;
 - a file with syntax errors fails the build, like a PHP parse error. Exclude files you do not want parsed with `--exclude`.
+
+Not extracted (these declarations are simply absent from the map):
+
+- anything inside `namespace`, `declare module` or `declare global` bodies, and any other nested declaration;
+- `let` and `var` declarations, and destructured `const` (`const { a, b } = ...`);
+- getters and setters, properties (except a property holding an arrow function or function expression), decorators;
+- members with computed names (`[Symbol.iterator]()`, `['name']()`);
+- `export default` of an anonymous arrow function or other expression (`export default function () {}` and `export default class {}` are extracted under the name `default`);
+- CommonJS exports (`module.exports = ...`, `exports.x = ...`): the declarations they refer to are extracted, but not marked exported;
+- re-exports (`export { a } from './b'`, `export * from './b'`) and export aliases (`export { a as b }` marks `a` exported; the name `b` is not recorded);
+- members of merged interface declarations after the first: of several declarations with one kind and name one is kept, the implementation for overloaded functions and the first otherwise.
 
 ## What the map contains
 

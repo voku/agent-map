@@ -112,13 +112,26 @@ final readonly class AgentMapBuilder
      */
     public static function languagesOptionForBackend(string $backend): string
     {
+        $languages = self::languagesForBackend($backend);
+
+        return $languages === [SourceLanguage::PHP] ? '' : ' --languages=' . implode(',', $languages);
+    }
+
+    /**
+     * The languages a recorded backend identity says were indexed; PHP for identities that name
+     * none (maps written before languages existed, hand-built test maps).
+     *
+     * @return list<string>
+     */
+    public static function languagesForBackend(string $backend): array
+    {
         $parts = explode('+', $backend);
         $languages = array_keys(array_filter(
             self::STRUCTURAL_BACKENDS,
             static fn (string $structural): bool => in_array($structural, $parts, true),
         ));
 
-        return $languages === [] || $languages === [SourceLanguage::PHP] ? '' : ' --languages=' . implode(',', $languages);
+        return $languages === [] ? [SourceLanguage::PHP] : $languages;
     }
 
     /**
@@ -173,6 +186,8 @@ final readonly class AgentMapBuilder
         // and a wide scope should not force a full re-parse each time.
         $nextCache = $cache;
 
+        // An incremental build that touched no TypeScript file keeps the recorded compiler version.
+        $typeScriptVersion = $previous?->fingerprint?->typeScriptVersion;
         $sourceHashes = [];
         $cachedSymbols = [];
         $uncachedRelatives = [];
@@ -209,6 +224,9 @@ final readonly class AgentMapBuilder
                     throw new RuntimeException('Parsing failed for ' . $relative . '.' . ($result?->error === null ? '' : ' ' . $result->error));
                 }
                 $cachedSymbols[$relative] = $result->symbols;
+                if ($result->toolVersion !== null && self::languageOf($relative) === SourceLanguage::TYPESCRIPT) {
+                    $typeScriptVersion = $result->toolVersion;
+                }
             }
         }
 
@@ -287,6 +305,7 @@ final readonly class AgentMapBuilder
                 composerLockSha256: is_string($composerLockHash) ? 'sha256:' . $composerLockHash : 'sha256:none',
                 sourceDigest: 'sha256:' . hash('sha256', implode("\n", $sourceDigestParts)),
                 semanticScope: new SemanticScope($paths, $excludes, $scanPaths),
+                typeScriptVersion: $typeScriptVersion,
             ),
             localBindings: $reconciled['local_bindings'],
             localExits: $reconciled['local_exits'],

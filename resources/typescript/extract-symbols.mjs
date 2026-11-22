@@ -2,7 +2,7 @@
 //
 // Protocol: one JSON request on stdin, one JSON response on stdout.
 //   request:  {"root": "/abs/project", "files": ["/abs/project/src/a.ts", ...], "typescriptPaths": ["/abs/.../typescript", ...]}
-//   response: {"files": {"/abs/project/src/a.ts": {"ok": true, "symbols": [...]} | {"ok": false, "error": "..."}}}
+//   response: {"typescriptVersion": "5.9.3", "files": {"/abs/project/src/a.ts": {"ok": true, "symbols": [...]} | {"ok": false, "error": "..."}}}
 //
 // Only `ts.createSourceFile` is used: no program, no type checker, no module resolution beyond
 // relative imports inside the project root. A non-zero exit means the whole batch failed; the
@@ -384,32 +384,50 @@ function resolveModule(fromFile, specifier) {
     return candidates.find(isProjectSource) ?? null;
 }
 
-const TYPE_KINDS = ['class', 'interface', 'type_alias', 'enum'];
+// What a heritage clause can name, in order of preference. A class extends a class; `implements`
+// and an interface's `extends` take an interface or a class. A type alias, enum, function or
+// constant of the same name is never the target: whether it denotes a class is not provable here.
+const CLASS_EXTENDS = ['class'];
+const CONTRACTS = ['interface', 'class'];
 
-function typeDeclaredIn(file, name) {
+function pick(symbols, kinds, matches) {
+    for (const kind of kinds) {
+        const match = symbols.find((symbol) => symbol.kind === kind && matches(symbol));
+        if (match !== undefined) {
+            return match;
+        }
+    }
+
+    return undefined;
+}
+
+function typeDeclaredIn(file, name, kinds) {
     const found = declarationsOf(file);
     if (found === null || found === undefined) {
         return null;
     }
     const match = name === 'default'
-        ? found.symbols.find((symbol) => symbol.attributes.includes('export default') && TYPE_KINDS.includes(symbol.kind))
-        : found.symbols.find((symbol) => symbol.name === name && TYPE_KINDS.includes(symbol.kind) && symbol.attributes.length > 0);
+        ? pick(found.symbols, kinds, (symbol) => symbol.attributes.includes('export default'))
+        : pick(found.symbols, kinds, (symbol) => symbol.name === name && symbol.attributes.length > 0);
 
     return match === undefined ? null : relative(file) + '#' + match.name;
 }
 
 /**
  * The FQN of a heritage name when its declaration is provable from syntax alone: declared in the
- * same file, or bound by a relative import to a project source file that declares and exports it.
+ * same file, or bound by a relative import to a project source file that declares and exports it,
+ * with a kind the clause can name (`kinds`).
  * Everything else (packages, re-exports, mixin calls, globals) keeps the name as written.
  */
-function resolveHeritage(file, own, written) {
+function resolveHeritage(file, own, written, kinds) {
     const direct = /^[A-Za-z_$][\w$]*$/.test(written);
     const qualified = /^([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/.exec(written);
     if (direct) {
-        const local = own.symbols.find((symbol) => symbol.name === written && TYPE_KINDS.includes(symbol.kind));
-        if (local !== undefined) {
-            return relative(file) + '#' + written;
+        // Any own declaration of the name shadows an import of it, whatever its kind.
+        if (own.symbols.some((symbol) => symbol.name === written)) {
+            return pick(own.symbols, kinds, (symbol) => symbol.name === written) === undefined
+                ? written
+                : relative(file) + '#' + written;
         }
         const binding = own.imports.get(written);
         if (binding === undefined || binding.name === null) {
@@ -417,7 +435,7 @@ function resolveHeritage(file, own, written) {
         }
         const target = resolveModule(file, binding.specifier);
 
-        return (target === null ? null : typeDeclaredIn(target, binding.name)) ?? written;
+        return (target === null ? null : typeDeclaredIn(target, binding.name, kinds)) ?? written;
     }
     if (qualified !== null) {
         const binding = own.imports.get(qualified[1]);
@@ -426,13 +444,13 @@ function resolveHeritage(file, own, written) {
         }
         const target = resolveModule(file, binding.specifier);
 
-        return (target === null ? null : typeDeclaredIn(target, qualified[2])) ?? written;
+        return (target === null ? null : typeDeclaredIn(target, qualified[2], kinds)) ?? written;
     }
 
     return written;
 }
 
-const response = { files: {} };
+const response = { typescriptVersion: String(ts.version ?? 'unknown'), files: {} };
 for (const file of files) {
     const entry = parse(file);
     if (entry.source === null) {
@@ -447,8 +465,8 @@ for (const file of files) {
         symbols: own.symbols.map((symbol) => ({
             ...symbol,
             fqn: prefix + symbol.name,
-            extends: (symbol.extends ?? []).map((written) => resolveHeritage(file, own, written)),
-            implements: (symbol.implements ?? []).map((written) => resolveHeritage(file, own, written)),
+            extends: (symbol.extends ?? []).map((written) => resolveHeritage(file, own, written, symbol.kind === 'class' ? CLASS_EXTENDS : CONTRACTS)),
+            implements: (symbol.implements ?? []).map((written) => resolveHeritage(file, own, written, CONTRACTS)),
         })),
     };
 }

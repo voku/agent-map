@@ -32,6 +32,8 @@ use voku\AgentMap\MapArtifactPaths;
 use voku\AgentMap\Prepare\MapPreparationException;
 use voku\AgentMap\Prepare\MapPreparationRequest;
 use voku\AgentMap\Prepare\MapPreparationService;
+use voku\AgentMap\Prepare\MapWatcher;
+use voku\AgentMap\Build\PhpStanSemanticAnalyzer;
 use voku\AgentMap\Rename\FunctionRenamePlanner;
 
 /**
@@ -237,6 +239,8 @@ final class TypeScriptSupportTest extends TestCase
             $this->removeDirectory($phpOnlyRoot);
         }
 
+        self::assertNotNull($mixed->fingerprint);
+        self::assertArrayNotHasKey('typescript_version', $mixed->fingerprint->toArray());
         self::assertSame(AgentMapIndex::SCHEMA_VERSION, $mixed->schemaVersion);
         self::assertSame('2.0', $mixed->schemaVersion);
         self::assertSame('simple-php-code-parser+structural-only', $mixed->backend);
@@ -311,9 +315,12 @@ final class TypeScriptSupportTest extends TestCase
         sort($relations['implements']);
         self::assertSame(['class:src/shapes/base.ts#BaseShape'], $relations['extends']);
         self::assertSame(
-            ['interface:src/shapes/base.ts#Shape', 'interface:src/shapes/circle.ts#Serializable', 'type:Disposable'],
+            ['interface:src/shapes/base.ts#Shape', 'interface:src/shapes/circle.ts#Serializable', 'unresolved:implements'],
             $relations['implements'],
         );
+        self::assertNotNull($index->fingerprint);
+        self::assertSame(AgentMapBuilderTestTypeScriptVersion::current(), $index->fingerprint->typeScriptVersion);
+        self::assertSame(AgentMapBuilderTestTypeScriptVersion::current(), $index->fingerprint->toArray()['typescript_version'] ?? null);
         self::assertContains('method:src/shapes/circle.ts#Circle::area', $relations['declares_method']);
     }
 
@@ -477,11 +484,169 @@ final class TypeScriptSupportTest extends TestCase
         self::assertSame('typescript', $results['/p/e.tsx']->error);
     }
 
+    /**
+     * A name the TypeScript extractor could not prove must never become the id of a PHP symbol
+     * that happens to share it, nor of a TypeScript symbol the clause cannot name.
+     */
+    public function testUnprovableHeritageNeverResolvesToAnotherLanguageOrAnIncompatibleKind(): void
+    {
+        file_put_contents($this->root . '/src/Php/Globals.php', "<?php\n\nclass Base {}\n\ninterface Shape {}\n\nclass Disposable {}\n");
+        file_put_contents(
+            $this->root . '/src/a.ts',
+            "import { Base, Shape } from 'some-package';\n\nexport class A extends Base implements Shape {}\n\n"
+            . "export const X = 1;\nexport type X = number;\nclass U extends X {}\n\n"
+            . "export type Alias = { a: number };\nexport interface FromAlias extends Alias {}\n"
+            . "export class Impl implements FromAlias, A {}\n",
+        );
+        file_put_contents(
+            $this->root . '/src/b.ts',
+            "import { X, A } from './a';\n\nexport class V extends X {}\nexport class W extends A {}\n",
+        );
+
+        $a = $this->extract('src/a.ts');
+        self::assertSame(['Base'], $a['class:src/a.ts#A']->extends);
+        self::assertSame(['Shape'], $a['class:src/a.ts#A']->implements);
+        self::assertSame(['X'], $a['class:src/a.ts#U']->extends, 'A constant and a type alias named X are not a class.');
+        self::assertSame(['Alias'], $a['interface:src/a.ts#FromAlias']->extends);
+        self::assertSame(['src/a.ts#FromAlias', 'src/a.ts#A'], $a['class:src/a.ts#Impl']->implements);
+        $b = $this->extract('src/b.ts');
+        self::assertSame(['X'], $b['class:src/b.ts#V']->extends);
+        self::assertSame(['src/a.ts#A'], $b['class:src/b.ts#W']->extends);
+
+        $index = $this->builder([SourceLanguage::PHP, SourceLanguage::TYPESCRIPT])->build($this->root, ['.'], []);
+        $heritage = [];
+        foreach ($index->relations as $relation) {
+            if (in_array($relation->kind, ['extends', 'implements'], true) && preg_match('~^(class|interface):src/[ab]\.ts#~', $relation->sourceId) === 1) {
+                $heritage[] = $relation->sourceId . ' ' . $relation->kind . ' ' . implode(',', $relation->targetIds) . ' (' . ($relation->receiverType ?? '-') . ')';
+            }
+        }
+        sort($heritage);
+        self::assertSame(
+            [
+                'class:src/a.ts#A extends unresolved:extends (Base)',
+                'class:src/a.ts#A implements unresolved:implements (Shape)',
+                'class:src/a.ts#Impl implements class:src/a.ts#A (-)',
+                'class:src/a.ts#Impl implements interface:src/a.ts#FromAlias (-)',
+                'class:src/a.ts#U extends unresolved:extends (X)',
+                'class:src/b.ts#V extends unresolved:extends (X)',
+                'class:src/b.ts#W extends class:src/a.ts#A (-)',
+                'interface:src/a.ts#FromAlias extends unresolved:extends (Alias)',
+            ],
+            $heritage,
+        );
+        // The existing fixture: a global TypeScript name next to a PHP class of that name.
+        foreach ($index->relations as $relation) {
+            if ($relation->file !== 'src/Php/Globals.php' && $relation->kind !== 'defines') {
+                self::assertNotContains('class:Disposable', $relation->targetIds);
+                self::assertNotContains('class:Base', $relation->targetIds);
+                self::assertNotContains('interface:Shape', $relation->targetIds);
+            }
+        }
+    }
+
+    public function testCompiledOutputIsSkippedOnlyAtTheTopLevelAndNeverWhenRequested(): void
+    {
+        mkdir($this->root . '/src/build', 0o775, true);
+        mkdir($this->root . '/build', 0o775, true);
+        file_put_contents($this->root . '/src/build/pipeline.ts', "export function runPipeline(): void {}\n");
+        file_put_contents($this->root . '/build/out.js', "export function emitted() {}\n");
+        $finder = new PhpFileFinder(SourceLanguage::extensions([SourceLanguage::TYPESCRIPT]));
+
+        $default = $finder->find($this->root, ['.']);
+        self::assertContains('src/build/pipeline.ts', $default, 'Only top-level dist/ and build/ are compiled output.');
+        self::assertNotContains('build/out.js', $default);
+        self::assertNotContains('dist/kinds.js', $default);
+
+        self::assertSame(['src/build/pipeline.ts'], $finder->find($this->root, ['src/build']));
+        self::assertSame(['build/out.js', 'dist/kinds.js'], $finder->find($this->root, ['dist', 'build']), 'An explicit scope is indexed.');
+        self::assertSame(['dist/kinds.js'], $finder->find($this->root, ['./dist/kinds.js']));
+
+        putenv(TypeScriptSymbolExtractor::TYPESCRIPT_PATH_ENV . '=' . $this->typeScriptPath());
+        [$exit, $stdout] = $this->runCli(['build', '--root=' . $this->root, '--paths=src/build', '--languages=typescript', '--out=' . $this->root . '/out/nested.json']);
+        self::assertSame(0, $exit, $stdout);
+        self::assertStringContainsString('Wrote 1 file(s)', $stdout);
+    }
+
+    public function testExplicitCompilerPathWinsOverTheProjectCopyWhichStaysTheFallback(): void
+    {
+        $real = $this->typeScriptPath();
+        $file = $this->root . '/src/kinds.ts';
+
+        // A project copy that would be picked up, and executed, if it were tried first.
+        mkdir($this->root . '/node_modules/typescript', 0o775, true);
+        file_put_contents($this->root . '/node_modules/typescript/package.json', '{"name":"typescript","version":"0.0.0-project","main":"index.js"}');
+        file_put_contents(
+            $this->root . '/node_modules/typescript/index.js',
+            "require('fs').writeFileSync(__dirname + '/executed', '1');\nmodule.exports = {};\n",
+        );
+
+        $explicit = (new TypeScriptSymbolExtractor($this->root, $real))->extract($file);
+        self::assertTrue($explicit->ok, (string) $explicit->error);
+        self::assertSame(AgentMapBuilderTestTypeScriptVersion::current(), $explicit->toolVersion);
+        self::assertFileDoesNotExist($this->root . '/node_modules/typescript/executed', 'The project copy must not be loaded when an explicit path works.');
+
+        putenv(TypeScriptSymbolExtractor::TYPESCRIPT_PATH_ENV . '=' . $real);
+        self::assertTrue((new TypeScriptSymbolExtractor($this->root))->extract($file)->ok);
+        self::assertFileDoesNotExist($this->root . '/node_modules/typescript/executed');
+        putenv(TypeScriptSymbolExtractor::TYPESCRIPT_PATH_ENV);
+
+        // Fallback: no explicit path, a usable project copy.
+        unlink($this->root . '/node_modules/typescript/index.js');
+        unlink($this->root . '/node_modules/typescript/package.json');
+        rmdir($this->root . '/node_modules/typescript');
+        self::assertTrue(symlink($real, $this->root . '/node_modules/typescript'));
+        $fallback = (new TypeScriptSymbolExtractor($this->root))->extract($file);
+        self::assertTrue($fallback->ok, (string) $fallback->error);
+        unlink($this->root . '/node_modules/typescript');
+    }
+
+    public function testChildThatNeverReadsOrExitsEarlyIsACleanBatchFailure(): void
+    {
+        // Far more than a pipe buffer holds, so a blocking write would hang or hit a closed pipe.
+        $files = [];
+        for ($i = 0; $i < 6000; ++$i) {
+            $files[] = $this->root . '/src/generated/file-number-' . $i . '-with-a-long-enough-name.ts';
+        }
+        $deaf = $this->root . '/deaf-node';
+        file_put_contents($deaf, "#!/bin/sh\nexec sleep 30\n");
+        chmod($deaf, 0o755);
+        $gone = $this->root . '/gone-node';
+        file_put_contents($gone, "#!/bin/sh\necho 'boom' >&2\nexit 7\n");
+        chmod($gone, 0o755);
+
+        $notices = [];
+        set_error_handler(static function (int $severity, string $message) use (&$notices): bool {
+            // Like PHPUnit's own handler: a diagnostic silenced at its call site is not raised.
+            if ((error_reporting() & $severity) !== 0) {
+                $notices[] = $message;
+            }
+
+            return true;
+        });
+        try {
+            $started = microtime(true);
+            $timedOut = (new TypeScriptSymbolExtractor($this->root, null, $deaf, 1))->extractMany($files);
+            $elapsed = microtime(true) - $started;
+            $exited = (new TypeScriptSymbolExtractor($this->root, null, $gone, 30))->extractMany($files);
+        } finally {
+            restore_error_handler();
+        }
+
+        self::assertSame([], $notices);
+        self::assertLessThan(10.0, $elapsed, 'The timeout covers the stdin write.');
+        self::assertCount(6000, $timedOut);
+        self::assertFalse($timedOut[$files[0]]->ok);
+        self::assertSame('TypeScript symbol extraction timed out after 1 second(s).', $timedOut[$files[5999]]->error);
+        self::assertCount(6000, $exited);
+        self::assertFalse($exited[$files[0]]->ok);
+        self::assertSame('TypeScript symbol extraction failed (exit 7): boom', $exited[$files[5999]]->error);
+    }
+
     public function testRefreshPrepareAndStaleReadRefuseATypeScriptMapAndNameTheRebuild(): void
     {
         putenv(TypeScriptSymbolExtractor::TYPESCRIPT_PATH_ENV . '=' . $this->typeScriptPath());
         $out = $this->root . '/out/map.json';
-        [$exit] = $this->runCli(['build', '--root=' . $this->root, '--languages=php,typescript', '--backend=structural', '--out=' . $out]);
+        [$exit] = $this->runCli(['build', '--root=' . $this->root, '--paths=src', '--languages=php,typescript', '--backend=structural', '--out=' . $out]);
         self::assertSame(0, $exit);
 
         $request = new MapPreparationRequest(
@@ -507,33 +672,58 @@ final class TypeScriptSupportTest extends TestCase
             (new MapPreparationService())->refresh($request);
             self::fail('Refresh must refuse a map that indexes TypeScript.');
         } catch (RuntimeException $exception) {
-            self::assertStringContainsString('refresh covers PHP-only maps', $exception->getMessage());
-            self::assertStringContainsString(' --languages=php,typescript', $exception->getMessage());
+            self::assertStringContainsString('refresh, watch and prepare cover PHP-only maps', $exception->getMessage());
+            // The recorded build scope (`src`), not this request's default `.`.
+            self::assertStringContainsString('agent-map build --root=' . $this->root . ' --paths=src --out=' . $out . ' --languages=php,typescript', $exception->getMessage());
         }
+
+        // A watcher refuses before its first cycle instead of logging one failure and idling.
+        $log = [];
+        try {
+            (new MapWatcher(sleepMilliseconds: static function (int $milliseconds): void {}))->watch(
+                $request,
+                50,
+                static function (string $line) use (&$log): void {
+                    $log[] = $line;
+                },
+                static fn (): bool => false,
+                3,
+            );
+            self::fail('Watch must refuse a map that indexes TypeScript.');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('refresh, watch and prepare cover PHP-only maps', $exception->getMessage());
+            self::assertStringContainsString(' --paths=src ', $exception->getMessage());
+            self::assertSame([], $log);
+        }
+        [$exit] = $this->runProcess(['watch', '--root=' . $this->root, '--index=' . $out, '--languages=typescript']);
+        self::assertSame(1, $exit, 'watch does not accept --languages.');
         try {
             (new MapPreparationService())->prepare($request);
             self::fail('Prepare must refuse a map that indexes TypeScript.');
         } catch (MapPreparationException $exception) {
             self::assertSame('backend_mismatch', $exception->reason);
+            self::assertStringContainsString(' --paths=src ', $exception->recoveryCommand);
             self::assertStringContainsString(' --languages=php,typescript', $exception->recoveryCommand);
         }
 
         // A read of a stale map fails closed and names the rebuild, including the languages.
         file_put_contents($this->root . '/src/kinds.ts', "\nexport const ADDED = 1;\n", FILE_APPEND);
         IndexReader::clearCache();
-        $process = proc_open(
-            [\PHP_BINARY, dirname(__DIR__) . '/bin/agent-map', 'scope', 'src/kinds.ts#distance', '--root=' . $this->root, '--index=' . $out, '--backend=structural'],
-            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
-            $pipes,
-        );
-        self::assertIsResource($process);
-        stream_get_contents($pipes[1]);
-        $stderr = (string) stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        self::assertSame(1, proc_close($process));
+        [$exit, , $stderr] = $this->runProcess(['scope', 'src/kinds.ts#distance', '--root=' . $this->root, '--index=' . $out, '--backend=structural']);
+        self::assertSame(1, $exit);
         self::assertStringContainsString('An incremental repair cannot merge two semantic backends.', $stderr);
+        self::assertStringContainsString(' --paths=src ', $stderr);
         self::assertStringContainsString(' --languages=php,typescript', $stderr);
+        // The printed command reproduces the recorded backend, so no "will carry another" claim.
+        self::assertStringNotContainsString('The rebuilt index will carry', $stderr);
+
+        // Without --backend the same command would produce another semantic backend; the message
+        // must name the identity that command yields, languages included.
+        if (PhpStanSemanticAnalyzer::isAvailable()) {
+            [, , $stderr] = $this->runProcess(['scope', 'src/kinds.ts#distance', '--root=' . $this->root, '--index=' . $out]);
+            self::assertStringContainsString(' --languages=php,typescript --backend=structural', $stderr);
+            self::assertStringNotContainsString('The rebuilt index will carry', $stderr);
+        }
         self::assertSame($before, (string) file_get_contents($out), 'A refusal leaves the map untouched.');
     }
 
@@ -613,6 +803,25 @@ final class TypeScriptSupportTest extends TestCase
     }
 
     /**
+     * Run the CLI as a host does, so STDERR is observable.
+     *
+     * @param list<string> $arguments
+     *
+     * @return array{0: int, 1: string, 2: string}
+     */
+    private function runProcess(array $arguments): array
+    {
+        $process = proc_open([\PHP_BINARY, dirname(__DIR__) . '/bin/agent-map', ...$arguments], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        self::assertIsResource($process);
+        $stdout = (string) stream_get_contents($pipes[1]);
+        $stderr = (string) stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+
+        return [proc_close($process), $stdout, $stderr];
+    }
+
+    /**
      * The compiler the tests run against: `<agent-map>/node_modules/typescript`, installed by `npm ci`.
      */
     private function typeScriptPath(): string
@@ -674,6 +883,17 @@ final class TypeScriptSupportTest extends TestCase
             $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
         }
         rmdir($directory);
+    }
+}
+
+final class AgentMapBuilderTestTypeScriptVersion
+{
+    /** The version of the compiler `npm ci` installed, read from its own package.json. */
+    public static function current(): string
+    {
+        $package = json_decode((string) file_get_contents(dirname(__DIR__) . '/node_modules/typescript/package.json'), true);
+
+        return is_array($package) && is_string($package['version'] ?? null) ? $package['version'] : '';
     }
 }
 
