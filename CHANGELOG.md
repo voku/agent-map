@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+## 0.25.1 - 2026-11-22
+
+### Fixed
+
+- `AgentMapIndex::resolveMethod()` resolves a path-qualified method target such as `src/a.ts#Foo::run`. It treated only namespaced (`\\`) names as qualified, so the exact target it suggested for an ambiguous TypeScript method was reported as not found. (`TypeScriptSupportTest::testPathQualifiedMethodTargetResolvesWhenTwoFilesDeclareTheSameClass`)
+
 ## 0.25.0 - 2026-11-22
 
 ### Added

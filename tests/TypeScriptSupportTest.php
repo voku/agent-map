@@ -775,6 +775,26 @@ final class TypeScriptSupportTest extends TestCase
         }
     }
 
+    public function testPathQualifiedMethodTargetResolvesWhenTwoFilesDeclareTheSameClass(): void
+    {
+        mkdir($this->root . '/same', 0o777, true);
+        file_put_contents($this->root . '/same/a.ts', "export class Twin { run(): void {} }\n");
+        file_put_contents($this->root . '/same/b.ts', "export class Twin { run(): void {} }\n");
+
+        $index = $this->builder(['typescript'])->build($this->root, ['same'], []);
+
+        self::assertSame('method:same/a.ts#Twin::run', $index->resolveMethod('same/a.ts#Twin::run')->id);
+        self::assertSame('method:same/b.ts#Twin::run', $index->resolveMethod('same/b.ts#Twin::run')->id);
+
+        try {
+            $index->resolveMethod('Twin::run');
+            self::fail('An unqualified target shared by two files must stay ambiguous.');
+        } catch (\RuntimeException $exception) {
+            self::assertStringContainsString('ambiguous', $exception->getMessage());
+            self::assertStringContainsString('same/a.ts#Twin::run', $exception->getMessage());
+        }
+    }
+
     /**
      * @param list<string> $languages
      */

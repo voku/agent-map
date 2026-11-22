@@ -103,7 +103,8 @@ final readonly class AgentMapIndex
             throw new RuntimeException('Method target must use Class::method syntax: ' . $target);
         }
 
-        $qualified = str_contains($className, '\\');
+        // PHP FQNs are namespaced (`App\\Foo`); FQNs of other languages are path-qualified (`src/a.ts#Foo`).
+        $qualified = str_contains($className, '\\') || str_contains($className, '#');
         $matches = [];
         foreach ($this->files as $file) {
             foreach ($file->symbols as $symbol) {
