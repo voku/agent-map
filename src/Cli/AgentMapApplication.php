@@ -169,25 +169,29 @@ final readonly class AgentMapApplication
             pcntl_signal(SIGTERM, $handler);
         }
 
+        $request = new MapPreparationRequest(
+            root: $options->root,
+            indexPath: $options->index,
+            outputPath: $options->out,
+            format: $format,
+            paths: $options->paths,
+            pathsProvided: $options->pathsProvided,
+            scanPaths: $options->scanPaths,
+            scanPathsProvided: $options->scanPathsProvided,
+            excludes: $options->excludes,
+            excludesProvided: $options->excludesProvided,
+            backend: $options->backend,
+            phpStanConfig: $options->phpStanConfig,
+            phpStanMemoryLimit: $options->phpStanMemoryLimit,
+            artifacts: $options->artifacts,
+        );
+        // Refused before the banner: "Watching ..." must not precede a watch that cannot run.
+        (new MapPreparationService())->assertRefreshSupported($request);
+
         fwrite(STDERR, 'Watching ' . $options->root . ' every ' . $options->watchIntervalMilliseconds . " ms. Ctrl-C to stop.\n");
 
         (new MapWatcher())->watch(
-            new MapPreparationRequest(
-                root: $options->root,
-                indexPath: $options->index,
-                outputPath: $options->out,
-                format: $format,
-                paths: $options->paths,
-                pathsProvided: $options->pathsProvided,
-                scanPaths: $options->scanPaths,
-                scanPathsProvided: $options->scanPathsProvided,
-                excludes: $options->excludes,
-                excludesProvided: $options->excludesProvided,
-                backend: $options->backend,
-                phpStanConfig: $options->phpStanConfig,
-                phpStanMemoryLimit: $options->phpStanMemoryLimit,
-                artifacts: $options->artifacts,
-            ),
+            $request,
             $options->watchIntervalMilliseconds,
             static function (string $line): void {
                 echo '[' . date('H:i:s') . '] ' . $line . "\n";
@@ -1248,7 +1252,7 @@ final readonly class AgentMapApplication
             --languages selects what is indexed (default: php). typescript adds TypeScript/JavaScript
             declarations (.ts .tsx .mts .cts .js .jsx .mjs .cjs) through the TypeScript compiler in
             syntax-only mode; it needs Node.js and the "typescript" npm package at
-            AGENT_MAP_TYPESCRIPT_PATH or, failing that, in the project's node_modules (using the
+            AGENT_MAP_TYPESCRIPT_PATH or, when that is not set, in the project's node_modules (using the
             project's copy executes code from the analysed project). Such a map is rebuilt with
             build; refresh, watch and the rename/removal/move plans cover PHP only.
 

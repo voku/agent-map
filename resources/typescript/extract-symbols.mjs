@@ -419,13 +419,14 @@ function typeDeclaredIn(file, name, kinds) {
  * with a kind the clause can name (`kinds`).
  * Everything else (packages, re-exports, mixin calls, globals) keeps the name as written.
  */
-function resolveHeritage(file, own, written, kinds) {
+function resolveHeritage(file, own, written, kinds, self) {
     const direct = /^[A-Za-z_$][\w$]*$/.test(written);
     const qualified = /^([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/.exec(written);
     if (direct) {
         // Any own declaration of the name shadows an import of it, whatever its kind.
         if (own.symbols.some((symbol) => symbol.name === written)) {
-            return pick(own.symbols, kinds, (symbol) => symbol.name === written) === undefined
+            // A declaration naming itself (`class A extends A`) proves nothing: keep the written name.
+            return pick(own.symbols, kinds, (symbol) => symbol.name === written && symbol !== self) === undefined
                 ? written
                 : relative(file) + '#' + written;
         }
@@ -465,8 +466,8 @@ for (const file of files) {
         symbols: own.symbols.map((symbol) => ({
             ...symbol,
             fqn: prefix + symbol.name,
-            extends: (symbol.extends ?? []).map((written) => resolveHeritage(file, own, written, symbol.kind === 'class' ? CLASS_EXTENDS : CONTRACTS)),
-            implements: (symbol.implements ?? []).map((written) => resolveHeritage(file, own, written, CONTRACTS)),
+            extends: (symbol.extends ?? []).map((written) => resolveHeritage(file, own, written, symbol.kind === 'class' ? CLASS_EXTENDS : CONTRACTS, symbol)),
+            implements: (symbol.implements ?? []).map((written) => resolveHeritage(file, own, written, CONTRACTS, symbol)),
         })),
     };
 }

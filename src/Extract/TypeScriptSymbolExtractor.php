@@ -15,8 +15,8 @@ use voku\AgentMap\Index\SymbolEntry;
  * program, no type checker. Symbols are named `<project-relative path>#<Name>`.
  *
  * The compiler is the `typescript` npm package at the explicit directory given here or in
- * `AGENT_MAP_TYPESCRIPT_PATH`, else the analysed project's own copy
- * (`<root>/node_modules/typescript`). Without Node or the compiler every file fails with the reason:
+ * `AGENT_MAP_TYPESCRIPT_PATH`; only when none is configured, the analysed project's own copy
+ * (`<root>/node_modules/typescript`). A configured path that cannot be loaded fails the batch. Without Node or the compiler every file fails with the reason:
  * there is no fallback parser and no empty successful result.
  *
  * A file with syntax errors fails as a whole, like a PHP file with a parse error: line ranges
@@ -58,14 +58,12 @@ final readonly class TypeScriptSymbolExtractor implements SymbolExtractor, Proje
         }
         $root = rtrim(str_replace('\\', '/', $root), '/');
 
-        // An explicitly chosen compiler wins: loading the analysed project's own copy executes
-        // code from that project, so it is only the fallback.
-        $candidates = [];
+        // An explicitly chosen compiler is the only candidate: loading the analysed project's own
+        // copy executes code from that project, so it must not happen behind a configured path
+        // that turned out to be wrong. The project copy is used only when nothing is configured.
         $explicit = $this->typeScriptPath ?? getenv(self::TYPESCRIPT_PATH_ENV);
-        if (is_string($explicit) && $explicit !== '') {
-            $candidates[] = $explicit;
-        }
-        $candidates[] = $root . '/node_modules/typescript';
+        $explicit = is_string($explicit) && $explicit !== '' ? $explicit : null;
+        $candidates = [$explicit ?? $root . '/node_modules/typescript'];
 
         $request = json_encode([
             'root' => $root,
@@ -83,7 +81,10 @@ final readonly class TypeScriptSymbolExtractor implements SymbolExtractor, Proje
         if ($exitCode !== 0) {
             return $this->failAll(
                 $files,
-                'TypeScript symbol extraction failed (exit ' . $exitCode . '): ' . (trim($stderr) !== '' ? trim($stderr) : 'no error output'),
+                'TypeScript symbol extraction failed (exit ' . $exitCode . '): ' . (trim($stderr) !== '' ? trim($stderr) : 'no error output')
+                . ($exitCode === 3 && $explicit !== null
+                    ? ' The configured compiler path "' . $explicit . '" was rejected; the analysed project\'s own copy is deliberately not tried while a path is configured.'
+                    : ''),
             );
         }
 

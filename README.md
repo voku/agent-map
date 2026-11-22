@@ -178,7 +178,7 @@ vendor/bin/agent-map query 'src/recognition/matcher.ts#matchGesture'
 
 `typescript` covers `.ts .tsx .mts .cts .js .jsx .mjs .cjs`. Declaration files (`.d.ts`) are skipped, next to the default excludes (`vendor`, `node_modules`, `.git`, `var/cache`). The top-level `dist/` and `build/` directories are skipped as compiled output unless `--paths` names them or something inside them (`--paths=src,build`); a `dist` or `build` directory deeper in the tree is indexed like any other.
 
-Requirements: Node.js on `PATH` and the `typescript` npm package. The directory named by `AGENT_MAP_TYPESCRIPT_PATH` is used first; without it, or when it cannot be loaded, the analysed project's own copy (`<root>/node_modules/typescript`) is used. **Using the project's copy executes code from the analysed project.** Set `AGENT_MAP_TYPESCRIPT_PATH` to a compiler you trust to avoid that for a project whose dependencies you do not trust:
+Requirements: Node.js on `PATH` and the `typescript` npm package. When `AGENT_MAP_TYPESCRIPT_PATH` names a directory, only that compiler is used: if it cannot be loaded the build fails and names the path and the reason, and nothing else is tried. Only when no path is configured is the analysed project's own copy (`<root>/node_modules/typescript`) used. **Using the project's copy executes code from the analysed project.** Set `AGENT_MAP_TYPESCRIPT_PATH` to a compiler you trust to avoid that for a project whose dependencies you do not trust:
 
 ```bash
 AGENT_MAP_TYPESCRIPT_PATH=/opt/tools/node_modules/typescript vendor/bin/agent-map build --languages=typescript

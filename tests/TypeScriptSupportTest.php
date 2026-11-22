@@ -446,7 +446,9 @@ final class TypeScriptSupportTest extends TestCase
             self::assertFalse($result->ok);
             self::assertSame([], $result->symbols);
             self::assertStringContainsString('The "typescript" npm package could not be loaded.', (string) $result->error);
-            self::assertStringContainsString($this->root . '/node_modules/typescript (not found)', (string) $result->error);
+            self::assertStringContainsString($this->root . '/no-such-typescript (not found)', (string) $result->error);
+            self::assertStringContainsString('The configured compiler path "' . $this->root . '/no-such-typescript" was rejected', (string) $result->error);
+            self::assertStringNotContainsString($this->root . '/node_modules/typescript', (string) $result->error);
             self::assertStringContainsString('npm install --save-dev typescript', (string) $result->error);
             self::assertStringContainsString('AGENT_MAP_TYPESCRIPT_PATH', (string) $result->error);
         }
@@ -496,7 +498,8 @@ final class TypeScriptSupportTest extends TestCase
             "import { Base, Shape } from 'some-package';\n\nexport class A extends Base implements Shape {}\n\n"
             . "export const X = 1;\nexport type X = number;\nclass U extends X {}\n\n"
             . "export type Alias = { a: number };\nexport interface FromAlias extends Alias {}\n"
-            . "export class Impl implements FromAlias, A {}\n",
+            . "export class Impl implements FromAlias, A {}\n"
+            . "class Self extends Self {}\n",
         );
         file_put_contents(
             $this->root . '/src/b.ts',
@@ -527,6 +530,7 @@ final class TypeScriptSupportTest extends TestCase
                 'class:src/a.ts#A implements unresolved:implements (Shape)',
                 'class:src/a.ts#Impl implements class:src/a.ts#A (-)',
                 'class:src/a.ts#Impl implements interface:src/a.ts#FromAlias (-)',
+                'class:src/a.ts#Self extends unresolved:extends (Self)',
                 'class:src/a.ts#U extends unresolved:extends (X)',
                 'class:src/b.ts#V extends unresolved:extends (X)',
                 'class:src/b.ts#W extends class:src/a.ts#A (-)',
@@ -590,7 +594,27 @@ final class TypeScriptSupportTest extends TestCase
         self::assertFileDoesNotExist($this->root . '/node_modules/typescript/executed');
         putenv(TypeScriptSymbolExtractor::TYPESCRIPT_PATH_ENV);
 
-        // Fallback: no explicit path, a usable project copy.
+        // A configured path that does not load fails closed: the project copy is not the fallback.
+        mkdir($this->root . '/not-typescript', 0o775, true);
+        file_put_contents($this->root . '/not-typescript/package.json', '{"name":"other","version":"9.9.9","main":"index.js"}');
+        file_put_contents($this->root . '/not-typescript/index.js', "module.exports = { version: '9.9.9' };\n");
+        foreach ([$this->root . '/no-such-directory' => '(not found)', $this->root . '/not-typescript' => '(version 9.9.9 has no createSourceFile compiler API)'] as $path => $reason) {
+            $viaArgument = (new TypeScriptSymbolExtractor($this->root, $path))->extractMany([$file, $this->root . '/src/ring.ts']);
+            putenv(TypeScriptSymbolExtractor::TYPESCRIPT_PATH_ENV . '=' . $path);
+            $viaEnvironment = (new TypeScriptSymbolExtractor($this->root))->extractMany([$file, $this->root . '/src/ring.ts']);
+            putenv(TypeScriptSymbolExtractor::TYPESCRIPT_PATH_ENV);
+            foreach ([...array_values($viaArgument), ...array_values($viaEnvironment)] as $result) {
+                self::assertFalse($result->ok);
+                self::assertStringContainsString($path . ' ' . $reason, (string) $result->error);
+                self::assertStringContainsString('The configured compiler path "' . $path . '" was rejected', (string) $result->error);
+            }
+        }
+        self::assertFileDoesNotExist($this->root . '/node_modules/typescript/executed', 'A rejected explicit path must not fall back to the project copy.');
+
+        // Without any configured path the project copy is used (and here, executed).
+        self::assertFalse((new TypeScriptSymbolExtractor($this->root))->extract($file)->ok);
+        self::assertFileExists($this->root . '/node_modules/typescript/executed');
+        unlink($this->root . '/node_modules/typescript/executed');
         unlink($this->root . '/node_modules/typescript/index.js');
         unlink($this->root . '/node_modules/typescript/package.json');
         rmdir($this->root . '/node_modules/typescript');
@@ -697,6 +721,10 @@ final class TypeScriptSupportTest extends TestCase
         }
         [$exit] = $this->runProcess(['watch', '--root=' . $this->root, '--index=' . $out, '--languages=typescript']);
         self::assertSame(1, $exit, 'watch does not accept --languages.');
+        [$exit, , $stderr] = $this->runProcess(['watch', '--root=' . $this->root, '--index=' . $out, '--backend=structural']);
+        self::assertSame(1, $exit);
+        self::assertStringContainsString('refresh, watch and prepare cover PHP-only maps', $stderr);
+        self::assertStringNotContainsString('Watching ', $stderr);
         try {
             (new MapPreparationService())->prepare($request);
             self::fail('Prepare must refuse a map that indexes TypeScript.');
