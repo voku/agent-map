@@ -9,6 +9,7 @@ use RuntimeException;
 use voku\AgentMap\Index\AgentMapIndex;
 use voku\AgentMap\Index\FileEntry;
 use voku\AgentMap\Index\SymbolEntry;
+use voku\AgentMap\IO\SourceLanguage;
 use voku\AgentMap\Plan\PlanBlindSpot;
 use voku\AgentMap\Plan\PlanEdit;
 use voku\AgentMap\Plan\PlanProvenance;
@@ -35,6 +36,14 @@ final readonly class FunctionRenamePlanner
         }
 
         [$file, $symbol] = $this->resolveFunction($map, $target);
+        if ($file->language !== SourceLanguage::PHP) {
+            // Every locator and relation this planner relies on is PHP evidence. A plan for another
+            // language would be a guess, so it is refused before any edit is computed.
+            throw new InvalidArgumentException(
+                'Function rename supports PHP declarations only: ' . $symbol->fqn . ' is a ' . $file->language
+                . ' declaration (' . $file->path . '). No rename plan is published for it.',
+            );
+        }
         if (strcasecmp($symbol->name, $replacementName) === 0) {
             throw new InvalidArgumentException('Replacement function name is semantically identical to the current name: ' . $symbol->name);
         }
@@ -175,7 +184,8 @@ final readonly class FunctionRenamePlanner
         if ($target === '') {
             throw new InvalidArgumentException('Function rename target cannot be empty.');
         }
-        $qualified = str_contains($target, '\\');
+        // `path#Name` is the FQN form of non-PHP declarations; it must resolve so the refusal is explicit.
+        $qualified = str_contains($target, '\\') || str_contains($target, '#');
         /** @var list<array{0: FileEntry, 1: SymbolEntry}> $matches */
         $matches = [];
         foreach ($map->files as $file) {

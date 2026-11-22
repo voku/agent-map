@@ -13,6 +13,7 @@ use voku\AgentMap\Index\MethodEntry;
 use voku\AgentMap\Index\ParameterEntry;
 use voku\AgentMap\Index\RelationEntry;
 use voku\AgentMap\Index\SymbolEntry;
+use voku\AgentMap\IO\SourceLanguage;
 
 final readonly class MapReconciler
 {
@@ -56,6 +57,20 @@ final readonly class MapReconciler
         $knownFqns = [];
 
         foreach ($structuralFiles as $file) {
+            if ($file->language !== SourceLanguage::PHP) {
+                // No semantic backend exists for this language: nothing to reconcile against, and
+                // "PHPStan produced no records" would be a false statement about a file it never saw.
+                foreach ($file->symbols as $symbol) {
+                    $knownSymbolIds[$symbol->id()] = true;
+                    $knownFqns[$symbol->fqn] = $symbol->id();
+                    foreach ($symbol->methods as $method) {
+                        $knownSymbolIds[$symbol->methodId($method)] = true;
+                    }
+                }
+                $files[$file->path] = new FileEntry($file->path, $file->sha256, $file->namespace, $file->symbols, 'structural_only', $file->language);
+                continue;
+            }
+
             $symbols = [];
             $semanticSeen = false;
             $missingSemanticDiagnostics = [];

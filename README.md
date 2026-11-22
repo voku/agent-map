@@ -136,6 +136,7 @@ There is one analysis path and one map model. JSON and TOON are serializers, not
 - `--paths`: comma-separated PHP files or directories, default `.`; directories contribute `.php` and `.phtml` (plain PHP template) files;
 - `--out`: map file, default `.agent-map/php-symbols.json`;
 - `--format`: `json` or `toon`, default `json`;
+- `--languages`: comma-separated languages to index, `php` (default) and/or `typescript`; see [TypeScript and JavaScript](#typescript-and-javascript-opt-in);
 - `--phpstan-config`: explicit PHPStan configuration when the PHPStan backend is available;
 - `--phpstan-memory-limit`: explicit positive PHPStan memory limit, for example `512M` or `2G`;
 - `--scan`: comma-separated directories that only have to resolve symbols and are never indexed;
@@ -164,6 +165,39 @@ vendor/bin/agent-map build --paths=src --phpstan-config=phpstan.neon
 
 Project PHPStan findings are stored as diagnostics when the semantic export itself succeeds. Parse failures, internal PHPStan failures, or a missing semantic export fail the build.
 
+### TypeScript and JavaScript (opt-in)
+
+By default only PHP is indexed, and a PHP-only map is byte-identical to what earlier releases wrote. `--languages` adds TypeScript/JavaScript declarations to the same map:
+
+```bash
+vendor/bin/agent-map build --root=. --languages=php,typescript   # mixed project
+vendor/bin/agent-map build --root=. --languages=typescript       # TypeScript/JavaScript only
+vendor/bin/agent-map query matchGesture
+vendor/bin/agent-map query 'src/recognition/matcher.ts#matchGesture'
+```
+
+`typescript` covers `.ts .tsx .mts .cts .js .jsx .mjs .cjs`. Declaration files (`.d.ts`) and `dist/` and `build/` directories are skipped, next to the default excludes (`vendor`, `node_modules`, `.git`, `var/cache`).
+
+Requirements: Node.js on `PATH` and the `typescript` npm package. It is loaded from the analysed project (`<root>/node_modules/typescript`), then from the directory named by `AGENT_MAP_TYPESCRIPT_PATH`. Loading the project's own compiler runs code from its `node_modules`, so enable this only for projects whose dependencies you trust. One Node process parses all files with the compiler API in syntax-only mode (`ts.createSourceFile`): no program, no type checker, no `tsconfig.json`. If Node or the compiler is missing the build fails and says so; nothing falls back to another parser.
+
+What the map gets in this first slice:
+
+- top-level `class`, `interface`, `enum`, `function`, plus the kinds `type_alias` and `constant` (top-level `const`; a `const` holding an arrow function or function expression is a `function`);
+- class and interface methods with visibility, `static`/`abstract`, parameter names, and parameter and return types as written in the source;
+- `extends` / `implements` and the matching structural relations. A name is resolved to a symbol when it is declared in the same file, or imported through a relative import from a project source file that declares and exports it. Package imports, globals, re-exporting barrels and mixin expressions keep the name as written;
+- exact 1-based line ranges;
+- `export` / `export default` in the symbol's `attributes`.
+
+Symbols are named `<project-relative file path>#<Name>`, for example `src/recognition/matcher.ts#matchGesture`, and methods `src/shapes/circle.ts#Circle::area`. A file's `namespace` is its directory. Files carry `language: typescript` and `semantic_status: structural_only`; the map's schema version is `2.1` and its backend identity contains `typescript-compiler` (for example `simple-php-code-parser+typescript-compiler+phpstan`), so it never merges incrementally with a map built without the option.
+
+Not supported in this slice:
+
+- call relations, callers/callees and types resolved by a checker: PHPStan is never handed these files, and no TypeScript program is created;
+- rename, removal, move, copy and scaffold plans: they are PHP contracts and do not publish edits for TypeScript symbols (`function-rename-plan` refuses explicitly, the others stay blocked);
+- `refresh`, `watch` and the automatic repair of a stale map on read: rebuild such a map with `build --languages=...`;
+- nested declarations, `namespace` blocks, `let`/`var`, destructured `const`, accessors, properties, decorators, HTML and CSS. Of several declarations with one kind and name (overloads, merged interfaces) one is kept: the implementation for functions, the first otherwise;
+- a file with syntax errors fails the build, like a PHP parse error. Exclude files you do not want parsed with `--exclude`.
+
 ## What the map contains
 
 ### Files
@@ -171,7 +205,8 @@ Project PHPStan findings are stored as diagnostics when the semantic export itse
 - repository-relative path;
 - SHA-256 source hash;
 - namespace;
-- structural and semantic status.
+- structural and semantic status;
+- language, for files that are not PHP.
 
 ### Symbols
 

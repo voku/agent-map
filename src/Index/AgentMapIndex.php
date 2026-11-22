@@ -12,6 +12,14 @@ final readonly class AgentMapIndex
     public const SCHEMA_VERSION = '2.0';
 
     /**
+     * The schema a build writes when a language other than PHP is enabled.
+     *
+     * 2.1 adds `files[].language` (absent means `php`) and the symbol kinds `type_alias` and
+     * `constant`. PHP-only builds keep writing 2.0, byte for byte.
+     */
+    public const POLYGLOT_SCHEMA_VERSION = '2.1';
+
+    /**
      * The persisted schema major this build can read.
      *
      * A map from another major is not partially readable: the fields this build looks for would
@@ -66,7 +74,7 @@ final readonly class AgentMapIndex
             $hasNormalizedOnly = $hasNormalizedOnly || ($isNormalized && !$isLiteral);
             $symbols = $this->mergeSymbolMatches($literalSymbols, $normalizedSymbols);
             $matches[] = [
-                'file' => new FileEntry($file->path, $file->sha256, $file->namespace, $symbols === [] ? $file->symbols : $symbols, $file->semanticStatus),
+                'file' => new FileEntry($file->path, $file->sha256, $file->namespace, $symbols === [] ? $file->symbols : $symbols, $file->semanticStatus, $file->language),
                 'score' => $this->fileMatchScore($file, $lower, $normalizedTerm),
             ];
         }
@@ -568,7 +576,8 @@ final readonly class AgentMapIndex
             if (!$symbolMatches && $methods === []) {
                 continue;
             }
-            $matches[$symbol->fqn] = $symbolMatches ? $symbol : $this->withMethods($symbol, $methods);
+            // Keyed by id, not FQN: a TypeScript value and type may share one name (`const X` + `type X`).
+            $matches[$symbol->id()] = $symbolMatches ? $symbol : $this->withMethods($symbol, $methods);
         }
         return $matches;
     }
@@ -580,9 +589,9 @@ final readonly class AgentMapIndex
      */
     private function mergeSymbolMatches(array $literal, array $normalized): array
     {
-        foreach ($normalized as $fqn => $symbol) {
-            if (!isset($literal[$fqn]) || count($symbol->methods) > count($literal[$fqn]->methods)) {
-                $literal[$fqn] = $symbol;
+        foreach ($normalized as $id => $symbol) {
+            if (!isset($literal[$id]) || count($symbol->methods) > count($literal[$id]->methods)) {
+                $literal[$id] = $symbol;
             }
         }
         return array_values($literal);

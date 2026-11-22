@@ -241,9 +241,10 @@ final readonly class AgentMapApplication
             'phpstan' => new PhpStanSemanticAnalyzer($options->artifacts),
         };
 
-        return new AgentMapBuilder(
-            semanticAnalyzer: $semanticAnalyzer,
-            artifacts: $options->artifacts,
+        return AgentMapBuilder::forLanguages(
+            $options->languages,
+            $semanticAnalyzer,
+            $options->artifacts,
         );
     }
 
@@ -884,6 +885,7 @@ final readonly class AgentMapApplication
                 . ' --root=' . self::shellArgument($index->root)
                 . ' --paths=' . self::shellArgument(implode(',', $semanticScope->paths))
                 . ' --out=' . self::shellArgument($options->index)
+                . AgentMapBuilder::languagesOptionForBackend($index->backend)
                 . ($structuralOnly ? ' --backend=structural' : '')
                 . ($structuralOnly
                     ? ''
@@ -1211,7 +1213,7 @@ final readonly class AgentMapApplication
         if ($command === 'build' || $command === 'refresh' || $command === 'watch') {
             return <<<'TXT'
             Usage:
-              agent-map build [--root=.] [--paths=src,tests] [--scan=vendor/acme] [--out=.agent-map/php-symbols.json] [--format=json|toon] [--backend=auto|structural|phpstan] [--phpstan-config=phpstan.neon] [--phpstan-memory-limit=512M] [--exclude=REGEX] [--merge]
+              agent-map build [--root=.] [--paths=src,tests] [--scan=vendor/acme] [--out=.agent-map/php-symbols.json] [--format=json|toon] [--backend=auto|structural|phpstan] [--languages=php,typescript] [--phpstan-config=phpstan.neon] [--phpstan-memory-limit=512M] [--exclude=REGEX] [--merge]
               agent-map refresh [--root=.] [--index=.agent-map/php-symbols.json] [--out=.agent-map/php-symbols.json] [--backend=auto|structural|phpstan]
               agent-map watch [--root=.] [--index=...] [--paths=src] [--interval=500] [--backend=...]
 
@@ -1219,6 +1221,12 @@ final readonly class AgentMapApplication
             milliseconds (minimum 50) and runs a refresh once the changes settle. Stop with Ctrl-C.
 
             Build a repository map. auto uses PHPStan when available and otherwise structural analysis; structural never executes PHPStan; phpstan explicitly requires the semantic backend. JSON is the default; TOON is optional. --exclude is repeatable.
+
+            --languages selects what is indexed (default: php). typescript adds TypeScript/JavaScript
+            declarations (.ts .tsx .mts .cts .js .jsx .mjs .cjs) through the TypeScript compiler in
+            syntax-only mode; it needs Node.js and the "typescript" npm package in the project's
+            node_modules or at AGENT_MAP_TYPESCRIPT_PATH. Such a map is rebuilt with build; refresh,
+            watch and the rename/removal/move plans cover PHP only.
 
             --scan lists directories that only have to resolve symbols (never indexed): use it when the
             analysed scope references classes living outside it, otherwise their types stay unresolved.

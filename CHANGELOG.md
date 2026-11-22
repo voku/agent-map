@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- Opt-in TypeScript/JavaScript declarations in the map: `agent-map build --languages=php,typescript` (or `--languages=typescript`). Top-level classes, interfaces, enums, functions, type aliases (`type_alias`) and `const` declarations (`constant`), with class/interface methods, parameter and return types as written, exact line ranges, `export` state in `attributes`, and `extends`/`implements` resolved where the declaration is provable from syntax (same file, or a relative import of a project file that declares and exports the name). Symbols are named `<file path>#<Name>`. `query`, `file`, `scope`, `related`, `summary` and the search index read them like PHP symbols. One Node process runs the TypeScript compiler API in syntax-only mode (`resources/typescript/extract-symbols.mjs`); it needs Node.js and the `typescript` npm package from the analysed project's `node_modules` or `AGENT_MAP_TYPESCRIPT_PATH`, and the build fails with the reason when either is missing. `.d.ts` files and `dist/`/`build/` directories are skipped. (`TypeScriptSupportTest`)
+- `FileEntry::$language` (`php` or `typescript`). It is serialized only for non-PHP files, and a map built with a non-PHP language carries schema version `2.1` and a backend identity containing `typescript-compiler`, so it cannot be merged incrementally with a PHP-only map. Maps built without `--languages` are unchanged: same bytes, schema `2.0`, same backend string. TypeScript files get `semantic_status: structural_only`; PHPStan is never handed them.
+- New library surface: `SourceLanguage`, `TypeScriptSymbolExtractor`, `LanguageRoutingSymbolExtractor`, `ProjectRootAware`, `AgentMapBuilder::forLanguages()`, and a constructor argument on `PhpFileFinder` for the indexed suffixes (default unchanged).
+
+### Changed
+
+- `query` reports a function and a type that share one FQN as two symbols instead of one; they were keyed by FQN and the later one replaced the earlier.
+
+### Not included
+
+- No call relations and no rename/removal/move plans for TypeScript or JavaScript. `function-rename-plan` refuses a TypeScript target explicitly; the other planners stay blocked on such a map. `refresh`, `watch` and stale-map repair on read do not rebuild a map that indexes TypeScript; their error now names the `build --languages=...` command to run.
+
 ## 0.24.2 - 2026-11-20
 
 ### Fixed

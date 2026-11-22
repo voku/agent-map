@@ -50,6 +50,16 @@ final readonly class MapPreparationService
             );
         }
 
+        $languagesOption = AgentMapBuilder::languagesOptionForBackend($index->backend);
+        if ($languagesOption !== '') {
+            throw new MapPreparationException(
+                reason: 'backend_mismatch',
+                recoveryCommand: $this->fullBuildCommand($request, null, $languagesOption),
+                message: 'Cannot prepare ' . $request->indexPath . ': it carries backend "' . $index->backend
+                    . '" and refresh covers PHP-only maps.',
+            );
+        }
+
         $normalized = $this->requestForExistingBackend($request, $index);
         try {
             return $this->refresh($normalized);
@@ -74,6 +84,16 @@ final readonly class MapPreparationService
     public function refresh(MapPreparationRequest $request): MapPreparationResult
     {
         $index = $this->reader->readForRoot($request->indexPath, $request->root);
+        $languagesOption = AgentMapBuilder::languagesOptionForBackend($index->backend);
+        if ($languagesOption !== '') {
+            // Refresh discovers and re-analyses PHP files only. Answering "up to date" for a map
+            // that also indexes another language would be a claim about files it never looked at.
+            throw new RuntimeException(
+                'Cannot refresh ' . $request->indexPath . ': it carries backend "' . $index->backend
+                . '" and refresh covers PHP-only maps. Run a full build:'
+                . "\n  " . $this->fullBuildCommand($request, null, $languagesOption),
+            );
+        }
 
         $structural = $request->backend === 'structural';
         $phpStanRefresh = !$structural
@@ -344,12 +364,13 @@ final readonly class MapPreparationService
         };
     }
 
-    private function fullBuildCommand(MapPreparationRequest $request, ?string $backend = null): string
+    private function fullBuildCommand(MapPreparationRequest $request, ?string $backend = null, string $languagesOption = ''): string
     {
         $command = 'agent-map build'
             . ' --root=' . self::shellArgument($request->root)
             . ' --paths=' . self::shellArgument(implode(',', $request->paths))
-            . ' --out=' . self::shellArgument($request->outputPath);
+            . ' --out=' . self::shellArgument($request->outputPath)
+            . $languagesOption;
 
         foreach ($request->excludes as $exclude) {
             $command .= ' --exclude=' . self::shellArgument($exclude);

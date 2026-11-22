@@ -34,6 +34,14 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: composer:v2
+      # The TypeScript/JavaScript extractor tests run the real compiler from node_modules.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - name: Install the TypeScript compiler for the extractor tests
+        working-directory: agent-map
+        run: npm ci --ignore-scripts
       - name: Install released owner graph through Composer
         working-directory: agent-map
         shell: bash
@@ -49,6 +57,8 @@ jobs:
       - name: Downstream full consumer tests and PHPStan
         working-directory: agent-map
         run: composer ci
+        env:
+          AGENT_MAP_REQUIRE_TYPESCRIPT: '1'
       - name: Paired released-package PHPStan build proof
         working-directory: agent-map
         shell: bash
