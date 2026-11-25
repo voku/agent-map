@@ -598,7 +598,14 @@ final class TypeScriptSupportTest extends TestCase
         mkdir($this->root . '/not-typescript', 0o775, true);
         file_put_contents($this->root . '/not-typescript/package.json', '{"name":"other","version":"9.9.9","main":"index.js"}');
         file_put_contents($this->root . '/not-typescript/index.js', "module.exports = { version: '9.9.9' };\n");
-        foreach ([$this->root . '/no-such-directory' => '(not found)', $this->root . '/not-typescript' => '(version 9.9.9 has no createSourceFile compiler API)'] as $path => $reason) {
+        // TypeScript 7 is installed but resolves only through "exports": requiring its directory throws.
+        mkdir($this->root . '/typescript-7', 0o775, true);
+        file_put_contents($this->root . '/typescript-7/package.json', '{"name":"typescript","version":"7.0.2","type":"module","exports":{".":"./lib/version.cjs"}}');
+        foreach ([
+            $this->root . '/no-such-directory' => '(not found)',
+            $this->root . '/not-typescript' => '(version 9.9.9 has no createSourceFile compiler API)',
+            $this->root . '/typescript-7' => '(version 7.0.2 has no createSourceFile compiler API)',
+        ] as $path => $reason) {
             $viaArgument = (new TypeScriptSymbolExtractor($this->root, $path))->extractMany([$file, $this->root . '/src/ring.ts']);
             putenv(TypeScriptSymbolExtractor::TYPESCRIPT_PATH_ENV . '=' . $path);
             $viaEnvironment = (new TypeScriptSymbolExtractor($this->root))->extractMany([$file, $this->root . '/src/ring.ts']);

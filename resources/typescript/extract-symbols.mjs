@@ -31,6 +31,16 @@ const root = String(request.root ?? '').replace(/\/+$/, '');
 const files = Array.isArray(request.files) ? request.files.map(String) : [];
 const typescriptPaths = Array.isArray(request.typescriptPaths) ? request.typescriptPaths.map(String) : [];
 
+function installedVersion(candidate) {
+    try {
+        const version = JSON.parse(fs.readFileSync(path.join(candidate, 'package.json'), 'utf8')).version;
+
+        return typeof version === 'string' ? version : null;
+    } catch {
+        return null;
+    }
+}
+
 const require = createRequire(import.meta.url);
 let ts = null;
 const rejected = [];
@@ -43,14 +53,17 @@ for (const candidate of typescriptPaths) {
         }
         rejected.push(candidate + ' (version ' + String(loaded?.version ?? 'unknown') + ' has no createSourceFile compiler API)');
     } catch {
-        rejected.push(candidate + ' (not found)');
+        // TypeScript 7 resolves only through "exports", so requiring its
+        // directory throws although the package is installed.
+        const version = installedVersion(candidate);
+        rejected.push(candidate + (version === null ? ' (not found)' : ' (version ' + version + ' has no createSourceFile compiler API)'));
     }
 }
 if (ts === null) {
     fail(
         'The "typescript" npm package could not be loaded. Looked in: '
         + (rejected.length > 0 ? rejected.join(', ') : '(no candidates)')
-        + '. Install it in the analysed project (npm install --save-dev typescript)'
+        + '. Install it in the analysed project (npm install --save-dev typescript@6; TypeScript 7 has no compiler API)'
         + ' or point AGENT_MAP_TYPESCRIPT_PATH at a typescript package directory.',
         3,
     );
