@@ -52,11 +52,13 @@ for (const candidate of typescriptPaths) {
             break;
         }
         rejected.push(candidate + ' (version ' + String(loaded?.version ?? 'unknown') + ' has no createSourceFile compiler API)');
-    } catch {
-        // TypeScript 7 resolves only through "exports", so requiring its
-        // directory throws although the package is installed.
+    } catch (error) {
+        // An installed package can fail to load: TypeScript 7 resolves only
+        // through "exports", so requiring its directory throws. The exception
+        // says nothing about which API the package offers.
         const version = installedVersion(candidate);
-        rejected.push(candidate + (version === null ? ' (not found)' : ' (version ' + version + ' has no createSourceFile compiler API)'));
+        const reason = String(error?.message ?? error).split('\n', 1)[0];
+        rejected.push(candidate + (version === null ? ' (not found)' : ' (version ' + version + ' could not be loaded: ' + reason + ')'));
     }
 }
 if (ts === null) {

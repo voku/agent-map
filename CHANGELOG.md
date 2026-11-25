@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- An installed TypeScript 7 is reported as `(version 7.x has no createSourceFile compiler API)` instead of `(not found)`, and the install hint names `typescript@6`. TypeScript 7 exports only its version and `unstable/*` modules, so the syntax-only extractor cannot use it, and the old hint installed exactly that version. (`TypeScriptSupportTest`)
+- An installed TypeScript 7 is reported as `(version 7.x could not be loaded: …)` instead of `(not found)`, and the install hint names `typescript@6`. TypeScript 7 exports only its version and `unstable/*` modules, so the syntax-only extractor cannot use it, and the old hint installed exactly that version. (`TypeScriptSupportTest`)
 
 ## 0.25.1 - 2026-11-22
 

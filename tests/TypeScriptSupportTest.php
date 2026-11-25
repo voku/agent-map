@@ -601,10 +601,15 @@ final class TypeScriptSupportTest extends TestCase
         // TypeScript 7 is installed but resolves only through "exports": requiring its directory throws.
         mkdir($this->root . '/typescript-7', 0o775, true);
         file_put_contents($this->root . '/typescript-7/package.json', '{"name":"typescript","version":"7.0.2","type":"module","exports":{".":"./lib/version.cjs"}}');
+        // A readable version proves nothing about the API when loading fails for another reason.
+        mkdir($this->root . '/broken-typescript', 0o775, true);
+        file_put_contents($this->root . '/broken-typescript/package.json', '{"name":"typescript","version":"5.9.3","main":"index.js"}');
+        file_put_contents($this->root . '/broken-typescript/index.js', "throw new Error('missing part\\nsecond line');\n");
         foreach ([
             $this->root . '/no-such-directory' => '(not found)',
             $this->root . '/not-typescript' => '(version 9.9.9 has no createSourceFile compiler API)',
-            $this->root . '/typescript-7' => '(version 7.0.2 has no createSourceFile compiler API)',
+            $this->root . '/typescript-7' => '(version 7.0.2 could not be loaded: Cannot find module ',
+            $this->root . '/broken-typescript' => '(version 5.9.3 could not be loaded: missing part)',
         ] as $path => $reason) {
             $viaArgument = (new TypeScriptSymbolExtractor($this->root, $path))->extractMany([$file, $this->root . '/src/ring.ts']);
             putenv(TypeScriptSymbolExtractor::TYPESCRIPT_PATH_ENV . '=' . $path);
