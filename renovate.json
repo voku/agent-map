@@ -11,6 +11,13 @@
         "phpunit/phpunit"
       ],
       "allowedVersions": "<13"
+    },
+    {
+      "description": "TypeScript 7 ships no createSourceFile compiler API (only unstable/*), which the symbol extractor needs; keep TypeScript 5/6 until the extractor supports a stable v7 API.",
+      "matchPackageNames": [
+        "typescript"
+      ],
+      "allowedVersions": "<7"
     }
   ]
 }
